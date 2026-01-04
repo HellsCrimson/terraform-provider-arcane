@@ -19,8 +19,8 @@ resource "arcane_project" "demo" {
 - `name` (String, Required)
 - `compose_content` (String, Required)
 - `env_content` (String, Optional)
+- `running` (Bool, Optional) — when true, ensures the project is running (compose up); when false, brings it down. If unset, lifecycle is not managed.
 
 ## Attributes Reference
 
 - `id`, `path`, `status`, `service_count`, `running_count`, `created_at`, `updated_at`
-

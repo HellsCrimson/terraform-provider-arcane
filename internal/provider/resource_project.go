@@ -36,7 +36,8 @@ func (r *ProjectResource) Schema(_ context.Context, _ resource.SchemaRequest, re
 			"environment_id":  resourceschema.StringAttribute{Required: true, Description: "Environment ID"},
 			"name":            resourceschema.StringAttribute{Required: true, Description: "Project name"},
 			"compose_content": resourceschema.StringAttribute{Required: true, Description: "docker-compose.yml content"},
-			"env_content":     resourceschema.StringAttribute{Optional: true, Description: ".env content"},
+            "env_content":     resourceschema.StringAttribute{Optional: true, Description: ".env content"},
+            "running":         resourceschema.BoolAttribute{Optional: true, Description: "If true, ensure project is running (compose up); if false, compose down. If unset, no lifecycle management."},
 
 			// Computed fields
 			"path":          resourceschema.StringAttribute{Computed: true, PlanModifiers: []planmodifier.String{stringplanmodifier.UseStateForUnknown()}},
@@ -66,7 +67,8 @@ type projectModel struct {
 	EnvironmentID types.String `tfsdk:"environment_id"`
 	Name          types.String `tfsdk:"name"`
 	Compose       types.String `tfsdk:"compose_content"`
-	Env           types.String `tfsdk:"env_content"`
+    Env           types.String `tfsdk:"env_content"`
+    Running       types.Bool   `tfsdk:"running"`
 	Path          types.String `tfsdk:"path"`
 	Status        types.String `tfsdk:"status"`
 	ServiceCount  types.Int64  `tfsdk:"service_count"`
@@ -90,11 +92,33 @@ func (r *ProjectResource) Create(ctx context.Context, req resource.CreateRequest
 		body.EnvContent = &v
 	}
 
-	out, err := r.client.CreateProject(ctx, plan.EnvironmentID.ValueString(), body)
-	if err != nil {
-		resp.Diagnostics.AddError("create project failed", err.Error())
-		return
-	}
+    envID := plan.EnvironmentID.ValueString()
+    out, err := r.client.CreateProject(ctx, envID, body)
+    if err != nil {
+        resp.Diagnostics.AddError("create project failed", err.Error())
+        return
+    }
+
+    // Manage lifecycle if requested
+    if !plan.Running.IsNull() && !plan.Running.IsUnknown() {
+        if plan.Running.ValueBool() {
+            if err := r.client.UpProject(ctx, envID, out.ID); err != nil {
+                resp.Diagnostics.AddError("project up failed", err.Error())
+                return
+            }
+        } else {
+            if err := r.client.DownProject(ctx, envID, out.ID); err != nil {
+                resp.Diagnostics.AddError("project down failed", err.Error())
+                return
+            }
+        }
+        if det, derr := r.client.GetProject(ctx, envID, out.ID); derr == nil {
+            out.Status = det.Status
+            out.RunningCount = det.RunningCount
+            out.ServiceCount = det.ServiceCount
+            out.UpdatedAt = det.UpdatedAt
+        }
+    }
 
 	state := projectModel{
 		ID:            types.StringValue(out.ID),
@@ -111,7 +135,8 @@ func (r *ProjectResource) Create(ctx context.Context, req resource.CreateRequest
 		RemoveFiles:   plan.RemoveFiles,
 		RemoveVolumes: plan.RemoveVolumes,
 	}
-	resp.Diagnostics.Append(resp.State.Set(ctx, &state)...)
+    state.Running = plan.Running
+    resp.Diagnostics.Append(resp.State.Set(ctx, &state)...)
 }
 
 func (r *ProjectResource) Read(ctx context.Context, req resource.ReadRequest, resp *resource.ReadResponse) {
@@ -179,6 +204,23 @@ func (r *ProjectResource) Update(ctx context.Context, req resource.UpdateRequest
 	if err != nil {
 		resp.Diagnostics.AddError("update project failed", err.Error())
 		return
+	}
+
+	// Lifecycle manage if configured
+	if !plan.Running.IsNull() && !plan.Running.IsUnknown() {
+		desired := plan.Running.ValueBool()
+		current := state.Running.ValueBool()
+		if desired != current {
+			if desired {
+				if err := r.client.UpProject(ctx, envID, projID); err != nil { resp.Diagnostics.AddError("project up failed", err.Error()); return }
+			} else {
+				if err := r.client.DownProject(ctx, envID, projID); err != nil { resp.Diagnostics.AddError("project down failed", err.Error()); return }
+			}
+			if det, derr := r.client.GetProject(ctx, envID, projID); derr == nil {
+				out.Status = det.Status
+			}
+			state.Running = plan.Running
+		}
 	}
 
 	state.Name = types.StringValue(out.Name)

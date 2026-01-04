@@ -100,13 +100,12 @@ func (p *ArcaneProvider) DataSources(_ context.Context) []func() datasource.Data
 
 // Resources returns the provider resources.
 func (p *ArcaneProvider) Resources(_ context.Context) []func() resource.Resource {
-	return []func() resource.Resource{
-		NewUserResource,
-		NewSettingsResource,
-		NewProjectResource,
-		NewProjectPathResource,
-		NewProjectStateResource,
-		NewNotificationResource,
-		NewContainerResource,
-	}
+    return []func() resource.Resource{
+        NewUserResource,
+        NewSettingsResource,
+        NewProjectResource,
+        NewProjectPathResource,
+        NewNotificationResource,
+        NewContainerResource,
+    }
 }

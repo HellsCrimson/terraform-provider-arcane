@@ -1,13 +1,13 @@
 package provider
 
 import (
-	"context"
-	"crypto/sha256"
-	"encoding/hex"
-	"os"
-	"strings"
+    "context"
+    "crypto/sha256"
+    "encoding/hex"
+    "os"
+    "strings"
 
-	"terraform-provider-arcane/internal/sdkclient"
+    "arcane-terraform/internal/sdkclient"
 
 	"github.com/hashicorp/terraform-plugin-framework/path"
 	"github.com/hashicorp/terraform-plugin-framework/resource"
@@ -47,6 +47,9 @@ func (r *ProjectPathResource) Schema(_ context.Context, _ resource.SchemaRequest
 			"compose_content_hash": resourceschema.StringAttribute{Computed: true, Sensitive: true},
 			"env_content_hash":     resourceschema.StringAttribute{Computed: true, Sensitive: true},
 
+			// Lifecycle (optional)
+			"running": resourceschema.BoolAttribute{Optional: true, Description: "If true, ensure project is running (compose up); if false, compose down. If unset, no lifecycle management."},
+
 			// Computed info
 			"path":          resourceschema.StringAttribute{Computed: true, PlanModifiers: []planmodifier.String{stringplanmodifier.UseStateForUnknown()}},
 			"status":        resourceschema.StringAttribute{Computed: true},
@@ -81,6 +84,7 @@ type projectPathModel struct {
 	Env             types.String `tfsdk:"env_content"`
 	ComposeHash     types.String `tfsdk:"compose_content_hash"`
 	EnvHash         types.String `tfsdk:"env_content_hash"`
+	Running         types.Bool   `tfsdk:"running"`
 	Path            types.String `tfsdk:"path"`
 	Status          types.String `tfsdk:"status"`
 	ServiceCount    types.Int64  `tfsdk:"service_count"`
@@ -166,17 +170,39 @@ func (r *ProjectPathResource) Create(ctx context.Context, req resource.CreateReq
 		envStr = &s
 	}
 
-	body := sdkclient.ProjectCreateRequest{Name: plan.Name.ValueString(), ComposeContent: compose, EnvContent: envStr}
-	out, err := r.client.CreateProject(ctx, plan.EnvironmentID.ValueString(), body)
-	if err != nil {
-		resp.Diagnostics.AddError("create project failed", err.Error())
-		return
-	}
+    body := sdkclient.ProjectCreateRequest{Name: plan.Name.ValueString(), ComposeContent: compose, EnvContent: envStr}
+    envID := plan.EnvironmentID.ValueString()
+    out, err := r.client.CreateProject(ctx, envID, body)
+    if err != nil {
+        resp.Diagnostics.AddError("create project failed", err.Error())
+        return
+    }
 
-	state := plan
-	state.ID = types.StringValue(out.ID)
-	state.Path = types.StringValue(out.Path)
-	state.Status = types.StringValue(out.Status)
+    // Optionally manage lifecycle
+    if !plan.Running.IsNull() && !plan.Running.IsUnknown() {
+        if plan.Running.ValueBool() {
+            if err := r.client.UpProject(ctx, envID, out.ID); err != nil {
+                resp.Diagnostics.AddError("project up failed", err.Error())
+                return
+            }
+        } else {
+            if err := r.client.DownProject(ctx, envID, out.ID); err != nil {
+                resp.Diagnostics.AddError("project down failed", err.Error())
+                return
+            }
+        }
+        if det, derr := r.client.GetProject(ctx, envID, out.ID); derr == nil {
+            out.Status = det.Status
+            out.RunningCount = det.RunningCount
+            out.ServiceCount = det.ServiceCount
+            out.UpdatedAt = det.UpdatedAt
+        }
+    }
+
+    state := plan
+    state.ID = types.StringValue(out.ID)
+    state.Path = types.StringValue(out.Path)
+    state.Status = types.StringValue(out.Status)
 	state.ServiceCount = types.Int64Value(int64(out.ServiceCount))
 	state.RunningCount = types.Int64Value(int64(out.RunningCount))
 	state.CreatedAt = types.StringValue(out.CreatedAt)
@@ -201,7 +227,8 @@ func (r *ProjectPathResource) Create(ctx context.Context, req resource.CreateReq
 			state.Env = types.StringNull()
 		}
 	}
-	resp.Diagnostics.Append(resp.State.Set(ctx, &state)...)
+    state.Running = plan.Running
+    resp.Diagnostics.Append(resp.State.Set(ctx, &state)...)
 }
 
 func (r *ProjectPathResource) Read(ctx context.Context, req resource.ReadRequest, resp *resource.ReadResponse) {
@@ -313,6 +340,22 @@ func (r *ProjectPathResource) Update(ctx context.Context, req resource.UpdateReq
 			state.Env = types.StringValue(*envStr)
 		} else {
 			state.Env = types.StringNull()
+		}
+	}
+	// Lifecycle management if configured and changed
+	if !plan.Running.IsNull() && !plan.Running.IsUnknown() {
+		desired := plan.Running.ValueBool()
+		current := state.Running.ValueBool()
+		if desired != current {
+			if desired {
+				if err := r.client.UpProject(ctx, envID, projID); err != nil { resp.Diagnostics.AddError("project up failed", err.Error()); return }
+			} else {
+				if err := r.client.DownProject(ctx, envID, projID); err != nil { resp.Diagnostics.AddError("project down failed", err.Error()); return }
+			}
+			if det, derr := r.client.GetProject(ctx, envID, projID); derr == nil {
+				state.Status = types.StringValue(det.Status)
+			}
+			state.Running = plan.Running
 		}
 	}
 	resp.Diagnostics.Append(resp.State.Set(ctx, &state)...)

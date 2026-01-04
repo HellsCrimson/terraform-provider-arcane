@@ -98,10 +98,7 @@ Resources
   - content_hash_mode (bool): when true, state stores only SHA256 hashes (compose_content_hash/env_content_hash) instead of full content; still detects file changes and updates.
   - When false (default), state stores the last read file contents (sensitive) to detect changes.
 
-- arcane_project_state
-  - Manage the running state of a compose project (up/down).
-  - Attributes: environment_id, project_id, running (bool), status (computed).
-  - Example: set `running = true` to ensure the project is deployed (compose up).
+  - Lifecycle: set `running = true` to ensure the project is deployed (compose up), or `false` to bring it down. If unset, lifecycle is not managed.
 
 - arcane_notification
   - Manage notification settings for a provider.
@@ -118,7 +115,6 @@ Imports
 - arcane_settings: `environment_id`
 - arcane_project: `environment_id:project_id`
 - arcane_project_path: `environment_id:project_id`
-- arcane_project_state: `environment_id:project_id`
 - arcane_notification: `environment_id:provider_name`
 - arcane_container: `environment_id:container_id`
 
@@ -163,4 +159,3 @@ Contributing
 go mod tidy
 go build ./cmd/terraform-provider-arcane
 ```
-
