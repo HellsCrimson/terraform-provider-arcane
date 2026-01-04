@@ -1,0 +1,412 @@
+package sdkclient
+
+import (
+    "bytes"
+    "context"
+    "encoding/json"
+    "fmt"
+    "io"
+    "net/http"
+    "net/url"
+    "path"
+    "strings"
+    "time"
+)
+
+// Client is a minimal Arcane API client using API key auth.
+type Client struct {
+    BaseURL *url.URL
+    APIKey  string
+    http    *http.Client
+}
+
+func NewClient(endpoint, apiKey string) *Client {
+    if !strings.HasSuffix(endpoint, "/") {
+        endpoint += "/"
+    }
+    u, _ := url.Parse(endpoint)
+    return &Client{
+        BaseURL: u,
+        APIKey:  apiKey,
+        http:    &http.Client{Timeout: 30 * time.Second},
+    }
+}
+
+func (c *Client) newRequest(ctx context.Context, method, p string, body any) (*http.Request, error) {
+    rel := &url.URL{Path: path.Join(c.BaseURL.Path, p)}
+    u := c.BaseURL.ResolveReference(rel)
+    var buf io.ReadWriter
+    if body != nil {
+        buf = new(bytes.Buffer)
+        enc := json.NewEncoder(buf)
+        enc.SetEscapeHTML(false)
+        if err := enc.Encode(body); err != nil {
+            return nil, err
+        }
+    }
+    req, err := http.NewRequestWithContext(ctx, method, u.String(), buf)
+    if err != nil {
+        return nil, err
+    }
+    if body != nil {
+        req.Header.Set("Content-Type", "application/json")
+    }
+    req.Header.Set("Accept", "application/json")
+    req.Header.Set("X-API-Key", c.APIKey)
+    return req, nil
+}
+
+func (c *Client) do(req *http.Request, v any) error {
+    res, err := c.http.Do(req)
+    if err != nil {
+        return err
+    }
+    defer res.Body.Close()
+    if res.StatusCode >= 300 {
+        b, _ := io.ReadAll(io.LimitReader(res.Body, 1<<20))
+        return fmt.Errorf("arcane API error: %s: %s", res.Status, strings.TrimSpace(string(b)))
+    }
+    if v == nil {
+        io.Copy(io.Discard, res.Body)
+        return nil
+    }
+    dec := json.NewDecoder(res.Body)
+    return dec.Decode(v)
+}
+
+// Models derived from api-1.json
+// components/schemas/UserCreateUser
+type CreateUserRequest struct {
+    DisplayName *string  `json:"displayName,omitempty"`
+    Email       *string  `json:"email,omitempty"`
+    Locale      *string  `json:"locale,omitempty"`
+    Password    string   `json:"password"`
+    Roles       []string `json:"roles,omitempty"`
+    Username    string   `json:"username"`
+}
+
+// components/schemas/UserUpdateUser
+type UpdateUserRequest struct {
+    DisplayName *string  `json:"displayName,omitempty"`
+    Email       *string  `json:"email,omitempty"`
+    Locale      *string  `json:"locale,omitempty"`
+    Password    *string  `json:"password,omitempty"`
+    Roles       []string `json:"roles,omitempty"`
+}
+
+// components/schemas/UserUser
+type User struct {
+    ID        string   `json:"id"`
+    Username  string   `json:"username"`
+    Display   *string  `json:"displayName,omitempty"`
+    Email     *string  `json:"email,omitempty"`
+    Locale    *string  `json:"locale,omitempty"`
+    Roles     []string `json:"roles,omitempty"`
+    CreatedAt *string  `json:"createdAt,omitempty"`
+    UpdatedAt *string  `json:"updatedAt,omitempty"`
+}
+
+// components/schemas/BaseApiResponseUser
+type userResponse struct {
+    Success bool `json:"success"`
+    Data    User `json:"data"`
+}
+
+// CreateUser POST /users
+func (c *Client) CreateUser(ctx context.Context, reqBody CreateUserRequest) (*User, error) {
+    req, err := c.newRequest(ctx, http.MethodPost, "users", reqBody)
+    if err != nil {
+        return nil, err
+    }
+    var out userResponse
+    if err := c.do(req, &out); err != nil {
+        return nil, err
+    }
+    return &out.Data, nil
+}
+
+// GetUser GET /users/{id}
+func (c *Client) GetUser(ctx context.Context, id string) (*User, error) {
+    req, err := c.newRequest(ctx, http.MethodGet, path.Join("users", id), nil)
+    if err != nil {
+        return nil, err
+    }
+    var out userResponse
+    if err := c.do(req, &out); err != nil {
+        return nil, err
+    }
+    return &out.Data, nil
+}
+
+// UpdateUser PUT /users/{id}
+func (c *Client) UpdateUser(ctx context.Context, id string, body UpdateUserRequest) (*User, error) {
+    req, err := c.newRequest(ctx, http.MethodPut, path.Join("users", id), body)
+    if err != nil {
+        return nil, err
+    }
+    var out userResponse
+    if err := c.do(req, &out); err != nil {
+        return nil, err
+    }
+    return &out.Data, nil
+}
+
+// DeleteUser DELETE /users/{id}
+func (c *Client) DeleteUser(ctx context.Context, id string) error {
+    req, err := c.newRequest(ctx, http.MethodDelete, path.Join("users", id), nil)
+    if err != nil {
+        return err
+    }
+    return c.do(req, nil)
+}
+
+// -------- Settings --------
+// components/schemas/SettingsPublicSetting
+type SettingsPublicSetting struct {
+    Key   string `json:"key"`
+    Type  string `json:"type"`
+    Value string `json:"value"`
+}
+
+// UpdateSettings PUT /environments/{id}/settings
+func (c *Client) UpdateSettings(ctx context.Context, envID string, values map[string]string) ([]SettingsPublicSetting, error) {
+    // Send raw map[string]string matching SettingsUpdate fields
+    req, err := c.newRequest(ctx, http.MethodPut, path.Join("environments", envID, "settings"), values)
+    if err != nil {
+        return nil, err
+    }
+    // Response: BaseApiResponseListSettingDto -> data: []SettingsSettingDto or public
+    var out struct{
+        Success bool                        `json:"success"`
+        Data    []SettingsPublicSetting     `json:"data"`
+    }
+    if err := c.do(req, &out); err != nil {
+        return nil, err
+    }
+    return out.Data, nil
+}
+
+// GetSettings GET /environments/{id}/settings
+func (c *Client) GetSettings(ctx context.Context, envID string) (map[string]string, error) {
+    req, err := c.newRequest(ctx, http.MethodGet, path.Join("environments", envID, "settings"), nil)
+    if err != nil {
+        return nil, err
+    }
+    var arr []SettingsPublicSetting
+    if err := c.do(req, &arr); err != nil {
+        return nil, err
+    }
+    res := make(map[string]string, len(arr))
+    for _, s := range arr {
+        res[s.Key] = s.Value
+    }
+    return res, nil
+}
+
+// -------- Projects --------
+type ProjectCreateRequest struct {
+    ComposeContent string  `json:"composeContent"`
+    EnvContent     *string `json:"envContent,omitempty"`
+    Name           string  `json:"name"`
+}
+
+type ProjectCreateResponse struct {
+    ID           string `json:"id"`
+    Name         string `json:"name"`
+    Path         string `json:"path"`
+    ServiceCount int    `json:"serviceCount"`
+    RunningCount int    `json:"runningCount"`
+    Status       string `json:"status"`
+    CreatedAt    string `json:"createdAt"`
+    UpdatedAt    string `json:"updatedAt"`
+}
+
+type projectCreateEnvelope struct {
+    Success bool                   `json:"success"`
+    Data    ProjectCreateResponse  `json:"data"`
+}
+
+type ProjectUpdateRequest struct {
+    ComposeContent *string `json:"composeContent,omitempty"`
+    EnvContent     *string `json:"envContent,omitempty"`
+    Name           *string `json:"name,omitempty"`
+}
+
+type ProjectDetails struct {
+    ID           string `json:"id"`
+    Name         string `json:"name"`
+    Path         string `json:"path"`
+    ServiceCount int    `json:"serviceCount"`
+    RunningCount int    `json:"runningCount"`
+    Status       string `json:"status"`
+    CreatedAt    string `json:"createdAt"`
+    UpdatedAt    string `json:"updatedAt"`
+    ComposeContent *string `json:"composeContent,omitempty"`
+    EnvContent     *string `json:"envContent,omitempty"`
+}
+
+type projectDetailsEnvelope struct {
+    Success bool           `json:"success"`
+    Data    ProjectDetails `json:"data"`
+}
+
+type ProjectDestroyOptions struct {
+    RemoveFiles   bool `json:"removeFiles"`
+    RemoveVolumes bool `json:"removeVolumes"`
+}
+
+func (c *Client) CreateProject(ctx context.Context, envID string, body ProjectCreateRequest) (*ProjectCreateResponse, error) {
+    req, err := c.newRequest(ctx, http.MethodPost, path.Join("environments", envID, "projects"), body)
+    if err != nil { return nil, err }
+    var env projectCreateEnvelope
+    if err := c.do(req, &env); err != nil { return nil, err }
+    return &env.Data, nil
+}
+
+func (c *Client) GetProject(ctx context.Context, envID, projectID string) (*ProjectDetails, error) {
+    req, err := c.newRequest(ctx, http.MethodGet, path.Join("environments", envID, "projects", projectID), nil)
+    if err != nil { return nil, err }
+    var env projectDetailsEnvelope
+    if err := c.do(req, &env); err != nil { return nil, err }
+    return &env.Data, nil
+}
+
+func (c *Client) UpdateProject(ctx context.Context, envID, projectID string, body ProjectUpdateRequest) (*ProjectDetails, error) {
+    req, err := c.newRequest(ctx, http.MethodPut, path.Join("environments", envID, "projects", projectID), body)
+    if err != nil { return nil, err }
+    var env projectDetailsEnvelope
+    if err := c.do(req, &env); err != nil { return nil, err }
+    return &env.Data, nil
+}
+
+func (c *Client) DestroyProject(ctx context.Context, envID, projectID string, opts ProjectDestroyOptions) error {
+    req, err := c.newRequest(ctx, http.MethodDelete, path.Join("environments", envID, "projects", projectID, "destroy"), opts)
+    if err != nil { return err }
+    return c.do(req, nil)
+}
+
+// -------- Notifications --------
+type NotificationUpdate struct {
+    Provider string            `json:"provider"`
+    Enabled  bool              `json:"enabled"`
+    Config   map[string]any    `json:"config"`
+}
+
+type NotificationResponse struct {
+    ID       int64             `json:"id"`
+    Provider string            `json:"provider"`
+    Enabled  bool              `json:"enabled"`
+    Config   map[string]any    `json:"config"`
+}
+
+func (c *Client) UpsertNotification(ctx context.Context, envID string, body NotificationUpdate) (*NotificationResponse, error) {
+    req, err := c.newRequest(ctx, http.MethodPost, path.Join("environments", envID, "notifications", "settings"), body)
+    if err != nil { return nil, err }
+    var out NotificationResponse
+    if err := c.do(req, &out); err != nil { return nil, err }
+    return &out, nil
+}
+
+func (c *Client) GetNotification(ctx context.Context, envID, provider string) (*NotificationResponse, error) {
+    req, err := c.newRequest(ctx, http.MethodGet, path.Join("environments", envID, "notifications", "settings", provider), nil)
+    if err != nil { return nil, err }
+    var out NotificationResponse
+    if err := c.do(req, &out); err != nil { return nil, err }
+    return &out, nil
+}
+
+func (c *Client) DeleteNotification(ctx context.Context, envID, provider string) error {
+    req, err := c.newRequest(ctx, http.MethodDelete, path.Join("environments", envID, "notifications", "settings", provider), nil)
+    if err != nil { return err }
+    return c.do(req, nil)
+}
+
+// -------- Containers --------
+type ContainerCreateRequest struct {
+    Name          string             `json:"name"`
+    Image         string             `json:"image"`
+    AutoRemove    *bool              `json:"autoRemove,omitempty"`
+    Command       []string           `json:"command,omitempty"`
+    CPUs          *float64           `json:"cpus,omitempty"`
+    Entrypoint    []string           `json:"entrypoint,omitempty"`
+    Environment   []string           `json:"environment,omitempty"`
+    Memory        *int64             `json:"memory,omitempty"`
+    Networks      []string           `json:"networks,omitempty"`
+    Ports         map[string]string  `json:"ports,omitempty"`
+    Privileged    *bool              `json:"privileged,omitempty"`
+    RestartPolicy *string            `json:"restartPolicy,omitempty"`
+    User          *string            `json:"user,omitempty"`
+    Volumes       []string           `json:"volumes,omitempty"`
+    WorkingDir    *string            `json:"workingDir,omitempty"`
+}
+
+type ContainerCreated struct {
+    ID      string `json:"id"`
+    Name    string `json:"name"`
+    Image   string `json:"image"`
+    Status  string `json:"status"`
+    Created string `json:"created"`
+}
+
+type containerCreatedEnvelope struct {
+    Success bool              `json:"success"`
+    Data    ContainerCreated  `json:"data"`
+}
+
+type ContainerDetails struct {
+    ID      string `json:"id"`
+    Name    string `json:"name"`
+    Image   string `json:"image"`
+    Created string `json:"created"`
+    Status  string `json:"status"`
+}
+
+type containerDetailsEnvelope struct {
+    Success bool              `json:"success"`
+    Data    ContainerDetails  `json:"data"`
+}
+
+func (c *Client) CreateContainer(ctx context.Context, envID string, body ContainerCreateRequest) (*ContainerCreated, error) {
+    req, err := c.newRequest(ctx, http.MethodPost, path.Join("environments", envID, "containers"), body)
+    if err != nil { return nil, err }
+    var env containerCreatedEnvelope
+    if err := c.do(req, &env); err != nil { return nil, err }
+    return &env.Data, nil
+}
+
+func (c *Client) GetContainer(ctx context.Context, envID, containerID string) (*ContainerDetails, error) {
+    req, err := c.newRequest(ctx, http.MethodGet, path.Join("environments", envID, "containers", containerID), nil)
+    if err != nil { return nil, err }
+    var env containerDetailsEnvelope
+    if err := c.do(req, &env); err != nil { return nil, err }
+    return &env.Data, nil
+}
+
+func (c *Client) DeleteContainer(ctx context.Context, envID, containerID string, force, volumes bool) error {
+    // These are query parameters per OpenAPI
+    p := path.Join("environments", envID, "containers", containerID)
+    u := *c.BaseURL
+    u.Path = path.Join(c.BaseURL.Path, p)
+    q := u.Query()
+    if force { q.Set("force", "true") }
+    if volumes { q.Set("volumes", "true") }
+    u.RawQuery = q.Encode()
+    req, err := http.NewRequestWithContext(ctx, http.MethodDelete, u.String(), nil)
+    if err != nil { return err }
+    req.Header.Set("Accept", "application/json")
+    req.Header.Set("X-API-Key", c.APIKey)
+    return c.do(req, nil)
+}
+
+// Project lifecycle: up/down/restart/redeploy
+func (c *Client) UpProject(ctx context.Context, envID, projectID string) error {
+    req, err := c.newRequest(ctx, http.MethodPost, path.Join("environments", envID, "projects", projectID, "up"), nil)
+    if err != nil { return err }
+    return c.do(req, nil)
+}
+
+func (c *Client) DownProject(ctx context.Context, envID, projectID string) error {
+    req, err := c.newRequest(ctx, http.MethodPost, path.Join("environments", envID, "projects", projectID, "down"), nil)
+    if err != nil { return err }
+    return c.do(req, nil)
+}
