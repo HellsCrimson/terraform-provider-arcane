@@ -1,18 +1,18 @@
 package provider
 
 import (
-	"context"
-	"strings"
+    "context"
+    "strings"
 
-	"terraform-provider-arcane/internal/sdkclient"
+    "terraform-provider-arcane/internal/sdkclient"
 
-	"github.com/hashicorp/terraform-plugin-framework/path"
-	"github.com/hashicorp/terraform-plugin-framework/resource"
-	resourceschema "github.com/hashicorp/terraform-plugin-framework/resource/schema"
-	"github.com/hashicorp/terraform-plugin-framework/resource/schema/booldefault"
-	"github.com/hashicorp/terraform-plugin-framework/resource/schema/planmodifier"
-	"github.com/hashicorp/terraform-plugin-framework/resource/schema/stringplanmodifier"
-	"github.com/hashicorp/terraform-plugin-framework/types"
+    "github.com/hashicorp/terraform-plugin-framework/path"
+    "github.com/hashicorp/terraform-plugin-framework/resource"
+    resourceschema "github.com/hashicorp/terraform-plugin-framework/resource/schema"
+    "github.com/hashicorp/terraform-plugin-framework/resource/schema/booldefault"
+    "github.com/hashicorp/terraform-plugin-framework/resource/schema/planmodifier"
+    "github.com/hashicorp/terraform-plugin-framework/resource/schema/stringplanmodifier"
+    "github.com/hashicorp/terraform-plugin-framework/types"
 )
 
 var _ resource.Resource = &ProjectResource{}
@@ -39,7 +39,7 @@ func (r *ProjectResource) Schema(_ context.Context, _ resource.SchemaRequest, re
 			"compose_content":    resourceschema.StringAttribute{Required: true, Description: "docker-compose.yml content"},
 			"env_content":        resourceschema.StringAttribute{Optional: true, Description: ".env content"},
 			"running":            resourceschema.BoolAttribute{Optional: true, Description: "If true, ensure project is running (compose up); if false, compose down. If unset, no lifecycle management."},
-            "redeploy_on_update": resourceschema.BoolAttribute{Optional: true, Computed: true, Description: "Redeploy the project after updating compose/env content.", Default: booldefault.StaticBool(true)},
+			"redeploy_on_update": resourceschema.BoolAttribute{Optional: true, Computed: true, Description: "Redeploy the project after updating compose/env content.", Default: booldefault.StaticBool(true)},
 
 			// Computed fields
 			"path":          resourceschema.StringAttribute{Computed: true, PlanModifiers: []planmodifier.String{stringplanmodifier.UseStateForUnknown()}},
@@ -47,7 +47,7 @@ func (r *ProjectResource) Schema(_ context.Context, _ resource.SchemaRequest, re
 			"service_count": resourceschema.Int64Attribute{Computed: true},
 			"running_count": resourceschema.Int64Attribute{Computed: true},
 			"created_at":    resourceschema.StringAttribute{Computed: true, PlanModifiers: []planmodifier.String{stringplanmodifier.UseStateForUnknown()}},
-			"updated_at":    resourceschema.StringAttribute{Computed: true},
+			"updated_at":    resourceschema.StringAttribute{Computed: true, PlanModifiers: []planmodifier.String{stringplanmodifier.UseStateForUnknown()}},
 
 			// Delete options
 			"remove_files":   resourceschema.BoolAttribute{Optional: true, Description: "Remove files on destroy"},
@@ -167,7 +167,7 @@ func (r *ProjectResource) Read(ctx context.Context, req resource.ReadRequest, re
 	state.ServiceCount = types.Int64Value(int64(out.ServiceCount))
 	state.RunningCount = types.Int64Value(int64(out.RunningCount))
 	state.CreatedAt = types.StringValue(out.CreatedAt)
-	state.UpdatedAt = types.StringValue(out.UpdatedAt)
+	// Leave updated_at unchanged during Update to avoid plan inconsistency on server-side timestamp changes
 	if out.ComposeContent != nil {
 		state.Compose = types.StringValue(*out.ComposeContent)
 	}
@@ -260,7 +260,6 @@ func (r *ProjectResource) Update(ctx context.Context, req resource.UpdateRequest
 	state.ServiceCount = types.Int64Value(int64(out.ServiceCount))
 	state.RunningCount = types.Int64Value(int64(out.RunningCount))
 	state.CreatedAt = types.StringValue(out.CreatedAt)
-	state.UpdatedAt = types.StringValue(out.UpdatedAt)
 	if out.ComposeContent != nil {
 		state.Compose = types.StringValue(*out.ComposeContent)
 	}
