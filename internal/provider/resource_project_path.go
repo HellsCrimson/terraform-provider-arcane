@@ -56,7 +56,7 @@ func (r *ProjectPathResource) Schema(_ context.Context, _ resource.SchemaRequest
 			"service_count": resourceschema.Int64Attribute{Computed: true},
 			"running_count": resourceschema.Int64Attribute{Computed: true},
 			"created_at":    resourceschema.StringAttribute{Computed: true, PlanModifiers: []planmodifier.String{stringplanmodifier.UseStateForUnknown()}},
-			"updated_at":    resourceschema.StringAttribute{Computed: true, PlanModifiers: []planmodifier.String{stringplanmodifier.UseStateForUnknown()}},
+            "updated_at":    resourceschema.StringAttribute{Computed: true},
 
 			// Delete options
 			"remove_files":   resourceschema.BoolAttribute{Optional: true, Description: "Remove files on destroy"},
@@ -307,11 +307,11 @@ func (r *ProjectPathResource) Update(ctx context.Context, req resource.UpdateReq
 		body.Name = &n
 	}
 
-	out, err := r.client.UpdateProject(ctx, envID, projID, body)
-	if err != nil {
-		resp.Diagnostics.AddError("update project failed", err.Error())
-		return
-	}
+    out, err := r.client.UpdateProject(ctx, envID, projID, body)
+    if err != nil {
+        resp.Diagnostics.AddError("update project failed", err.Error())
+        return
+    }
 
 	state.Name = types.StringValue(out.Name)
 	state.Path = types.StringValue(out.Path)
@@ -342,8 +342,23 @@ func (r *ProjectPathResource) Update(ctx context.Context, req resource.UpdateReq
 			state.Env = types.StringNull()
 		}
 	}
-	// Lifecycle management if configured and changed
-	if !plan.Running.IsNull() && !plan.Running.IsUnknown() {
+    // Redeploy if compose/env changed and enabled (default true) and desired running true/unspecified
+    changedContent := (body.ComposeContent != nil) || (body.EnvContent != nil)
+    if changedContent {
+        // default to true if unset
+        redeploy := true
+        if !plan.Running.IsNull() && !plan.Running.IsUnknown() {
+            // redeploy only if intend to be running
+            if !plan.Running.ValueBool() { redeploy = false }
+        }
+        if redeploy {
+            if err := r.client.RedeployProject(ctx, envID, projID); err != nil { resp.Diagnostics.AddError("project redeploy failed", err.Error()); return }
+            if det, derr := r.client.GetProject(ctx, envID, projID); derr == nil { state.Status = types.StringValue(det.Status) }
+        }
+    }
+
+    // Lifecycle management if configured and changed
+    if !plan.Running.IsNull() && !plan.Running.IsUnknown() {
 		desired := plan.Running.ValueBool()
 		current := state.Running.ValueBool()
 		if desired != current {

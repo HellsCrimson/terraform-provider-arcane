@@ -21,6 +21,10 @@ type Client struct {
 }
 
 func NewClient(endpoint, apiKey string) *Client {
+    return NewClientWithTimeout(endpoint, apiKey, 30*time.Second)
+}
+
+func NewClientWithTimeout(endpoint, apiKey string, timeout time.Duration) *Client {
     if !strings.HasSuffix(endpoint, "/") {
         endpoint += "/"
     }
@@ -28,7 +32,7 @@ func NewClient(endpoint, apiKey string) *Client {
     return &Client{
         BaseURL: u,
         APIKey:  apiKey,
-        http:    &http.Client{Timeout: 30 * time.Second},
+        http:    &http.Client{Timeout: timeout},
     }
 }
 
@@ -407,6 +411,12 @@ func (c *Client) UpProject(ctx context.Context, envID, projectID string) error {
 
 func (c *Client) DownProject(ctx context.Context, envID, projectID string) error {
     req, err := c.newRequest(ctx, http.MethodPost, path.Join("environments", envID, "projects", projectID, "down"), nil)
+    if err != nil { return err }
+    return c.do(req, nil)
+}
+
+func (c *Client) RedeployProject(ctx context.Context, envID, projectID string) error {
+    req, err := c.newRequest(ctx, http.MethodPost, path.Join("environments", envID, "projects", projectID, "redeploy"), nil)
     if err != nil { return err }
     return c.do(req, nil)
 }

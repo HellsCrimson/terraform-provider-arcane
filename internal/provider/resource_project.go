@@ -9,6 +9,7 @@ import (
 	"github.com/hashicorp/terraform-plugin-framework/path"
 	"github.com/hashicorp/terraform-plugin-framework/resource"
 	resourceschema "github.com/hashicorp/terraform-plugin-framework/resource/schema"
+	"github.com/hashicorp/terraform-plugin-framework/resource/schema/booldefault"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema/planmodifier"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema/stringplanmodifier"
 	"github.com/hashicorp/terraform-plugin-framework/types"
@@ -33,11 +34,12 @@ func (r *ProjectResource) Schema(_ context.Context, _ resource.SchemaRequest, re
 				Description:   "Project ID",
 				PlanModifiers: []planmodifier.String{stringplanmodifier.UseStateForUnknown()},
 			},
-			"environment_id":  resourceschema.StringAttribute{Required: true, Description: "Environment ID"},
-			"name":            resourceschema.StringAttribute{Required: true, Description: "Project name"},
-			"compose_content": resourceschema.StringAttribute{Required: true, Description: "docker-compose.yml content"},
-            "env_content":     resourceschema.StringAttribute{Optional: true, Description: ".env content"},
-            "running":         resourceschema.BoolAttribute{Optional: true, Description: "If true, ensure project is running (compose up); if false, compose down. If unset, no lifecycle management."},
+			"environment_id":     resourceschema.StringAttribute{Required: true, Description: "Environment ID"},
+			"name":               resourceschema.StringAttribute{Required: true, Description: "Project name"},
+			"compose_content":    resourceschema.StringAttribute{Required: true, Description: "docker-compose.yml content"},
+			"env_content":        resourceschema.StringAttribute{Optional: true, Description: ".env content"},
+			"running":            resourceschema.BoolAttribute{Optional: true, Description: "If true, ensure project is running (compose up); if false, compose down. If unset, no lifecycle management."},
+            "redeploy_on_update": resourceschema.BoolAttribute{Optional: true, Computed: true, Description: "Redeploy the project after updating compose/env content.", Default: booldefault.StaticBool(true)},
 
 			// Computed fields
 			"path":          resourceschema.StringAttribute{Computed: true, PlanModifiers: []planmodifier.String{stringplanmodifier.UseStateForUnknown()}},
@@ -45,7 +47,7 @@ func (r *ProjectResource) Schema(_ context.Context, _ resource.SchemaRequest, re
 			"service_count": resourceschema.Int64Attribute{Computed: true},
 			"running_count": resourceschema.Int64Attribute{Computed: true},
 			"created_at":    resourceschema.StringAttribute{Computed: true, PlanModifiers: []planmodifier.String{stringplanmodifier.UseStateForUnknown()}},
-            "updated_at":    resourceschema.StringAttribute{Computed: true, PlanModifiers: []planmodifier.String{stringplanmodifier.UseStateForUnknown()}},
+			"updated_at":    resourceschema.StringAttribute{Computed: true},
 
 			// Delete options
 			"remove_files":   resourceschema.BoolAttribute{Optional: true, Description: "Remove files on destroy"},
@@ -63,20 +65,21 @@ func (r *ProjectResource) Configure(_ context.Context, req resource.ConfigureReq
 }
 
 type projectModel struct {
-	ID            types.String `tfsdk:"id"`
-	EnvironmentID types.String `tfsdk:"environment_id"`
-	Name          types.String `tfsdk:"name"`
-	Compose       types.String `tfsdk:"compose_content"`
-    Env           types.String `tfsdk:"env_content"`
-    Running       types.Bool   `tfsdk:"running"`
-	Path          types.String `tfsdk:"path"`
-	Status        types.String `tfsdk:"status"`
-	ServiceCount  types.Int64  `tfsdk:"service_count"`
-	RunningCount  types.Int64  `tfsdk:"running_count"`
-	CreatedAt     types.String `tfsdk:"created_at"`
-	UpdatedAt     types.String `tfsdk:"updated_at"`
-	RemoveFiles   types.Bool   `tfsdk:"remove_files"`
-	RemoveVolumes types.Bool   `tfsdk:"remove_volumes"`
+	ID               types.String `tfsdk:"id"`
+	EnvironmentID    types.String `tfsdk:"environment_id"`
+	Name             types.String `tfsdk:"name"`
+	Compose          types.String `tfsdk:"compose_content"`
+	Env              types.String `tfsdk:"env_content"`
+	Running          types.Bool   `tfsdk:"running"`
+	RedeployOnUpdate types.Bool   `tfsdk:"redeploy_on_update"`
+	Path             types.String `tfsdk:"path"`
+	Status           types.String `tfsdk:"status"`
+	ServiceCount     types.Int64  `tfsdk:"service_count"`
+	RunningCount     types.Int64  `tfsdk:"running_count"`
+	CreatedAt        types.String `tfsdk:"created_at"`
+	UpdatedAt        types.String `tfsdk:"updated_at"`
+	RemoveFiles      types.Bool   `tfsdk:"remove_files"`
+	RemoveVolumes    types.Bool   `tfsdk:"remove_volumes"`
 }
 
 func (r *ProjectResource) Create(ctx context.Context, req resource.CreateRequest, resp *resource.CreateResponse) {
@@ -92,33 +95,33 @@ func (r *ProjectResource) Create(ctx context.Context, req resource.CreateRequest
 		body.EnvContent = &v
 	}
 
-    envID := plan.EnvironmentID.ValueString()
-    out, err := r.client.CreateProject(ctx, envID, body)
-    if err != nil {
-        resp.Diagnostics.AddError("create project failed", err.Error())
-        return
-    }
+	envID := plan.EnvironmentID.ValueString()
+	out, err := r.client.CreateProject(ctx, envID, body)
+	if err != nil {
+		resp.Diagnostics.AddError("create project failed", err.Error())
+		return
+	}
 
-    // Manage lifecycle if requested
-    if !plan.Running.IsNull() && !plan.Running.IsUnknown() {
-        if plan.Running.ValueBool() {
-            if err := r.client.UpProject(ctx, envID, out.ID); err != nil {
-                resp.Diagnostics.AddError("project up failed", err.Error())
-                return
-            }
-        } else {
-            if err := r.client.DownProject(ctx, envID, out.ID); err != nil {
-                resp.Diagnostics.AddError("project down failed", err.Error())
-                return
-            }
-        }
-        if det, derr := r.client.GetProject(ctx, envID, out.ID); derr == nil {
-            out.Status = det.Status
-            out.RunningCount = det.RunningCount
-            out.ServiceCount = det.ServiceCount
-            out.UpdatedAt = det.UpdatedAt
-        }
-    }
+	// Manage lifecycle if requested
+	if !plan.Running.IsNull() && !plan.Running.IsUnknown() {
+		if plan.Running.ValueBool() {
+			if err := r.client.UpProject(ctx, envID, out.ID); err != nil {
+				resp.Diagnostics.AddError("project up failed", err.Error())
+				return
+			}
+		} else {
+			if err := r.client.DownProject(ctx, envID, out.ID); err != nil {
+				resp.Diagnostics.AddError("project down failed", err.Error())
+				return
+			}
+		}
+		if det, derr := r.client.GetProject(ctx, envID, out.ID); derr == nil {
+			out.Status = det.Status
+			out.RunningCount = det.RunningCount
+			out.ServiceCount = det.ServiceCount
+			out.UpdatedAt = det.UpdatedAt
+		}
+	}
 
 	state := projectModel{
 		ID:            types.StringValue(out.ID),
@@ -135,8 +138,8 @@ func (r *ProjectResource) Create(ctx context.Context, req resource.CreateRequest
 		RemoveFiles:   plan.RemoveFiles,
 		RemoveVolumes: plan.RemoveVolumes,
 	}
-    state.Running = plan.Running
-    resp.Diagnostics.Append(resp.State.Set(ctx, &state)...)
+	state.Running = plan.Running
+	resp.Diagnostics.Append(resp.State.Set(ctx, &state)...)
 }
 
 func (r *ProjectResource) Read(ctx context.Context, req resource.ReadRequest, resp *resource.ReadResponse) {
@@ -206,15 +209,43 @@ func (r *ProjectResource) Update(ctx context.Context, req resource.UpdateRequest
 		return
 	}
 
+	// Redeploy if compose/env changed and enabled (default true) and desired running true/unspecified
+	changedContent := (body.ComposeContent != nil) || (body.EnvContent != nil)
+	if changedContent {
+		redeploy := true
+		if !plan.RedeployOnUpdate.IsNull() && !plan.RedeployOnUpdate.IsUnknown() {
+			redeploy = plan.RedeployOnUpdate.ValueBool()
+		}
+		runningDesired := true
+		if !plan.Running.IsNull() && !plan.Running.IsUnknown() {
+			runningDesired = plan.Running.ValueBool()
+		}
+		if redeploy && runningDesired {
+			if err := r.client.RedeployProject(ctx, envID, projID); err != nil {
+				resp.Diagnostics.AddError("project redeploy failed", err.Error())
+				return
+			}
+			if det, derr := r.client.GetProject(ctx, envID, projID); derr == nil {
+				out.Status = det.Status
+			}
+		}
+	}
+
 	// Lifecycle manage if configured
 	if !plan.Running.IsNull() && !plan.Running.IsUnknown() {
 		desired := plan.Running.ValueBool()
 		current := state.Running.ValueBool()
 		if desired != current {
 			if desired {
-				if err := r.client.UpProject(ctx, envID, projID); err != nil { resp.Diagnostics.AddError("project up failed", err.Error()); return }
+				if err := r.client.UpProject(ctx, envID, projID); err != nil {
+					resp.Diagnostics.AddError("project up failed", err.Error())
+					return
+				}
 			} else {
-				if err := r.client.DownProject(ctx, envID, projID); err != nil { resp.Diagnostics.AddError("project down failed", err.Error()); return }
+				if err := r.client.DownProject(ctx, envID, projID); err != nil {
+					resp.Diagnostics.AddError("project down failed", err.Error())
+					return
+				}
 			}
 			if det, derr := r.client.GetProject(ctx, envID, projID); derr == nil {
 				out.Status = det.Status
