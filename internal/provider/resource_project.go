@@ -45,7 +45,7 @@ func (r *ProjectResource) Schema(_ context.Context, _ resource.SchemaRequest, re
 			"service_count": resourceschema.Int64Attribute{Computed: true},
 			"running_count": resourceschema.Int64Attribute{Computed: true},
 			"created_at":    resourceschema.StringAttribute{Computed: true, PlanModifiers: []planmodifier.String{stringplanmodifier.UseStateForUnknown()}},
-			"updated_at":    resourceschema.StringAttribute{Computed: true},
+            "updated_at":    resourceschema.StringAttribute{Computed: true, PlanModifiers: []planmodifier.String{stringplanmodifier.UseStateForUnknown()}},
 
 			// Delete options
 			"remove_files":   resourceschema.BoolAttribute{Optional: true, Description: "Remove files on destroy"},
