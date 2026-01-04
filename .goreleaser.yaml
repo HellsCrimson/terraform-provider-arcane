@@ -1,4 +1,5 @@
 project_name: terraform-provider-arcane
+version: 2
 
 before:
   hooks:
