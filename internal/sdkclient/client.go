@@ -420,3 +420,10 @@ func (c *Client) RedeployProject(ctx context.Context, envID, projectID string) e
     if err != nil { return err }
     return c.do(req, nil)
 }
+
+// PullProjectImages POST /environments/{id}/projects/{projectId}/pull
+func (c *Client) PullProjectImages(ctx context.Context, envID, projectID string) error {
+    req, err := c.newRequest(ctx, http.MethodPost, path.Join("environments", envID, "projects", projectID, "pull"), nil)
+    if err != nil { return err }
+    return c.do(req, nil)
+}

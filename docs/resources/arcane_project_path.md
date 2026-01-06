@@ -23,6 +23,7 @@ resource "arcane_project_path" "demo" {
 - `env_path` (String, Optional)
 - `content_hash_mode` (Bool, Optional) — keeps only SHA256 hashes in state.
 - `running` (Bool, Optional) — when true, ensures the project is running (compose up); when false, brings it down. If unset, lifecycle is not managed.
+- `pull_on_update` (Bool, Optional) — when true, pulls images before redeploy when file/hash changes (default false).
 
 ## Attributes Reference
 

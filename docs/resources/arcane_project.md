@@ -19,6 +19,7 @@ resource "arcane_project" "demo" {
 - `name` (String, Required)
 - `compose_content` (String, Required)
 - `env_content` (String, Optional)
+- `pull_on_update` (Bool, Optional) — when true, pulls images before redeploy when `compose_content`/`env_content` change (default false).
 - `running` (Bool, Optional) — when true, ensures the project is running (compose up); when false, brings it down. If unset, lifecycle is not managed.
 
 ## Attributes Reference

@@ -27,8 +27,8 @@ func (r *ProjectResource) Metadata(_ context.Context, req resource.MetadataReque
 }
 
 func (r *ProjectResource) Schema(_ context.Context, _ resource.SchemaRequest, resp *resource.SchemaResponse) {
-	resp.Schema = resourceschema.Schema{
-		Attributes: map[string]resourceschema.Attribute{
+    resp.Schema = resourceschema.Schema{
+        Attributes: map[string]resourceschema.Attribute{
 			"id": resourceschema.StringAttribute{
 				Computed:      true,
 				Description:   "Project ID",
@@ -39,7 +39,8 @@ func (r *ProjectResource) Schema(_ context.Context, _ resource.SchemaRequest, re
 			"compose_content":    resourceschema.StringAttribute{Required: true, Description: "docker-compose.yml content"},
 			"env_content":        resourceschema.StringAttribute{Optional: true, Description: ".env content"},
 			"running":            resourceschema.BoolAttribute{Optional: true, Description: "If true, ensure project is running (compose up); if false, compose down. If unset, no lifecycle management."},
-			"redeploy_on_update": resourceschema.BoolAttribute{Optional: true, Computed: true, Description: "Redeploy the project after updating compose/env content.", Default: booldefault.StaticBool(true)},
+            "redeploy_on_update": resourceschema.BoolAttribute{Optional: true, Computed: true, Description: "Redeploy the project after updating compose/env content.", Default: booldefault.StaticBool(true)},
+            "pull_on_update":     resourceschema.BoolAttribute{Optional: true, Computed: true, Description: "Pull images before redeploy when compose/env changes.", Default: booldefault.StaticBool(false)},
 
 			// Computed fields
 			"path":          resourceschema.StringAttribute{Computed: true, PlanModifiers: []planmodifier.String{stringplanmodifier.UseStateForUnknown()}},
@@ -71,7 +72,8 @@ type projectModel struct {
 	Compose          types.String `tfsdk:"compose_content"`
 	Env              types.String `tfsdk:"env_content"`
 	Running          types.Bool   `tfsdk:"running"`
-	RedeployOnUpdate types.Bool   `tfsdk:"redeploy_on_update"`
+    RedeployOnUpdate types.Bool   `tfsdk:"redeploy_on_update"`
+    PullOnUpdate     types.Bool   `tfsdk:"pull_on_update"`
 	Path             types.String `tfsdk:"path"`
 	Status           types.String `tfsdk:"status"`
 	ServiceCount     types.Int64  `tfsdk:"service_count"`
@@ -209,15 +211,27 @@ func (r *ProjectResource) Update(ctx context.Context, req resource.UpdateRequest
 		return
 	}
 
-	// Redeploy if compose/env changed and enabled (default true) and desired running true/unspecified
-	changedContent := (body.ComposeContent != nil) || (body.EnvContent != nil)
-	if changedContent {
-		redeploy := true
-		if !plan.RedeployOnUpdate.IsNull() && !plan.RedeployOnUpdate.IsUnknown() {
-			redeploy = plan.RedeployOnUpdate.ValueBool()
-		}
-		runningDesired := true
-		if !plan.Running.IsNull() && !plan.Running.IsUnknown() {
+    // Redeploy if compose/env changed and enabled (default true) and desired running true/unspecified
+    changedContent := (body.ComposeContent != nil) || (body.EnvContent != nil)
+    if changedContent {
+        // Optionally pull first
+        pull := false
+        if !plan.PullOnUpdate.IsNull() && !plan.PullOnUpdate.IsUnknown() {
+            pull = plan.PullOnUpdate.ValueBool()
+        }
+        if pull {
+            if err := r.client.PullProjectImages(ctx, envID, projID); err != nil {
+                resp.Diagnostics.AddError("project image pull failed", err.Error())
+                return
+            }
+        }
+
+        redeploy := true
+        if !plan.RedeployOnUpdate.IsNull() && !plan.RedeployOnUpdate.IsUnknown() {
+            redeploy = plan.RedeployOnUpdate.ValueBool()
+        }
+        runningDesired := true
+        if !plan.Running.IsNull() && !plan.Running.IsUnknown() {
 			runningDesired = plan.Running.ValueBool()
 		}
 		if redeploy && runningDesired {
