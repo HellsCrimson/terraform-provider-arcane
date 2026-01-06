@@ -402,6 +402,71 @@ func (c *Client) DeleteContainer(ctx context.Context, envID, containerID string,
     return c.do(req, nil)
 }
 
+// -------- Container Registries --------
+type CreateContainerRegistryRequest struct {
+    URL         string  `json:"url"`
+    Username    string  `json:"username"`
+    Token       string  `json:"token"`
+    Description *string `json:"description,omitempty"`
+    Insecure    *bool   `json:"insecure,omitempty"`
+    Enabled     *bool   `json:"enabled,omitempty"`
+}
+
+type UpdateContainerRegistryRequest struct {
+    URL         *string `json:"url,omitempty"`
+    Username    *string `json:"username,omitempty"`
+    Token       *string `json:"token,omitempty"`
+    Description *string `json:"description,omitempty"`
+    Insecure    *bool   `json:"insecure,omitempty"`
+    Enabled     *bool   `json:"enabled,omitempty"`
+}
+
+type ContainerRegistry struct {
+    ID          string `json:"id"`
+    URL         string `json:"url"`
+    Username    string `json:"username"`
+    Description string `json:"description"`
+    Insecure    bool   `json:"insecure"`
+    Enabled     bool   `json:"enabled"`
+    CreatedAt   string `json:"createdAt"`
+    UpdatedAt   string `json:"updatedAt"`
+}
+
+type containerRegistryEnvelope struct {
+    Success bool              `json:"success"`
+    Data    ContainerRegistry `json:"data"`
+}
+
+func (c *Client) CreateContainerRegistry(ctx context.Context, body CreateContainerRegistryRequest) (*ContainerRegistry, error) {
+    req, err := c.newRequest(ctx, http.MethodPost, "container-registries", body)
+    if err != nil { return nil, err }
+    var env containerRegistryEnvelope
+    if err := c.do(req, &env); err != nil { return nil, err }
+    return &env.Data, nil
+}
+
+func (c *Client) GetContainerRegistry(ctx context.Context, id string) (*ContainerRegistry, error) {
+    req, err := c.newRequest(ctx, http.MethodGet, path.Join("container-registries", id), nil)
+    if err != nil { return nil, err }
+    var env containerRegistryEnvelope
+    if err := c.do(req, &env); err != nil { return nil, err }
+    return &env.Data, nil
+}
+
+func (c *Client) UpdateContainerRegistry(ctx context.Context, id string, body UpdateContainerRegistryRequest) (*ContainerRegistry, error) {
+    req, err := c.newRequest(ctx, http.MethodPut, path.Join("container-registries", id), body)
+    if err != nil { return nil, err }
+    var env containerRegistryEnvelope
+    if err := c.do(req, &env); err != nil { return nil, err }
+    return &env.Data, nil
+}
+
+func (c *Client) DeleteContainerRegistry(ctx context.Context, id string) error {
+    req, err := c.newRequest(ctx, http.MethodDelete, path.Join("container-registries", id), nil)
+    if err != nil { return err }
+    return c.do(req, nil)
+}
+
 // Project lifecycle: up/down/restart/redeploy
 func (c *Client) UpProject(ctx context.Context, envID, projectID string) error {
     req, err := c.newRequest(ctx, http.MethodPost, path.Join("environments", envID, "projects", projectID, "up"), nil)

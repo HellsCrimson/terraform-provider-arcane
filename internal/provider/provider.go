@@ -118,6 +118,7 @@ func (p *ArcaneProvider) Resources(_ context.Context) []func() resource.Resource
         NewSettingsResource,
         NewProjectResource,
         NewProjectPathResource,
+        NewRegistryResource,
         NewNotificationResource,
         NewContainerResource,
     }
