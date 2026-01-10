@@ -25,6 +25,26 @@ func NewGitRepositoryResource() resource.Resource {
 	return &GitRepositoryResource{}
 }
 
+// mapAuthTypeToAPI converts user-friendly auth type to API format
+func mapAuthTypeToAPI(authType string) string {
+	switch authType {
+	case "token":
+		return "http"
+	default:
+		return authType
+	}
+}
+
+// mapAuthTypeFromAPI converts API auth type to user-friendly format
+func mapAuthTypeFromAPI(authType string) string {
+	switch authType {
+	case "http":
+		return "token"
+	default:
+		return authType
+	}
+}
+
 func (r *GitRepositoryResource) Metadata(_ context.Context, req resource.MetadataRequest, resp *resource.MetadataResponse) {
 	resp.TypeName = req.ProviderTypeName + "_git_repository"
 }
@@ -123,7 +143,7 @@ func (r *GitRepositoryResource) Create(ctx context.Context, req resource.CreateR
 	body := sdkclient.GitRepositoryCreateRequest{
 		Name:     plan.Name.ValueString(),
 		URL:      plan.URL.ValueString(),
-		AuthType: plan.AuthType.ValueString(),
+		AuthType: mapAuthTypeToAPI(plan.AuthType.ValueString()),
 	}
 
 	if !plan.Description.IsNull() && !plan.Description.IsUnknown() {
@@ -134,15 +154,15 @@ func (r *GitRepositoryResource) Create(ctx context.Context, req resource.CreateR
 		v := plan.Enabled.ValueBool()
 		body.Enabled = &v
 	}
-	if !plan.SSHKey.IsNull() && !plan.SSHKey.IsUnknown() {
+	if !plan.SSHKey.IsNull() && !plan.SSHKey.IsUnknown() && plan.SSHKey.ValueString() != "" {
 		v := plan.SSHKey.ValueString()
 		body.SSHKey = &v
 	}
-	if !plan.Token.IsNull() && !plan.Token.IsUnknown() {
+	if !plan.Token.IsNull() && !plan.Token.IsUnknown() && plan.Token.ValueString() != "" {
 		v := plan.Token.ValueString()
 		body.Token = &v
 	}
-	if !plan.Username.IsNull() && !plan.Username.IsUnknown() {
+	if !plan.Username.IsNull() && !plan.Username.IsUnknown() && plan.Username.ValueString() != "" {
 		v := plan.Username.ValueString()
 		body.Username = &v
 	}
@@ -154,17 +174,27 @@ func (r *GitRepositoryResource) Create(ctx context.Context, req resource.CreateR
 	}
 
 	state := gitRepositoryModel{
-		ID:          types.StringValue(repo.ID),
-		Name:        types.StringValue(repo.Name),
-		URL:         types.StringValue(repo.URL),
-		AuthType:    types.StringValue(repo.AuthType),
-		Description: types.StringValue(repo.Description),
-		Enabled:     types.BoolValue(repo.Enabled),
-		Username:    types.StringValue(repo.Username),
-		CreatedAt:   types.StringValue(repo.CreatedAt),
-		UpdatedAt:   types.StringValue(repo.UpdatedAt),
-		SSHKey:      plan.SSHKey,
-		Token:       plan.Token,
+		ID:        types.StringValue(repo.ID),
+		Name:      types.StringValue(repo.Name),
+		URL:       types.StringValue(repo.URL),
+		AuthType:  types.StringValue(mapAuthTypeFromAPI(repo.AuthType)),
+		Enabled:   types.BoolValue(repo.Enabled),
+		CreatedAt: types.StringValue(repo.CreatedAt),
+		UpdatedAt: types.StringValue(repo.UpdatedAt),
+		SSHKey:    plan.SSHKey,
+		Token:     plan.Token,
+	}
+
+	// Handle optional fields that may be empty strings from API
+	if repo.Description != "" {
+		state.Description = types.StringValue(repo.Description)
+	} else {
+		state.Description = plan.Description
+	}
+	if repo.Username != "" {
+		state.Username = types.StringValue(repo.Username)
+	} else {
+		state.Username = plan.Username
 	}
 
 	resp.Diagnostics.Append(resp.State.Set(ctx, &state)...)
@@ -189,11 +219,27 @@ func (r *GitRepositoryResource) Read(ctx context.Context, req resource.ReadReque
 
 	state.Name = types.StringValue(repo.Name)
 	state.URL = types.StringValue(repo.URL)
-	state.AuthType = types.StringValue(repo.AuthType)
-	state.Description = types.StringValue(repo.Description)
+	state.AuthType = types.StringValue(mapAuthTypeFromAPI(repo.AuthType))
 	state.Enabled = types.BoolValue(repo.Enabled)
-	state.Username = types.StringValue(repo.Username)
-	state.UpdatedAt = types.StringValue(repo.UpdatedAt)
+	// Leave created_at and updated_at unchanged to avoid plan inconsistency
+
+	// Handle optional fields that may be empty strings from API
+	if repo.Description != "" {
+		state.Description = types.StringValue(repo.Description)
+	} else if state.Description.IsNull() {
+		state.Description = types.StringNull()
+	}
+	// Keep existing description if API returns empty and we had a value
+
+	if repo.Username != "" {
+		state.Username = types.StringValue(repo.Username)
+	} else if state.Username.IsNull() {
+		state.Username = types.StringNull()
+	}
+	// Keep existing username if API returns empty and we had a value
+
+	// Preserve sensitive fields from state
+	// SSHKey and Token remain unchanged from state
 
 	resp.Diagnostics.Append(resp.State.Set(ctx, &state)...)
 }
@@ -218,7 +264,7 @@ func (r *GitRepositoryResource) Update(ctx context.Context, req resource.UpdateR
 		body.URL = &v
 	}
 	if !plan.AuthType.IsNull() && !plan.AuthType.IsUnknown() {
-		v := plan.AuthType.ValueString()
+		v := mapAuthTypeToAPI(plan.AuthType.ValueString())
 		body.AuthType = &v
 	}
 	if !plan.Description.IsNull() && !plan.Description.IsUnknown() {
@@ -229,15 +275,15 @@ func (r *GitRepositoryResource) Update(ctx context.Context, req resource.UpdateR
 		v := plan.Enabled.ValueBool()
 		body.Enabled = &v
 	}
-	if !plan.SSHKey.IsNull() && !plan.SSHKey.IsUnknown() {
+	if !plan.SSHKey.IsNull() && !plan.SSHKey.IsUnknown() && plan.SSHKey.ValueString() != "" {
 		v := plan.SSHKey.ValueString()
 		body.SSHKey = &v
 	}
-	if !plan.Token.IsNull() && !plan.Token.IsUnknown() {
+	if !plan.Token.IsNull() && !plan.Token.IsUnknown() && plan.Token.ValueString() != "" {
 		v := plan.Token.ValueString()
 		body.Token = &v
 	}
-	if !plan.Username.IsNull() && !plan.Username.IsUnknown() {
+	if !plan.Username.IsNull() && !plan.Username.IsUnknown() && plan.Username.ValueString() != "" {
 		v := plan.Username.ValueString()
 		body.Username = &v
 	}
@@ -250,18 +296,26 @@ func (r *GitRepositoryResource) Update(ctx context.Context, req resource.UpdateR
 
 	state.Name = types.StringValue(repo.Name)
 	state.URL = types.StringValue(repo.URL)
-	state.AuthType = types.StringValue(repo.AuthType)
-	state.Description = types.StringValue(repo.Description)
+	state.AuthType = types.StringValue(mapAuthTypeFromAPI(repo.AuthType))
 	state.Enabled = types.BoolValue(repo.Enabled)
-	state.Username = types.StringValue(repo.Username)
-	state.UpdatedAt = types.StringValue(repo.UpdatedAt)
+	// Leave created_at and updated_at unchanged to avoid plan inconsistency
 
-	if !plan.SSHKey.IsNull() && !plan.SSHKey.IsUnknown() {
-		state.SSHKey = plan.SSHKey
+	// Handle optional fields that may be empty strings from API
+	if repo.Description != "" {
+		state.Description = types.StringValue(repo.Description)
+	} else {
+		state.Description = plan.Description
 	}
-	if !plan.Token.IsNull() && !plan.Token.IsUnknown() {
-		state.Token = plan.Token
+
+	if repo.Username != "" {
+		state.Username = types.StringValue(repo.Username)
+	} else {
+		state.Username = plan.Username
 	}
+
+	// Preserve sensitive fields from plan
+	state.SSHKey = plan.SSHKey
+	state.Token = plan.Token
 
 	resp.Diagnostics.Append(resp.State.Set(ctx, &state)...)
 }

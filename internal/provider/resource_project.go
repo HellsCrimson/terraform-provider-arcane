@@ -1,18 +1,18 @@
 package provider
 
 import (
-    "context"
-    "strings"
+	"context"
+	"strings"
 
-    "terraform-provider-arcane/internal/sdkclient"
+	"terraform-provider-arcane/internal/sdkclient"
 
-    "github.com/hashicorp/terraform-plugin-framework/path"
-    "github.com/hashicorp/terraform-plugin-framework/resource"
-    resourceschema "github.com/hashicorp/terraform-plugin-framework/resource/schema"
-    "github.com/hashicorp/terraform-plugin-framework/resource/schema/booldefault"
-    "github.com/hashicorp/terraform-plugin-framework/resource/schema/planmodifier"
-    "github.com/hashicorp/terraform-plugin-framework/resource/schema/stringplanmodifier"
-    "github.com/hashicorp/terraform-plugin-framework/types"
+	"github.com/hashicorp/terraform-plugin-framework/path"
+	"github.com/hashicorp/terraform-plugin-framework/resource"
+	resourceschema "github.com/hashicorp/terraform-plugin-framework/resource/schema"
+	"github.com/hashicorp/terraform-plugin-framework/resource/schema/booldefault"
+	"github.com/hashicorp/terraform-plugin-framework/resource/schema/planmodifier"
+	"github.com/hashicorp/terraform-plugin-framework/resource/schema/stringplanmodifier"
+	"github.com/hashicorp/terraform-plugin-framework/types"
 )
 
 var _ resource.Resource = &ProjectResource{}
@@ -27,8 +27,8 @@ func (r *ProjectResource) Metadata(_ context.Context, req resource.MetadataReque
 }
 
 func (r *ProjectResource) Schema(_ context.Context, _ resource.SchemaRequest, resp *resource.SchemaResponse) {
-    resp.Schema = resourceschema.Schema{
-        Attributes: map[string]resourceschema.Attribute{
+	resp.Schema = resourceschema.Schema{
+		Attributes: map[string]resourceschema.Attribute{
 			"id": resourceschema.StringAttribute{
 				Computed:      true,
 				Description:   "Project ID",
@@ -39,8 +39,8 @@ func (r *ProjectResource) Schema(_ context.Context, _ resource.SchemaRequest, re
 			"compose_content":    resourceschema.StringAttribute{Required: true, Description: "docker-compose.yml content"},
 			"env_content":        resourceschema.StringAttribute{Optional: true, Description: ".env content"},
 			"running":            resourceschema.BoolAttribute{Optional: true, Description: "If true, ensure project is running (compose up); if false, compose down. If unset, no lifecycle management."},
-            "redeploy_on_update": resourceschema.BoolAttribute{Optional: true, Computed: true, Description: "Redeploy the project after updating compose/env content.", Default: booldefault.StaticBool(true)},
-            "pull_on_update":     resourceschema.BoolAttribute{Optional: true, Computed: true, Description: "Pull images before redeploy when compose/env changes.", Default: booldefault.StaticBool(false)},
+			"redeploy_on_update": resourceschema.BoolAttribute{Optional: true, Computed: true, Description: "Redeploy the project after updating compose/env content.", Default: booldefault.StaticBool(true)},
+			"pull_on_update":     resourceschema.BoolAttribute{Optional: true, Computed: true, Description: "Pull images before redeploy when compose/env changes.", Default: booldefault.StaticBool(false)},
 
 			// Computed fields
 			"path":          resourceschema.StringAttribute{Computed: true, PlanModifiers: []planmodifier.String{stringplanmodifier.UseStateForUnknown()}},
@@ -72,8 +72,8 @@ type projectModel struct {
 	Compose          types.String `tfsdk:"compose_content"`
 	Env              types.String `tfsdk:"env_content"`
 	Running          types.Bool   `tfsdk:"running"`
-    RedeployOnUpdate types.Bool   `tfsdk:"redeploy_on_update"`
-    PullOnUpdate     types.Bool   `tfsdk:"pull_on_update"`
+	RedeployOnUpdate types.Bool   `tfsdk:"redeploy_on_update"`
+	PullOnUpdate     types.Bool   `tfsdk:"pull_on_update"`
 	Path             types.String `tfsdk:"path"`
 	Status           types.String `tfsdk:"status"`
 	ServiceCount     types.Int64  `tfsdk:"service_count"`
@@ -126,21 +126,23 @@ func (r *ProjectResource) Create(ctx context.Context, req resource.CreateRequest
 	}
 
 	state := projectModel{
-		ID:            types.StringValue(out.ID),
-		EnvironmentID: plan.EnvironmentID,
-		Name:          types.StringValue(out.Name),
-		Compose:       plan.Compose,
-		Env:           plan.Env,
-		Path:          types.StringValue(out.Path),
-		Status:        types.StringValue(out.Status),
-		ServiceCount:  types.Int64Value(int64(out.ServiceCount)),
-		RunningCount:  types.Int64Value(int64(out.RunningCount)),
-		CreatedAt:     types.StringValue(out.CreatedAt),
-		UpdatedAt:     types.StringValue(out.UpdatedAt),
-		RemoveFiles:   plan.RemoveFiles,
-		RemoveVolumes: plan.RemoveVolumes,
+		ID:               types.StringValue(out.ID),
+		EnvironmentID:    plan.EnvironmentID,
+		Name:             types.StringValue(out.Name),
+		Compose:          plan.Compose,
+		Env:              plan.Env,
+		Path:             types.StringValue(out.Path),
+		Status:           types.StringValue(out.Status),
+		ServiceCount:     types.Int64Value(int64(out.ServiceCount)),
+		RunningCount:     types.Int64Value(int64(out.RunningCount)),
+		CreatedAt:        types.StringValue(out.CreatedAt),
+		UpdatedAt:        types.StringValue(out.UpdatedAt),
+		RemoveFiles:      plan.RemoveFiles,
+		RemoveVolumes:    plan.RemoveVolumes,
+		Running:          plan.Running,
+		RedeployOnUpdate: plan.RedeployOnUpdate,
+		PullOnUpdate:     plan.PullOnUpdate,
 	}
-	state.Running = plan.Running
 	resp.Diagnostics.Append(resp.State.Set(ctx, &state)...)
 }
 
@@ -168,14 +170,15 @@ func (r *ProjectResource) Read(ctx context.Context, req resource.ReadRequest, re
 	state.Status = types.StringValue(out.Status)
 	state.ServiceCount = types.Int64Value(int64(out.ServiceCount))
 	state.RunningCount = types.Int64Value(int64(out.RunningCount))
-	state.CreatedAt = types.StringValue(out.CreatedAt)
-	// Leave updated_at unchanged during Update to avoid plan inconsistency on server-side timestamp changes
+	// Leave created_at and updated_at unchanged to avoid plan inconsistency on server-side timestamp changes
 	if out.ComposeContent != nil {
 		state.Compose = types.StringValue(*out.ComposeContent)
 	}
 	if out.EnvContent != nil {
 		state.Env = types.StringValue(*out.EnvContent)
 	}
+	// Preserve configuration values that have defaults
+	// PullOnUpdate, RedeployOnUpdate, Running, RemoveFiles, RemoveVolumes are already in state
 
 	resp.Diagnostics.Append(resp.State.Set(ctx, &state)...)
 }
@@ -211,27 +214,27 @@ func (r *ProjectResource) Update(ctx context.Context, req resource.UpdateRequest
 		return
 	}
 
-    // Redeploy if compose/env changed and enabled (default true) and desired running true/unspecified
-    changedContent := (body.ComposeContent != nil) || (body.EnvContent != nil)
-    if changedContent {
-        // Optionally pull first
-        pull := false
-        if !plan.PullOnUpdate.IsNull() && !plan.PullOnUpdate.IsUnknown() {
-            pull = plan.PullOnUpdate.ValueBool()
-        }
-        if pull {
-            if err := r.client.PullProjectImages(ctx, envID, projID); err != nil {
-                resp.Diagnostics.AddError("project image pull failed", err.Error())
-                return
-            }
-        }
+	// Redeploy if compose/env changed and enabled (default true) and desired running true/unspecified
+	changedContent := (body.ComposeContent != nil) || (body.EnvContent != nil)
+	if changedContent {
+		// Optionally pull first
+		pull := false
+		if !plan.PullOnUpdate.IsNull() && !plan.PullOnUpdate.IsUnknown() {
+			pull = plan.PullOnUpdate.ValueBool()
+		}
+		if pull {
+			if err := r.client.PullProjectImages(ctx, envID, projID); err != nil {
+				resp.Diagnostics.AddError("project image pull failed", err.Error())
+				return
+			}
+		}
 
-        redeploy := true
-        if !plan.RedeployOnUpdate.IsNull() && !plan.RedeployOnUpdate.IsUnknown() {
-            redeploy = plan.RedeployOnUpdate.ValueBool()
-        }
-        runningDesired := true
-        if !plan.Running.IsNull() && !plan.Running.IsUnknown() {
+		redeploy := true
+		if !plan.RedeployOnUpdate.IsNull() && !plan.RedeployOnUpdate.IsUnknown() {
+			redeploy = plan.RedeployOnUpdate.ValueBool()
+		}
+		runningDesired := true
+		if !plan.Running.IsNull() && !plan.Running.IsUnknown() {
 			runningDesired = plan.Running.ValueBool()
 		}
 		if redeploy && runningDesired {
@@ -273,13 +276,12 @@ func (r *ProjectResource) Update(ctx context.Context, req resource.UpdateRequest
 	state.Status = types.StringValue(out.Status)
 	state.ServiceCount = types.Int64Value(int64(out.ServiceCount))
 	state.RunningCount = types.Int64Value(int64(out.RunningCount))
-	state.CreatedAt = types.StringValue(out.CreatedAt)
-	if out.ComposeContent != nil {
-		state.Compose = types.StringValue(*out.ComposeContent)
-	}
-	if out.EnvContent != nil {
-		state.Env = types.StringValue(*out.EnvContent)
-	}
+	// Leave created_at and updated_at unchanged to avoid plan inconsistency
+	state.Compose = plan.Compose
+	state.Env = plan.Env
+	state.PullOnUpdate = plan.PullOnUpdate
+	state.RedeployOnUpdate = plan.RedeployOnUpdate
+	// state.Running is already updated above if changed
 	resp.Diagnostics.Append(resp.State.Set(ctx, &state)...)
 }
 

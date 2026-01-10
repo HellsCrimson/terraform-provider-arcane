@@ -1,22 +1,22 @@
 package provider
 
 import (
-    "context"
-    "crypto/sha256"
-    "encoding/hex"
-    "os"
-    "strings"
-    "time"
+	"context"
+	"crypto/sha256"
+	"encoding/hex"
+	"os"
+	"strings"
+	"time"
 
-    "terraform-provider-arcane/internal/sdkclient"
+	"terraform-provider-arcane/internal/sdkclient"
 
-    "github.com/hashicorp/terraform-plugin-framework/path"
-    "github.com/hashicorp/terraform-plugin-framework/resource"
-    resourceschema "github.com/hashicorp/terraform-plugin-framework/resource/schema"
-    "github.com/hashicorp/terraform-plugin-framework/resource/schema/booldefault"
-    "github.com/hashicorp/terraform-plugin-framework/resource/schema/planmodifier"
-    "github.com/hashicorp/terraform-plugin-framework/resource/schema/stringplanmodifier"
-    "github.com/hashicorp/terraform-plugin-framework/types"
+	"github.com/hashicorp/terraform-plugin-framework/path"
+	"github.com/hashicorp/terraform-plugin-framework/resource"
+	resourceschema "github.com/hashicorp/terraform-plugin-framework/resource/schema"
+	"github.com/hashicorp/terraform-plugin-framework/resource/schema/booldefault"
+	"github.com/hashicorp/terraform-plugin-framework/resource/schema/planmodifier"
+	"github.com/hashicorp/terraform-plugin-framework/resource/schema/stringplanmodifier"
+	"github.com/hashicorp/terraform-plugin-framework/types"
 )
 
 var _ resource.Resource = &ProjectPathResource{}
@@ -43,15 +43,15 @@ func (r *ProjectPathResource) Schema(_ context.Context, _ resource.SchemaRequest
 			// Controls whether to store full file contents or only hashes in state
 			"content_hash_mode": resourceschema.BoolAttribute{Optional: true, Description: "If true, store only content hashes in state instead of full file contents."},
 
-            // Derived from files; used to detect changes and apply updates
-            "compose_content":      resourceschema.StringAttribute{Computed: true, Sensitive: true},
-            "env_content":          resourceschema.StringAttribute{Computed: true, Sensitive: true},
-            "compose_content_hash": resourceschema.StringAttribute{Computed: true, Sensitive: true},
-            "env_content_hash":     resourceschema.StringAttribute{Computed: true, Sensitive: true},
+			// Derived from files; used to detect changes and apply updates
+			"compose_content":      resourceschema.StringAttribute{Computed: true, Sensitive: true},
+			"env_content":          resourceschema.StringAttribute{Computed: true, Sensitive: true},
+			"compose_content_hash": resourceschema.StringAttribute{Computed: true, Sensitive: true},
+			"env_content_hash":     resourceschema.StringAttribute{Computed: true, Sensitive: true},
 
-            // Lifecycle (optional)
-            "running": resourceschema.BoolAttribute{Optional: true, Description: "If true, ensure project is running (compose up); if false, compose down. If unset, no lifecycle management."},
-            "pull_on_update": resourceschema.BoolAttribute{Optional: true, Computed: true, Description: "Pull images before redeploy when compose/env changes.", Default: booldefault.StaticBool(false)},
+			// Lifecycle (optional)
+			"running":        resourceschema.BoolAttribute{Optional: true, Description: "If true, ensure project is running (compose up); if false, compose down. If unset, no lifecycle management."},
+			"pull_on_update": resourceschema.BoolAttribute{Optional: true, Computed: true, Description: "Pull images before redeploy when compose/env changes.", Default: booldefault.StaticBool(false)},
 
 			// Computed info
 			"path":          resourceschema.StringAttribute{Computed: true, PlanModifiers: []planmodifier.String{stringplanmodifier.UseStateForUnknown()}},
@@ -59,7 +59,7 @@ func (r *ProjectPathResource) Schema(_ context.Context, _ resource.SchemaRequest
 			"service_count": resourceschema.Int64Attribute{Computed: true},
 			"running_count": resourceschema.Int64Attribute{Computed: true},
 			"created_at":    resourceschema.StringAttribute{Computed: true, PlanModifiers: []planmodifier.String{stringplanmodifier.UseStateForUnknown()}},
-            "updated_at":    resourceschema.StringAttribute{Computed: true, PlanModifiers: []planmodifier.String{stringplanmodifier.UseStateForUnknown()}},
+			"updated_at":    resourceschema.StringAttribute{Computed: true, PlanModifiers: []planmodifier.String{stringplanmodifier.UseStateForUnknown()}},
 
 			// Delete options
 			"remove_files":   resourceschema.BoolAttribute{Optional: true, Description: "Remove files on destroy"},
@@ -86,14 +86,14 @@ type projectPathModel struct {
 	Compose         types.String `tfsdk:"compose_content"`
 	Env             types.String `tfsdk:"env_content"`
 	ComposeHash     types.String `tfsdk:"compose_content_hash"`
-    EnvHash         types.String `tfsdk:"env_content_hash"`
-    Running         types.Bool   `tfsdk:"running"`
-    PullOnUpdate    types.Bool   `tfsdk:"pull_on_update"`
-    Path            types.String `tfsdk:"path"`
-    Status          types.String `tfsdk:"status"`
-    ServiceCount    types.Int64  `tfsdk:"service_count"`
-    RunningCount    types.Int64  `tfsdk:"running_count"`
-    CreatedAt       types.String `tfsdk:"created_at"`
+	EnvHash         types.String `tfsdk:"env_content_hash"`
+	Running         types.Bool   `tfsdk:"running"`
+	PullOnUpdate    types.Bool   `tfsdk:"pull_on_update"`
+	Path            types.String `tfsdk:"path"`
+	Status          types.String `tfsdk:"status"`
+	ServiceCount    types.Int64  `tfsdk:"service_count"`
+	RunningCount    types.Int64  `tfsdk:"running_count"`
+	CreatedAt       types.String `tfsdk:"created_at"`
 	UpdatedAt       types.String `tfsdk:"updated_at"`
 	RemoveFiles     types.Bool   `tfsdk:"remove_files"`
 	RemoveVolumes   types.Bool   `tfsdk:"remove_volumes"`
@@ -206,11 +206,11 @@ func (r *ProjectPathResource) Create(ctx context.Context, req resource.CreateReq
 	state := plan
 	state.ID = types.StringValue(out.ID)
 	state.Path = types.StringValue(out.Path)
-    state.Status = types.StringValue(out.Status)
-    state.ServiceCount = types.Int64Value(int64(out.ServiceCount))
-    state.RunningCount = types.Int64Value(int64(out.RunningCount))
-    state.CreatedAt = types.StringValue(out.CreatedAt)
-    state.UpdatedAt = types.StringValue(out.UpdatedAt)
+	state.Status = types.StringValue(out.Status)
+	state.ServiceCount = types.Int64Value(int64(out.ServiceCount))
+	state.RunningCount = types.Int64Value(int64(out.RunningCount))
+	state.CreatedAt = types.StringValue(out.CreatedAt)
+	state.UpdatedAt = types.StringValue(out.UpdatedAt)
 	if plan.ContentHashMode.ValueBool() {
 		ch := sha256.Sum256([]byte(compose))
 		state.ComposeHash = types.StringValue(hex.EncodeToString(ch[:]))
@@ -232,6 +232,7 @@ func (r *ProjectPathResource) Create(ctx context.Context, req resource.CreateReq
 		}
 	}
 	state.Running = plan.Running
+	state.PullOnUpdate = plan.PullOnUpdate
 	resp.Diagnostics.Append(resp.State.Set(ctx, &state)...)
 }
 
@@ -257,8 +258,9 @@ func (r *ProjectPathResource) Read(ctx context.Context, req resource.ReadRequest
 	state.Status = types.StringValue(out.Status)
 	state.ServiceCount = types.Int64Value(int64(out.ServiceCount))
 	state.RunningCount = types.Int64Value(int64(out.RunningCount))
-	state.CreatedAt = types.StringValue(out.CreatedAt)
-	// retain Compose/Env from local files in state; do not overwrite from server
+	// Leave created_at and updated_at unchanged to avoid plan inconsistency
+	// Retain Compose/Env from local files in state; do not overwrite from server
+	// Preserve configuration values: PullOnUpdate, Running, RemoveFiles, RemoveVolumes, etc.
 	resp.Diagnostics.Append(resp.State.Set(ctx, &state)...)
 }
 
@@ -316,47 +318,46 @@ func (r *ProjectPathResource) Update(ctx context.Context, req resource.UpdateReq
 		return
 	}
 
-    // Redeploy if compose/env changed and desired running is true/unspecified
-    changedContent := (body.ComposeContent != nil) || (body.EnvContent != nil)
-    if changedContent {
-        // Optional pull before redeploy
-        if !plan.PullOnUpdate.IsNull() && !plan.PullOnUpdate.IsUnknown() && plan.PullOnUpdate.ValueBool() {
-            if err := r.client.PullProjectImages(ctx, envID, projID); err != nil {
-                resp.Diagnostics.AddError("project image pull failed", err.Error())
-                return
-            }
-        }
+	// Redeploy if compose/env changed and desired running is true/unspecified
+	changedContent := (body.ComposeContent != nil) || (body.EnvContent != nil)
+	if changedContent {
+		// Optional pull before redeploy
+		if !plan.PullOnUpdate.IsNull() && !plan.PullOnUpdate.IsUnknown() && plan.PullOnUpdate.ValueBool() {
+			if err := r.client.PullProjectImages(ctx, envID, projID); err != nil {
+				resp.Diagnostics.AddError("project image pull failed", err.Error())
+				return
+			}
+		}
 
-        shouldRedeploy := true
-        if !plan.Running.IsNull() && !plan.Running.IsUnknown() && !plan.Running.ValueBool() {
-            shouldRedeploy = false
-        }
-        if shouldRedeploy {
-            if err := r.client.RedeployProject(ctx, envID, projID); err != nil {
-                if strings.Contains(strings.ToLower(err.Error()), "unhealthy") {
-                    resp.Diagnostics.AddWarning("project redeploy reported unhealthy", err.Error())
-                } else {
-                    resp.Diagnostics.AddError("project redeploy failed", err.Error())
-                    return
-                }
-            }
-            // wait a bit for status if running
-            timeout := 5 * time.Minute
-            if det, derr := r.client.GetProject(ctx, envID, projID); derr == nil {
-                state.Status = types.StringValue(det.Status)
-            } else {
-                _ = timeout // placeholder unused if not waiting further
-            }
-        }
-    }
+		shouldRedeploy := true
+		if !plan.Running.IsNull() && !plan.Running.IsUnknown() && !plan.Running.ValueBool() {
+			shouldRedeploy = false
+		}
+		if shouldRedeploy {
+			if err := r.client.RedeployProject(ctx, envID, projID); err != nil {
+				if strings.Contains(strings.ToLower(err.Error()), "unhealthy") {
+					resp.Diagnostics.AddWarning("project redeploy reported unhealthy", err.Error())
+				} else {
+					resp.Diagnostics.AddError("project redeploy failed", err.Error())
+					return
+				}
+			}
+			// wait a bit for status if running
+			timeout := 5 * time.Minute
+			if det, derr := r.client.GetProject(ctx, envID, projID); derr == nil {
+				state.Status = types.StringValue(det.Status)
+			} else {
+				_ = timeout // placeholder unused if not waiting further
+			}
+		}
+	}
 
 	state.Name = types.StringValue(out.Name)
 	state.Path = types.StringValue(out.Path)
 	state.Status = types.StringValue(out.Status)
 	state.ServiceCount = types.Int64Value(int64(out.ServiceCount))
 	state.RunningCount = types.Int64Value(int64(out.RunningCount))
-	state.CreatedAt = types.StringValue(out.CreatedAt)
-	state.UpdatedAt = types.StringValue(out.UpdatedAt)
+	// Leave created_at and updated_at unchanged to avoid plan inconsistency
 	if plan.ContentHashMode.ValueBool() {
 		ch := sha256.Sum256([]byte(compose))
 		state.ComposeHash = types.StringValue(hex.EncodeToString(ch[:]))
@@ -379,6 +380,7 @@ func (r *ProjectPathResource) Update(ctx context.Context, req resource.UpdateReq
 			state.Env = types.StringNull()
 		}
 	}
+	state.PullOnUpdate = plan.PullOnUpdate
 	// Redeploy if compose/env changed and enabled (default true) and desired running true/unspecified
 	changedContent = (body.ComposeContent != nil) || (body.EnvContent != nil)
 	if changedContent {
