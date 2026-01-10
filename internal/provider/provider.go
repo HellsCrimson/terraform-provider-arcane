@@ -122,5 +122,7 @@ func (p *ArcaneProvider) Resources(_ context.Context) []func() resource.Resource
 		NewRegistryResource,
 		NewNotificationResource,
 		NewContainerResource,
+		NewGitRepositoryResource,
+		NewGitOpsSyncResource,
 	}
 }

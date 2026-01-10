@@ -655,3 +655,179 @@ func (c *Client) PullProjectImages(ctx context.Context, envID, projectID string)
 	}
 	return c.do(req, nil)
 }
+
+// -------- Git Repositories --------
+type GitRepositoryCreateRequest struct {
+	Name        string  `json:"name"`
+	URL         string  `json:"url"`
+	AuthType    string  `json:"authType"`
+	Description *string `json:"description,omitempty"`
+	Enabled     *bool   `json:"enabled,omitempty"`
+	SSHKey      *string `json:"sshKey,omitempty"`
+	Token       *string `json:"token,omitempty"`
+	Username    *string `json:"username,omitempty"`
+}
+
+type GitRepositoryUpdateRequest struct {
+	Name        *string `json:"name,omitempty"`
+	URL         *string `json:"url,omitempty"`
+	AuthType    *string `json:"authType,omitempty"`
+	Description *string `json:"description,omitempty"`
+	Enabled     *bool   `json:"enabled,omitempty"`
+	SSHKey      *string `json:"sshKey,omitempty"`
+	Token       *string `json:"token,omitempty"`
+	Username    *string `json:"username,omitempty"`
+}
+
+type GitRepository struct {
+	ID          string `json:"id"`
+	Name        string `json:"name"`
+	URL         string `json:"url"`
+	AuthType    string `json:"authType"`
+	Enabled     bool   `json:"enabled"`
+	Username    string `json:"username"`
+	Description string `json:"description"`
+	CreatedAt   string `json:"createdAt"`
+	UpdatedAt   string `json:"updatedAt"`
+}
+
+type gitRepositoryEnvelope struct {
+	Success bool          `json:"success"`
+	Data    GitRepository `json:"data"`
+}
+
+func (c *Client) CreateGitRepository(ctx context.Context, body GitRepositoryCreateRequest) (*GitRepository, error) {
+	req, err := c.newRequest(ctx, http.MethodPost, "customize/git-repositories", body)
+	if err != nil {
+		return nil, err
+	}
+	var env gitRepositoryEnvelope
+	if err := c.do(req, &env); err != nil {
+		return nil, err
+	}
+	return &env.Data, nil
+}
+
+func (c *Client) GetGitRepository(ctx context.Context, id string) (*GitRepository, error) {
+	req, err := c.newRequest(ctx, http.MethodGet, path.Join("customize/git-repositories", id), nil)
+	if err != nil {
+		return nil, err
+	}
+	var env gitRepositoryEnvelope
+	if err := c.do(req, &env); err != nil {
+		return nil, err
+	}
+	return &env.Data, nil
+}
+
+func (c *Client) UpdateGitRepository(ctx context.Context, id string, body GitRepositoryUpdateRequest) (*GitRepository, error) {
+	req, err := c.newRequest(ctx, http.MethodPut, path.Join("customize/git-repositories", id), body)
+	if err != nil {
+		return nil, err
+	}
+	var env gitRepositoryEnvelope
+	if err := c.do(req, &env); err != nil {
+		return nil, err
+	}
+	return &env.Data, nil
+}
+
+func (c *Client) DeleteGitRepository(ctx context.Context, id string) error {
+	req, err := c.newRequest(ctx, http.MethodDelete, path.Join("customize/git-repositories", id), nil)
+	if err != nil {
+		return err
+	}
+	return c.do(req, nil)
+}
+
+// -------- GitOps Syncs --------
+type GitOpsSyncCreateRequest struct {
+	Name         string  `json:"name"`
+	RepositoryID string  `json:"repositoryId"`
+	Branch       string  `json:"branch"`
+	ComposePath  string  `json:"composePath"`
+	ProjectName  *string `json:"projectName,omitempty"`
+	AutoSync     *bool   `json:"autoSync,omitempty"`
+	SyncInterval *int64  `json:"syncInterval,omitempty"`
+	Enabled      *bool   `json:"enabled,omitempty"`
+}
+
+type GitOpsSyncUpdateRequest struct {
+	Name         *string `json:"name,omitempty"`
+	RepositoryID *string `json:"repositoryId,omitempty"`
+	Branch       *string `json:"branch,omitempty"`
+	ComposePath  *string `json:"composePath,omitempty"`
+	ProjectName  *string `json:"projectName,omitempty"`
+	AutoSync     *bool   `json:"autoSync,omitempty"`
+	SyncInterval *int64  `json:"syncInterval,omitempty"`
+	Enabled      *bool   `json:"enabled,omitempty"`
+}
+
+type GitOpsSync struct {
+	ID             string  `json:"id"`
+	Name           string  `json:"name"`
+	EnvironmentID  string  `json:"environmentId"`
+	RepositoryID   string  `json:"repositoryId"`
+	Branch         string  `json:"branch"`
+	ComposePath    string  `json:"composePath"`
+	ProjectName    string  `json:"projectName"`
+	ProjectID      *string `json:"projectId,omitempty"`
+	AutoSync       bool    `json:"autoSync"`
+	SyncInterval   int64   `json:"syncInterval"`
+	Enabled        bool    `json:"enabled"`
+	LastSyncAt     *string `json:"lastSyncAt,omitempty"`
+	LastSyncCommit *string `json:"lastSyncCommit,omitempty"`
+	LastSyncStatus *string `json:"lastSyncStatus,omitempty"`
+	LastSyncError  *string `json:"lastSyncError,omitempty"`
+	CreatedAt      string  `json:"createdAt"`
+	UpdatedAt      string  `json:"updatedAt"`
+}
+
+type gitOpsSyncEnvelope struct {
+	Success bool       `json:"success"`
+	Data    GitOpsSync `json:"data"`
+}
+
+func (c *Client) CreateGitOpsSync(ctx context.Context, envID string, body GitOpsSyncCreateRequest) (*GitOpsSync, error) {
+	req, err := c.newRequest(ctx, http.MethodPost, path.Join("environments", envID, "gitops-syncs"), body)
+	if err != nil {
+		return nil, err
+	}
+	var env gitOpsSyncEnvelope
+	if err := c.do(req, &env); err != nil {
+		return nil, err
+	}
+	return &env.Data, nil
+}
+
+func (c *Client) GetGitOpsSync(ctx context.Context, envID, syncID string) (*GitOpsSync, error) {
+	req, err := c.newRequest(ctx, http.MethodGet, path.Join("environments", envID, "gitops-syncs", syncID), nil)
+	if err != nil {
+		return nil, err
+	}
+	var env gitOpsSyncEnvelope
+	if err := c.do(req, &env); err != nil {
+		return nil, err
+	}
+	return &env.Data, nil
+}
+
+func (c *Client) UpdateGitOpsSync(ctx context.Context, envID, syncID string, body GitOpsSyncUpdateRequest) (*GitOpsSync, error) {
+	req, err := c.newRequest(ctx, http.MethodPut, path.Join("environments", envID, "gitops-syncs", syncID), body)
+	if err != nil {
+		return nil, err
+	}
+	var env gitOpsSyncEnvelope
+	if err := c.do(req, &env); err != nil {
+		return nil, err
+	}
+	return &env.Data, nil
+}
+
+func (c *Client) DeleteGitOpsSync(ctx context.Context, envID, syncID string) error {
+	req, err := c.newRequest(ctx, http.MethodDelete, path.Join("environments", envID, "gitops-syncs", syncID), nil)
+	if err != nil {
+		return err
+	}
+	return c.do(req, nil)
+}
