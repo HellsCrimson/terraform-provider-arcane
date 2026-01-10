@@ -1,9 +1,9 @@
 package provider
 
 import (
-    "context"
-    "os"
-    "time"
+	"context"
+	"os"
+	"time"
 
 	"terraform-provider-arcane/internal/sdkclient"
 
@@ -40,33 +40,33 @@ func (p *ArcaneProvider) Metadata(_ context.Context, _ provider.MetadataRequest,
 
 // Schema defines the provider-level configuration schema.
 func (p *ArcaneProvider) Schema(_ context.Context, _ provider.SchemaRequest, resp *provider.SchemaResponse) {
-    resp.Schema = schema.Schema{
-        Attributes: map[string]schema.Attribute{
-            "endpoint": schema.StringAttribute{
-                Description: "Base API endpoint for Arcane (e.g., http://localhost:3552/api).",
-                Optional:    true,
-            },
-            "api_key": schema.StringAttribute{
-                Description: "API key used for authentication (sent as X-API-Key). Can be set via ARCANE_API_KEY.",
-                Optional:    true,
-                Sensitive:   true,
-                Validators:  []validator.String{stringvalidator.LengthAtLeast(1)},
-            },
-            "http_timeout": schema.StringAttribute{
-                Description: "HTTP request timeout (e.g., 120s, 2m). Defaults to 120s if unset or invalid.",
-                Optional:    true,
-            },
-        },
-    }
+	resp.Schema = schema.Schema{
+		Attributes: map[string]schema.Attribute{
+			"endpoint": schema.StringAttribute{
+				Description: "Base API endpoint for Arcane (e.g., http://localhost:3552/api).",
+				Optional:    true,
+			},
+			"api_key": schema.StringAttribute{
+				Description: "API key used for authentication (sent as X-API-Key). Can be set via ARCANE_API_KEY.",
+				Optional:    true,
+				Sensitive:   true,
+				Validators:  []validator.String{stringvalidator.LengthAtLeast(1)},
+			},
+			"http_timeout": schema.StringAttribute{
+				Description: "HTTP request timeout (e.g., 120s, 2m). Defaults to 120s if unset or invalid.",
+				Optional:    true,
+			},
+		},
+	}
 }
 
 // Configure prepares a configured client for data sources and resources.
 func (p *ArcaneProvider) Configure(ctx context.Context, req provider.ConfigureRequest, resp *provider.ConfigureResponse) {
-    var config struct {
-        Endpoint types.String `tfsdk:"endpoint"`
-        APIKey   types.String `tfsdk:"api_key"`
-        HTTPTimeout types.String `tfsdk:"http_timeout"`
-    }
+	var config struct {
+		Endpoint    types.String `tfsdk:"endpoint"`
+		APIKey      types.String `tfsdk:"api_key"`
+		HTTPTimeout types.String `tfsdk:"http_timeout"`
+	}
 
 	diags := req.Config.Get(ctx, &config)
 	resp.Diagnostics.Append(diags...)
@@ -92,15 +92,15 @@ func (p *ArcaneProvider) Configure(ctx context.Context, req provider.ConfigureRe
 		return
 	}
 
-    // Determine timeout
-    timeout := 120 * time.Second
-    if !config.HTTPTimeout.IsNull() && !config.HTTPTimeout.IsUnknown() {
-        if d, err := time.ParseDuration(config.HTTPTimeout.ValueString()); err == nil && d > 0 {
-            timeout = d
-        }
-    }
-    client := sdkclient.NewClientWithTimeout(endpoint, apiKey, timeout)
-    tflog.Info(ctx, "Configured Arcane provider", map[string]any{"endpoint": endpoint, "timeout": timeout.String()})
+	// Determine timeout
+	timeout := 120 * time.Second
+	if !config.HTTPTimeout.IsNull() && !config.HTTPTimeout.IsUnknown() {
+		if d, err := time.ParseDuration(config.HTTPTimeout.ValueString()); err == nil && d > 0 {
+			timeout = d
+		}
+	}
+	client := sdkclient.NewClientWithTimeout(endpoint, apiKey, timeout)
+	tflog.Info(ctx, "Configured Arcane provider", map[string]any{"endpoint": endpoint, "timeout": timeout.String()})
 
 	resp.DataSourceData = client
 	resp.ResourceData = client
@@ -113,13 +113,14 @@ func (p *ArcaneProvider) DataSources(_ context.Context) []func() datasource.Data
 
 // Resources returns the provider resources.
 func (p *ArcaneProvider) Resources(_ context.Context) []func() resource.Resource {
-    return []func() resource.Resource{
-        NewUserResource,
-        NewSettingsResource,
-        NewProjectResource,
-        NewProjectPathResource,
-        NewRegistryResource,
-        NewNotificationResource,
-        NewContainerResource,
-    }
+	return []func() resource.Resource{
+		NewUserResource,
+		NewSettingsResource,
+		NewEnvironmentResource,
+		NewProjectResource,
+		NewProjectPathResource,
+		NewRegistryResource,
+		NewNotificationResource,
+		NewContainerResource,
+	}
 }
