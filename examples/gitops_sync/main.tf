@@ -58,6 +58,14 @@ resource "arcane_gitops_sync" "production_sync" {
   auto_sync     = true
   sync_interval = 300 # Sync every 5 minutes
   enabled       = true
+
+  # Environment variables for the deployed project
+  environment_variables = {
+    DATABASE_URL = "postgresql://user:pass@db:5432/prod"
+    REDIS_URL    = "redis://redis:6379"
+    APP_ENV      = "production"
+    LOG_LEVEL    = "info"
+  }
 }
 
 # Create a GitOps sync for a specific feature

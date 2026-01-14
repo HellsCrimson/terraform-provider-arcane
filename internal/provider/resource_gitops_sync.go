@@ -2,6 +2,7 @@ package provider
 
 import (
 	"context"
+	"fmt"
 	"strings"
 
 	"terraform-provider-arcane/internal/sdkclient"
@@ -78,6 +79,11 @@ func (r *GitOpsSyncResource) Schema(_ context.Context, _ resource.SchemaRequest,
 				Optional:    true,
 				Description: "Whether the sync is enabled",
 			},
+			"environment_variables": resourceschema.MapAttribute{
+				ElementType: types.StringType,
+				Optional:    true,
+				Description: "Environment variables for the synced project",
+			},
 
 			// Computed fields
 			"project_id": resourceschema.StringAttribute{
@@ -127,23 +133,73 @@ func (r *GitOpsSyncResource) Configure(_ context.Context, req resource.Configure
 }
 
 type gitOpsSyncModel struct {
-	ID             types.String `tfsdk:"id"`
-	EnvironmentID  types.String `tfsdk:"environment_id"`
-	Name           types.String `tfsdk:"name"`
-	RepositoryID   types.String `tfsdk:"repository_id"`
-	Branch         types.String `tfsdk:"branch"`
-	ComposePath    types.String `tfsdk:"compose_path"`
-	ProjectName    types.String `tfsdk:"project_name"`
-	AutoSync       types.Bool   `tfsdk:"auto_sync"`
-	SyncInterval   types.Int64  `tfsdk:"sync_interval"`
-	Enabled        types.Bool   `tfsdk:"enabled"`
-	ProjectID      types.String `tfsdk:"project_id"`
-	LastSyncAt     types.String `tfsdk:"last_sync_at"`
-	LastSyncCommit types.String `tfsdk:"last_sync_commit"`
-	LastSyncStatus types.String `tfsdk:"last_sync_status"`
-	LastSyncError  types.String `tfsdk:"last_sync_error"`
-	CreatedAt      types.String `tfsdk:"created_at"`
-	UpdatedAt      types.String `tfsdk:"updated_at"`
+	ID                    types.String `tfsdk:"id"`
+	EnvironmentID         types.String `tfsdk:"environment_id"`
+	Name                  types.String `tfsdk:"name"`
+	RepositoryID          types.String `tfsdk:"repository_id"`
+	Branch                types.String `tfsdk:"branch"`
+	ComposePath           types.String `tfsdk:"compose_path"`
+	ProjectName           types.String `tfsdk:"project_name"`
+	AutoSync              types.Bool   `tfsdk:"auto_sync"`
+	SyncInterval          types.Int64  `tfsdk:"sync_interval"`
+	Enabled               types.Bool   `tfsdk:"enabled"`
+	EnvironmentVariables  types.Map    `tfsdk:"environment_variables"`
+	ProjectID             types.String `tfsdk:"project_id"`
+	LastSyncAt            types.String `tfsdk:"last_sync_at"`
+	LastSyncCommit        types.String `tfsdk:"last_sync_commit"`
+	LastSyncStatus        types.String `tfsdk:"last_sync_status"`
+	LastSyncError         types.String `tfsdk:"last_sync_error"`
+	CreatedAt             types.String `tfsdk:"created_at"`
+	UpdatedAt             types.String `tfsdk:"updated_at"`
+}
+
+// mapToEnvContent converts a Terraform map to .env file format
+func mapToEnvContent(ctx context.Context, envMap types.Map) (string, error) {
+	if envMap.IsNull() || envMap.IsUnknown() {
+		return "", nil
+	}
+
+	elements := make(map[string]types.String, len(envMap.Elements()))
+	diags := envMap.ElementsAs(ctx, &elements, false)
+	if diags.HasError() {
+		return "", fmt.Errorf("failed to convert map elements")
+	}
+
+	var lines []string
+	for key, value := range elements {
+		lines = append(lines, fmt.Sprintf("%s=%s", key, value.ValueString()))
+	}
+	return strings.Join(lines, "\n"), nil
+}
+
+// envContentToMap converts .env file format to a Terraform map
+func envContentToMap(ctx context.Context, envContent string) (types.Map, error) {
+	if envContent == "" {
+		return types.MapNull(types.StringType), nil
+	}
+
+	envVars := make(map[string]string)
+	lines := strings.Split(envContent, "\n")
+	for _, line := range lines {
+		line = strings.TrimSpace(line)
+		if line == "" || strings.HasPrefix(line, "#") {
+			continue
+		}
+		parts := strings.SplitN(line, "=", 2)
+		if len(parts) == 2 {
+			envVars[parts[0]] = parts[1]
+		}
+	}
+
+	if len(envVars) == 0 {
+		return types.MapNull(types.StringType), nil
+	}
+
+	result, diags := types.MapValueFrom(ctx, types.StringType, envVars)
+	if diags.HasError() {
+		return types.MapNull(types.StringType), fmt.Errorf("failed to create map from environment variables")
+	}
+	return result, nil
 }
 
 func (r *GitOpsSyncResource) Create(ctx context.Context, req resource.CreateRequest, resp *resource.CreateResponse) {
@@ -183,19 +239,37 @@ func (r *GitOpsSyncResource) Create(ctx context.Context, req resource.CreateRequ
 		return
 	}
 
+	// If environment variables are provided and a project was created, update the project with env content
+	if !plan.EnvironmentVariables.IsNull() && !plan.EnvironmentVariables.IsUnknown() && sync.ProjectID != nil {
+		envContent, err := mapToEnvContent(ctx, plan.EnvironmentVariables)
+		if err != nil {
+			resp.Diagnostics.AddError("convert environment variables to .env format failed", err.Error())
+			return
+		}
+		projectUpdateBody := sdkclient.ProjectUpdateRequest{
+			EnvContent: &envContent,
+		}
+		_, err = r.client.UpdateProject(ctx, plan.EnvironmentID.ValueString(), *sync.ProjectID, projectUpdateBody)
+		if err != nil {
+			resp.Diagnostics.AddError("update project env content failed", err.Error())
+			return
+		}
+	}
+
 	state := gitOpsSyncModel{
-		ID:            types.StringValue(sync.ID),
-		EnvironmentID: types.StringValue(sync.EnvironmentID),
-		Name:          types.StringValue(sync.Name),
-		RepositoryID:  types.StringValue(sync.RepositoryID),
-		Branch:        types.StringValue(sync.Branch),
-		ComposePath:   types.StringValue(sync.ComposePath),
-		ProjectName:   types.StringValue(sync.ProjectName),
-		AutoSync:      types.BoolValue(sync.AutoSync),
-		SyncInterval:  types.Int64Value(sync.SyncInterval),
-		Enabled:       types.BoolValue(sync.Enabled),
-		CreatedAt:     types.StringValue(sync.CreatedAt),
-		UpdatedAt:     types.StringValue(sync.UpdatedAt),
+		ID:                   types.StringValue(sync.ID),
+		EnvironmentID:        types.StringValue(sync.EnvironmentID),
+		Name:                 types.StringValue(sync.Name),
+		RepositoryID:         types.StringValue(sync.RepositoryID),
+		Branch:               types.StringValue(sync.Branch),
+		ComposePath:          types.StringValue(sync.ComposePath),
+		ProjectName:          types.StringValue(sync.ProjectName),
+		AutoSync:             types.BoolValue(sync.AutoSync),
+		SyncInterval:         types.Int64Value(sync.SyncInterval),
+		Enabled:              types.BoolValue(sync.Enabled),
+		EnvironmentVariables: plan.EnvironmentVariables,
+		CreatedAt:            types.StringValue(sync.CreatedAt),
+		UpdatedAt:            types.StringValue(sync.UpdatedAt),
 	}
 
 	if sync.ProjectID != nil {
@@ -242,12 +316,25 @@ func (r *GitOpsSyncResource) Read(ctx context.Context, req resource.ReadRequest,
 	state.AutoSync = types.BoolValue(sync.AutoSync)
 	state.SyncInterval = types.Int64Value(sync.SyncInterval)
 	state.Enabled = types.BoolValue(sync.Enabled)
-	state.UpdatedAt = types.StringValue(sync.UpdatedAt)
+	// Leave updated_at and created_at unchanged to avoid plan inconsistency on server-side timestamp changes
 
 	if sync.ProjectID != nil {
 		state.ProjectID = types.StringValue(*sync.ProjectID)
+		// Fetch environment variables from the project if it exists
+		project, err := r.client.GetProject(ctx, state.EnvironmentID.ValueString(), *sync.ProjectID)
+		if err == nil && project.EnvContent != nil {
+			envMap, err := envContentToMap(ctx, *project.EnvContent)
+			if err != nil {
+				resp.Diagnostics.AddError("parse environment variables failed", err.Error())
+				return
+			}
+			state.EnvironmentVariables = envMap
+		} else {
+			state.EnvironmentVariables = types.MapNull(types.StringType)
+		}
 	} else {
 		state.ProjectID = types.StringNull()
+		state.EnvironmentVariables = types.MapNull(types.StringType)
 	}
 	if sync.LastSyncAt != nil {
 		state.LastSyncAt = types.StringValue(*sync.LastSyncAt)
@@ -323,6 +410,28 @@ func (r *GitOpsSyncResource) Update(ctx context.Context, req resource.UpdateRequ
 		return
 	}
 
+	// If environment variables changed and a project exists, update the project with env content
+	if sync.ProjectID != nil && !plan.EnvironmentVariables.Equal(state.EnvironmentVariables) {
+		projectUpdateBody := sdkclient.ProjectUpdateRequest{}
+		if !plan.EnvironmentVariables.IsNull() && !plan.EnvironmentVariables.IsUnknown() {
+			envContent, err := mapToEnvContent(ctx, plan.EnvironmentVariables)
+			if err != nil {
+				resp.Diagnostics.AddError("convert environment variables to .env format failed", err.Error())
+				return
+			}
+			projectUpdateBody.EnvContent = &envContent
+		} else {
+			// Set to empty string if environment variables are being removed
+			emptyContent := ""
+			projectUpdateBody.EnvContent = &emptyContent
+		}
+		_, err := r.client.UpdateProject(ctx, state.EnvironmentID.ValueString(), *sync.ProjectID, projectUpdateBody)
+		if err != nil {
+			resp.Diagnostics.AddError("update project env content failed", err.Error())
+			return
+		}
+	}
+
 	state.Name = types.StringValue(sync.Name)
 	state.RepositoryID = types.StringValue(sync.RepositoryID)
 	state.Branch = types.StringValue(sync.Branch)
@@ -331,12 +440,14 @@ func (r *GitOpsSyncResource) Update(ctx context.Context, req resource.UpdateRequ
 	state.AutoSync = types.BoolValue(sync.AutoSync)
 	state.SyncInterval = types.Int64Value(sync.SyncInterval)
 	state.Enabled = types.BoolValue(sync.Enabled)
-	state.UpdatedAt = types.StringValue(sync.UpdatedAt)
+	// Leave updated_at unchanged to avoid plan inconsistency on server-side timestamp changes
+	state.EnvironmentVariables = plan.EnvironmentVariables
 
 	if sync.ProjectID != nil {
 		state.ProjectID = types.StringValue(*sync.ProjectID)
 	} else {
 		state.ProjectID = types.StringNull()
+		state.EnvironmentVariables = types.MapNull(types.StringType)
 	}
 	if sync.LastSyncAt != nil {
 		state.LastSyncAt = types.StringValue(*sync.LastSyncAt)
