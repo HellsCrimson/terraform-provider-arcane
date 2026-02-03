@@ -52,25 +52,41 @@ func (r *SettingsResource) Schema(_ context.Context, _ resource.SchemaRequest, r
 			"default_shell":                 resourceschema.StringAttribute{Optional: true, Description: "defaultShell"},
 			"disk_usage_path":               resourceschema.StringAttribute{Optional: true, Description: "diskUsagePath"},
 			"docker_host":                   resourceschema.StringAttribute{Optional: true, Description: "dockerHost"},
-			"docker_prune_mode":             resourceschema.StringAttribute{Optional: true, Description: "dockerPruneMode"},
-			"enable_gravatar":               resourceschema.StringAttribute{Optional: true, Description: "enableGravatar"},
-			"environment_health_interval":   resourceschema.StringAttribute{Optional: true, Description: "environmentHealthInterval"},
-			"glass_effect_enabled":          resourceschema.StringAttribute{Optional: true, Description: "glassEffectEnabled"},
-			"max_image_upload_size":         resourceschema.StringAttribute{Optional: true, Description: "maxImageUploadSize"},
+			"docker_prune_mode":                resourceschema.StringAttribute{Optional: true, Description: "dockerPruneMode"},
+			"docker_api_timeout":               resourceschema.StringAttribute{Optional: true, Description: "dockerApiTimeout"},
+			"docker_image_pull_timeout":        resourceschema.StringAttribute{Optional: true, Description: "dockerImagePullTimeout"},
+			"enable_gravatar":                  resourceschema.StringAttribute{Optional: true, Description: "enableGravatar"},
+			"environment_health_interval":      resourceschema.StringAttribute{Optional: true, Description: "environmentHealthInterval"},
+			"git_operation_timeout":            resourceschema.StringAttribute{Optional: true, Description: "gitOperationTimeout"},
+			"http_client_timeout":              resourceschema.StringAttribute{Optional: true, Description: "httpClientTimeout"},
+			"keyboard_shortcuts_enabled":       resourceschema.StringAttribute{Optional: true, Description: "keyboardShortcutsEnabled"},
+			"max_image_upload_size":            resourceschema.StringAttribute{Optional: true, Description: "maxImageUploadSize"},
 			"mobile_navigation_mode":        resourceschema.StringAttribute{Optional: true, Description: "mobileNavigationMode"},
 			"mobile_navigation_show_labels": resourceschema.StringAttribute{Optional: true, Description: "mobileNavigationShowLabels"},
-			"oidc_admin_claim":              resourceschema.StringAttribute{Optional: true, Description: "oidcAdminClaim"},
-			"oidc_admin_value":              resourceschema.StringAttribute{Optional: true, Description: "oidcAdminValue"},
-			"oidc_client_id":                resourceschema.StringAttribute{Optional: true, Description: "oidcClientId"},
+			"oidc_admin_claim":                 resourceschema.StringAttribute{Optional: true, Description: "oidcAdminClaim"},
+			"oidc_admin_value":                 resourceschema.StringAttribute{Optional: true, Description: "oidcAdminValue"},
+			"oidc_auto_redirect_to_provider":   resourceschema.StringAttribute{Optional: true, Description: "oidcAutoRedirectToProvider"},
+			"oidc_client_id":                   resourceschema.StringAttribute{Optional: true, Description: "oidcClientId"},
 			"oidc_client_secret":            resourceschema.StringAttribute{Optional: true, Description: "oidcClientSecret"},
 			"oidc_enabled":                  resourceschema.StringAttribute{Optional: true, Description: "oidcEnabled"},
 			"oidc_issuer_url":               resourceschema.StringAttribute{Optional: true, Description: "oidcIssuerUrl"},
 			"oidc_merge_accounts":           resourceschema.StringAttribute{Optional: true, Description: "oidcMergeAccounts"},
+			"oidc_provider_logo_url":        resourceschema.StringAttribute{Optional: true, Description: "oidcProviderLogoUrl"},
+			"oidc_provider_name":            resourceschema.StringAttribute{Optional: true, Description: "oidcProviderName"},
 			"oidc_scopes":                   resourceschema.StringAttribute{Optional: true, Description: "oidcScopes"},
 			"oidc_skip_tls_verify":          resourceschema.StringAttribute{Optional: true, Description: "oidcSkipTlsVerify"},
 			"polling_enabled":               resourceschema.StringAttribute{Optional: true, Description: "pollingEnabled"},
 			"polling_interval":              resourceschema.StringAttribute{Optional: true, Description: "pollingInterval"},
 			"projects_directory":            resourceschema.StringAttribute{Optional: true, Description: "projectsDirectory"},
+			"proxy_request_timeout":         resourceschema.StringAttribute{Optional: true, Description: "proxyRequestTimeout"},
+			"registry_timeout":              resourceschema.StringAttribute{Optional: true, Description: "registryTimeout"},
+			"scheduled_prune_build_cache":   resourceschema.StringAttribute{Optional: true, Description: "scheduledPruneBuildCache"},
+			"scheduled_prune_containers":    resourceschema.StringAttribute{Optional: true, Description: "scheduledPruneContainers"},
+			"scheduled_prune_enabled":       resourceschema.StringAttribute{Optional: true, Description: "scheduledPruneEnabled"},
+			"scheduled_prune_images":        resourceschema.StringAttribute{Optional: true, Description: "scheduledPruneImages"},
+			"scheduled_prune_interval":      resourceschema.StringAttribute{Optional: true, Description: "scheduledPruneInterval"},
+			"scheduled_prune_networks":      resourceschema.StringAttribute{Optional: true, Description: "scheduledPruneNetworks"},
+			"scheduled_prune_volumes":       resourceschema.StringAttribute{Optional: true, Description: "scheduledPruneVolumes"},
 			"sidebar_hover_expansion":       resourceschema.StringAttribute{Optional: true, Description: "sidebarHoverExpansion"},
 
 			// Computed applied map
@@ -105,26 +121,42 @@ type settingsModel struct {
 	BaseServerUrl              types.String `tfsdk:"base_server_url"`
 	DefaultShell               types.String `tfsdk:"default_shell"`
 	DiskUsagePath              types.String `tfsdk:"disk_usage_path"`
+	DockerApiTimeout           types.String `tfsdk:"docker_api_timeout"`
 	DockerHost                 types.String `tfsdk:"docker_host"`
+	DockerImagePullTimeout     types.String `tfsdk:"docker_image_pull_timeout"`
 	DockerPruneMode            types.String `tfsdk:"docker_prune_mode"`
 	EnableGravatar             types.String `tfsdk:"enable_gravatar"`
 	EnvironmentHealthInterval  types.String `tfsdk:"environment_health_interval"`
-	GlassEffectEnabled         types.String `tfsdk:"glass_effect_enabled"`
+	GitOperationTimeout        types.String `tfsdk:"git_operation_timeout"`
+	HttpClientTimeout          types.String `tfsdk:"http_client_timeout"`
+	KeyboardShortcutsEnabled   types.String `tfsdk:"keyboard_shortcuts_enabled"`
 	MaxImageUploadSize         types.String `tfsdk:"max_image_upload_size"`
 	MobileNavigationMode       types.String `tfsdk:"mobile_navigation_mode"`
 	MobileNavigationShowLabels types.String `tfsdk:"mobile_navigation_show_labels"`
 	OidcAdminClaim             types.String `tfsdk:"oidc_admin_claim"`
 	OidcAdminValue             types.String `tfsdk:"oidc_admin_value"`
+	OidcAutoRedirectToProvider types.String `tfsdk:"oidc_auto_redirect_to_provider"`
 	OidcClientId               types.String `tfsdk:"oidc_client_id"`
 	OidcClientSecret           types.String `tfsdk:"oidc_client_secret"`
 	OidcEnabled                types.String `tfsdk:"oidc_enabled"`
 	OidcIssuerUrl              types.String `tfsdk:"oidc_issuer_url"`
 	OidcMergeAccounts          types.String `tfsdk:"oidc_merge_accounts"`
+	OidcProviderLogoUrl        types.String `tfsdk:"oidc_provider_logo_url"`
+	OidcProviderName           types.String `tfsdk:"oidc_provider_name"`
 	OidcScopes                 types.String `tfsdk:"oidc_scopes"`
 	OidcSkipTlsVerify          types.String `tfsdk:"oidc_skip_tls_verify"`
 	PollingEnabled             types.String `tfsdk:"polling_enabled"`
 	PollingInterval            types.String `tfsdk:"polling_interval"`
 	ProjectsDirectory          types.String `tfsdk:"projects_directory"`
+	ProxyRequestTimeout        types.String `tfsdk:"proxy_request_timeout"`
+	RegistryTimeout            types.String `tfsdk:"registry_timeout"`
+	ScheduledPruneBuildCache   types.String `tfsdk:"scheduled_prune_build_cache"`
+	ScheduledPruneContainers   types.String `tfsdk:"scheduled_prune_containers"`
+	ScheduledPruneEnabled      types.String `tfsdk:"scheduled_prune_enabled"`
+	ScheduledPruneImages       types.String `tfsdk:"scheduled_prune_images"`
+	ScheduledPruneInterval     types.String `tfsdk:"scheduled_prune_interval"`
+	ScheduledPruneNetworks     types.String `tfsdk:"scheduled_prune_networks"`
+	ScheduledPruneVolumes      types.String `tfsdk:"scheduled_prune_volumes"`
 	SidebarHoverExpansion      types.String `tfsdk:"sidebar_hover_expansion"`
 	Applied                    types.Map    `tfsdk:"applied"`
 }
@@ -186,16 +218,21 @@ func (r *SettingsResource) Update(ctx context.Context, req resource.UpdateReques
 
 	envID := state.EnvironmentID.ValueString()
 	vals := buildSettingsMapFromModel(plan)
-	if _, err := r.client.UpdateSettings(ctx, envID, vals); err != nil {
-		resp.Diagnostics.AddError("update settings failed", err.Error())
-		return
+	if len(vals) > 0 {
+		if _, err := r.client.UpdateSettings(ctx, envID, vals); err != nil {
+			resp.Diagnostics.AddError("update settings failed", err.Error())
+			return
+		}
 	}
 	applied, err := r.client.GetSettings(ctx, envID)
 	if err != nil {
 		resp.Diagnostics.AddError("read settings failed", err.Error())
 		return
 	}
-	// Keep plan values in state; provider does not force remote values into attributes
+	// Update state with plan values and applied settings from API
+	state = plan
+	state.ID = types.StringValue(envID)
+	state.EnvironmentID = types.StringValue(envID)
 	state.Applied = stringMapToMap(ctx, applied)
 	resp.Diagnostics.Append(resp.State.Set(ctx, &state)...)
 }
@@ -229,26 +266,42 @@ func buildSettingsMapFromModel(s settingsModel) map[string]string {
 	addIfSet(out, "baseServerUrl", s.BaseServerUrl)
 	addIfSet(out, "defaultShell", s.DefaultShell)
 	addIfSet(out, "diskUsagePath", s.DiskUsagePath)
+	addIfSet(out, "dockerApiTimeout", s.DockerApiTimeout)
 	addIfSet(out, "dockerHost", s.DockerHost)
+	addIfSet(out, "dockerImagePullTimeout", s.DockerImagePullTimeout)
 	addIfSet(out, "dockerPruneMode", s.DockerPruneMode)
 	addIfSet(out, "enableGravatar", s.EnableGravatar)
 	addIfSet(out, "environmentHealthInterval", s.EnvironmentHealthInterval)
-	addIfSet(out, "glassEffectEnabled", s.GlassEffectEnabled)
+	addIfSet(out, "gitOperationTimeout", s.GitOperationTimeout)
+	addIfSet(out, "httpClientTimeout", s.HttpClientTimeout)
+	addIfSet(out, "keyboardShortcutsEnabled", s.KeyboardShortcutsEnabled)
 	addIfSet(out, "maxImageUploadSize", s.MaxImageUploadSize)
 	addIfSet(out, "mobileNavigationMode", s.MobileNavigationMode)
 	addIfSet(out, "mobileNavigationShowLabels", s.MobileNavigationShowLabels)
 	addIfSet(out, "oidcAdminClaim", s.OidcAdminClaim)
 	addIfSet(out, "oidcAdminValue", s.OidcAdminValue)
+	addIfSet(out, "oidcAutoRedirectToProvider", s.OidcAutoRedirectToProvider)
 	addIfSet(out, "oidcClientId", s.OidcClientId)
 	addIfSet(out, "oidcClientSecret", s.OidcClientSecret)
 	addIfSet(out, "oidcEnabled", s.OidcEnabled)
 	addIfSet(out, "oidcIssuerUrl", s.OidcIssuerUrl)
 	addIfSet(out, "oidcMergeAccounts", s.OidcMergeAccounts)
+	addIfSet(out, "oidcProviderLogoUrl", s.OidcProviderLogoUrl)
+	addIfSet(out, "oidcProviderName", s.OidcProviderName)
 	addIfSet(out, "oidcScopes", s.OidcScopes)
 	addIfSet(out, "oidcSkipTlsVerify", s.OidcSkipTlsVerify)
 	addIfSet(out, "pollingEnabled", s.PollingEnabled)
 	addIfSet(out, "pollingInterval", s.PollingInterval)
 	addIfSet(out, "projectsDirectory", s.ProjectsDirectory)
+	addIfSet(out, "proxyRequestTimeout", s.ProxyRequestTimeout)
+	addIfSet(out, "registryTimeout", s.RegistryTimeout)
+	addIfSet(out, "scheduledPruneBuildCache", s.ScheduledPruneBuildCache)
+	addIfSet(out, "scheduledPruneContainers", s.ScheduledPruneContainers)
+	addIfSet(out, "scheduledPruneEnabled", s.ScheduledPruneEnabled)
+	addIfSet(out, "scheduledPruneImages", s.ScheduledPruneImages)
+	addIfSet(out, "scheduledPruneInterval", s.ScheduledPruneInterval)
+	addIfSet(out, "scheduledPruneNetworks", s.ScheduledPruneNetworks)
+	addIfSet(out, "scheduledPruneVolumes", s.ScheduledPruneVolumes)
 	addIfSet(out, "sidebarHoverExpansion", s.SidebarHoverExpansion)
 	return out
 }

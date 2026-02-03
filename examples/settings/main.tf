@@ -29,7 +29,7 @@ resource "arcane_settings" "env" {
   environment_id          = var.environment_id
   base_server_url         = "http://localhost:3552"
   polling_enabled         = "true"
-  polling_interval        = "10s"
+  polling_interval        = "0 */15 * * * *"  # Cron expression: every 15 minutes
   sidebar_hover_expansion = "true"
 }
 
