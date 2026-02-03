@@ -360,21 +360,31 @@ func (c *Client) DeleteNotification(ctx context.Context, envID, provider string)
 
 // -------- Containers --------
 type ContainerCreateRequest struct {
-	Name          string            `json:"name"`
-	Image         string            `json:"image"`
-	AutoRemove    *bool             `json:"autoRemove,omitempty"`
-	Command       []string          `json:"command,omitempty"`
-	CPUs          *float64          `json:"cpus,omitempty"`
-	Entrypoint    []string          `json:"entrypoint,omitempty"`
-	Environment   []string          `json:"environment,omitempty"`
-	Memory        *int64            `json:"memory,omitempty"`
-	Networks      []string          `json:"networks,omitempty"`
-	Ports         map[string]string `json:"ports,omitempty"`
-	Privileged    *bool             `json:"privileged,omitempty"`
-	RestartPolicy *string           `json:"restartPolicy,omitempty"`
-	User          *string           `json:"user,omitempty"`
-	Volumes       []string          `json:"volumes,omitempty"`
-	WorkingDir    *string           `json:"workingDir,omitempty"`
+	Name            string            `json:"name"`
+	Image           string            `json:"image"`
+	AutoRemove      *bool             `json:"autoRemove,omitempty"`
+	Command         []string          `json:"command,omitempty"`
+	CPUs            *float64          `json:"cpus,omitempty"`
+	Entrypoint      []string          `json:"entrypoint,omitempty"`
+	Environment     []string          `json:"environment,omitempty"`
+	Memory          *int64            `json:"memory,omitempty"`
+	Networks        []string          `json:"networks,omitempty"`
+	Ports           map[string]string `json:"ports,omitempty"`
+	Privileged      *bool             `json:"privileged,omitempty"`
+	RestartPolicy   *string           `json:"restartPolicy,omitempty"`
+	User            *string           `json:"user,omitempty"`
+	Volumes         []string          `json:"volumes,omitempty"`
+	WorkingDir      *string           `json:"workingDir,omitempty"`
+	Hostname        *string           `json:"hostname,omitempty"`
+	Domainname      *string           `json:"domainname,omitempty"`
+	Labels          map[string]string `json:"labels,omitempty"`
+	TTY             *bool             `json:"tty,omitempty"`
+	AttachStdin     *bool             `json:"attachStdin,omitempty"`
+	AttachStdout    *bool             `json:"attachStdout,omitempty"`
+	AttachStderr    *bool             `json:"attachStderr,omitempty"`
+	OpenStdin       *bool             `json:"openStdin,omitempty"`
+	StdinOnce       *bool             `json:"stdinOnce,omitempty"`
+	NetworkDisabled *bool             `json:"networkDisabled,omitempty"`
 }
 
 type ContainerCreated struct {
@@ -743,6 +753,101 @@ func (c *Client) UpdateGitRepository(ctx context.Context, id string, body GitRep
 
 func (c *Client) DeleteGitRepository(ctx context.Context, id string) error {
 	req, err := c.newRequest(ctx, http.MethodDelete, path.Join("customize/git-repositories", id), nil)
+	if err != nil {
+		return err
+	}
+	return c.do(req, nil)
+}
+
+// -------- API Keys --------
+type CreateApiKeyRequest struct {
+	Name        string  `json:"name"`
+	Description *string `json:"description,omitempty"`
+	ExpiresAt   *string `json:"expiresAt,omitempty"` // RFC3339 date-time
+}
+
+type UpdateApiKeyRequest struct {
+	Name        *string `json:"name,omitempty"`
+	Description *string `json:"description,omitempty"`
+	ExpiresAt   *string `json:"expiresAt,omitempty"` // RFC3339 date-time
+}
+
+type ApiKey struct {
+	ID          string  `json:"id"`
+	Name        string  `json:"name"`
+	Description *string `json:"description,omitempty"`
+	KeyPrefix   string  `json:"keyPrefix"`
+	UserID      string  `json:"userId"`
+	ExpiresAt   *string `json:"expiresAt,omitempty"`
+	LastUsedAt  *string `json:"lastUsedAt,omitempty"`
+	CreatedAt   string  `json:"createdAt"`
+	UpdatedAt   *string `json:"updatedAt,omitempty"`
+}
+
+type ApiKeyCreated struct {
+	ID          string  `json:"id"`
+	Name        string  `json:"name"`
+	Description *string `json:"description,omitempty"`
+	Key         string  `json:"key"` // Only returned on creation
+	KeyPrefix   string  `json:"keyPrefix"`
+	UserID      string  `json:"userId"`
+	ExpiresAt   *string `json:"expiresAt,omitempty"`
+	CreatedAt   string  `json:"createdAt"`
+	UpdatedAt   *string `json:"updatedAt,omitempty"`
+}
+
+type apiKeyEnvelope struct {
+	Success bool   `json:"success"`
+	Data    ApiKey `json:"data"`
+}
+
+type apiKeyCreatedEnvelope struct {
+	Success bool          `json:"success"`
+	Data    ApiKeyCreated `json:"data"`
+}
+
+// CreateApiKey POST /api-keys
+func (c *Client) CreateApiKey(ctx context.Context, body CreateApiKeyRequest) (*ApiKeyCreated, error) {
+	req, err := c.newRequest(ctx, http.MethodPost, "api-keys", body)
+	if err != nil {
+		return nil, err
+	}
+	var env apiKeyCreatedEnvelope
+	if err := c.do(req, &env); err != nil {
+		return nil, err
+	}
+	return &env.Data, nil
+}
+
+// GetApiKey GET /api-keys/{id}
+func (c *Client) GetApiKey(ctx context.Context, id string) (*ApiKey, error) {
+	req, err := c.newRequest(ctx, http.MethodGet, path.Join("api-keys", id), nil)
+	if err != nil {
+		return nil, err
+	}
+	var env apiKeyEnvelope
+	if err := c.do(req, &env); err != nil {
+		return nil, err
+	}
+	return &env.Data, nil
+}
+
+// UpdateApiKey PUT /api-keys/{id}
+func (c *Client) UpdateApiKey(ctx context.Context, id string, body UpdateApiKeyRequest) (*ApiKey, error) {
+	req, err := c.newRequest(ctx, http.MethodPut, path.Join("api-keys", id), body)
+	if err != nil {
+		return nil, err
+	}
+	var env apiKeyEnvelope
+	if err := c.do(req, &env); err != nil {
+		return nil, err
+	}
+	return &env.Data, nil
+}
+
+// DeleteApiKey DELETE /api-keys/{id}
+func (c *Client) DeleteApiKey(ctx context.Context, id string) error {
+	req, err := c.newRequest(ctx, http.MethodDelete, path.Join("api-keys", id), nil)
 	if err != nil {
 		return err
 	}
