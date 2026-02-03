@@ -57,7 +57,7 @@ resource "arcane_gitops_sync" "production_sync" {
 
   auto_sync     = true
   sync_interval = 300 # Sync every 5 minutes
-  enabled       = true
+  start_project = true # Start the project after creation (default: true)
 
   # Environment variables for the deployed project
   environment_variables = {
@@ -68,7 +68,7 @@ resource "arcane_gitops_sync" "production_sync" {
   }
 }
 
-# Create a GitOps sync for a specific feature
+# Create a GitOps sync for a specific feature (don't start automatically)
 resource "arcane_gitops_sync" "feature_sync" {
   environment_id = arcane_environment.production.id
   name           = "Feature Branch Deployment"
@@ -78,7 +78,8 @@ resource "arcane_gitops_sync" "feature_sync" {
   project_name   = "my-app-feature"
 
   auto_sync     = false
-  enabled       = true
+  start_project = false # Don't start the project automatically
+  # Note: 'enabled' is a computed (read-only) field that shows the sync status
 }
 
 # Output sync information

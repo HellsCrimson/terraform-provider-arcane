@@ -295,6 +295,15 @@ func (c *Client) UpdateProject(ctx context.Context, envID, projectID string, bod
 	return &env.Data, nil
 }
 
+// DeployProject POST /environments/{id}/projects/{projectId}/up
+func (c *Client) DeployProject(ctx context.Context, envID, projectID string) error {
+	req, err := c.newRequest(ctx, http.MethodPost, path.Join("environments", envID, "projects", projectID, "up"), nil)
+	if err != nil {
+		return err
+	}
+	return c.do(req, nil)
+}
+
 func (c *Client) DestroyProject(ctx context.Context, envID, projectID string, opts ProjectDestroyOptions) error {
 	req, err := c.newRequest(ctx, http.MethodDelete, path.Join("environments", envID, "projects", projectID, "destroy"), opts)
 	if err != nil {

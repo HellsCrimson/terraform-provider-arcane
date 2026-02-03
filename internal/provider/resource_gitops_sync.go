@@ -84,6 +84,10 @@ func (r *GitOpsSyncResource) Schema(_ context.Context, _ resource.SchemaRequest,
 				Optional:    true,
 				Description: "Environment variables for the synced project",
 			},
+			"start_project": resourceschema.BoolAttribute{
+				Optional:    true,
+				Description: "Whether to start the project after creation (default: true). This is not sent to the API but controls lifecycle behavior.",
+			},
 
 			// Computed fields
 			"project_id": resourceschema.StringAttribute{
@@ -144,6 +148,7 @@ type gitOpsSyncModel struct {
 	SyncInterval          types.Int64  `tfsdk:"sync_interval"`
 	Enabled               types.Bool   `tfsdk:"enabled"`
 	EnvironmentVariables  types.Map    `tfsdk:"environment_variables"`
+	StartProject          types.Bool   `tfsdk:"start_project"`
 	ProjectID             types.String `tfsdk:"project_id"`
 	LastSyncAt            types.String `tfsdk:"last_sync_at"`
 	LastSyncCommit        types.String `tfsdk:"last_sync_commit"`
@@ -253,6 +258,19 @@ func (r *GitOpsSyncResource) Create(ctx context.Context, req resource.CreateRequ
 		}
 	}
 
+	// Start the project if requested (default: true)
+	startProject := true // default value
+	if !plan.StartProject.IsNull() && !plan.StartProject.IsUnknown() {
+		startProject = plan.StartProject.ValueBool()
+	}
+	if startProject && sync.ProjectID != nil {
+		err = r.client.DeployProject(ctx, plan.EnvironmentID.ValueString(), *sync.ProjectID)
+		if err != nil {
+			resp.Diagnostics.AddError("deploy project failed", err.Error())
+			return
+		}
+	}
+
 	state := gitOpsSyncModel{
 		ID:                   types.StringValue(sync.ID),
 		EnvironmentID:        types.StringValue(sync.EnvironmentID),
@@ -265,6 +283,7 @@ func (r *GitOpsSyncResource) Create(ctx context.Context, req resource.CreateRequ
 		SyncInterval:         types.Int64Value(sync.SyncInterval),
 		Enabled:              types.BoolValue(sync.Enabled),
 		EnvironmentVariables: plan.EnvironmentVariables,
+		StartProject:         plan.StartProject, // Preserve the user's preference
 		CreatedAt:            types.StringValue(sync.CreatedAt),
 		UpdatedAt:            types.StringValue(sync.UpdatedAt),
 	}
@@ -314,6 +333,7 @@ func (r *GitOpsSyncResource) Read(ctx context.Context, req resource.ReadRequest,
 	state.SyncInterval = types.Int64Value(sync.SyncInterval)
 	state.Enabled = types.BoolValue(sync.Enabled)
 	// Leave updated_at and created_at unchanged to avoid plan inconsistency on server-side timestamp changes
+	// start_project is preserved from state as it's a lifecycle control, not an API field
 
 	if sync.ProjectID != nil {
 		state.ProjectID = types.StringValue(*sync.ProjectID)
@@ -436,6 +456,7 @@ func (r *GitOpsSyncResource) Update(ctx context.Context, req resource.UpdateRequ
 	state.Enabled = types.BoolValue(sync.Enabled)
 	// Leave updated_at unchanged to avoid plan inconsistency on server-side timestamp changes
 	state.EnvironmentVariables = plan.EnvironmentVariables
+	state.StartProject = plan.StartProject // Preserve the user's preference
 
 	if sync.ProjectID != nil {
 		state.ProjectID = types.StringValue(*sync.ProjectID)
