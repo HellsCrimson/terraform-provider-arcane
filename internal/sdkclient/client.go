@@ -854,6 +854,229 @@ func (c *Client) DeleteApiKey(ctx context.Context, id string) error {
 	return c.do(req, nil)
 }
 
+// -------- Templates --------
+type CreateTemplateRequest struct {
+	Name        string `json:"name"`
+	Description string `json:"description"`
+	Content     string `json:"content"`     // docker-compose.yml content
+	EnvContent  string `json:"envContent"` // .env content
+}
+
+type UpdateTemplateRequest struct {
+	Name        string `json:"name"`
+	Description string `json:"description"`
+	Content     string `json:"content"`
+	EnvContent  string `json:"envContent"`
+}
+
+type Template struct {
+	ID          string  `json:"id"`
+	Name        string  `json:"name"`
+	Description string  `json:"description"`
+	Content     string  `json:"content"`
+	EnvContent  *string `json:"envContent,omitempty"`
+	IsCustom    bool    `json:"isCustom"`
+	IsRemote    bool    `json:"isRemote"`
+	RegistryID  *string `json:"registryId,omitempty"`
+}
+
+type templateEnvelope struct {
+	Success bool     `json:"success"`
+	Data    Template `json:"data"`
+}
+
+// CreateTemplate POST /templates
+func (c *Client) CreateTemplate(ctx context.Context, body CreateTemplateRequest) (*Template, error) {
+	req, err := c.newRequest(ctx, http.MethodPost, "templates", body)
+	if err != nil {
+		return nil, err
+	}
+	var env templateEnvelope
+	if err := c.do(req, &env); err != nil {
+		return nil, err
+	}
+	return &env.Data, nil
+}
+
+// GetTemplate GET /templates/{id}
+func (c *Client) GetTemplate(ctx context.Context, id string) (*Template, error) {
+	req, err := c.newRequest(ctx, http.MethodGet, path.Join("templates", id), nil)
+	if err != nil {
+		return nil, err
+	}
+	var env templateEnvelope
+	if err := c.do(req, &env); err != nil {
+		return nil, err
+	}
+	return &env.Data, nil
+}
+
+// UpdateTemplate PUT /templates/{id}
+func (c *Client) UpdateTemplate(ctx context.Context, id string, body UpdateTemplateRequest) (*Template, error) {
+	req, err := c.newRequest(ctx, http.MethodPut, path.Join("templates", id), body)
+	if err != nil {
+		return nil, err
+	}
+	var env templateEnvelope
+	if err := c.do(req, &env); err != nil {
+		return nil, err
+	}
+	return &env.Data, nil
+}
+
+// DeleteTemplate DELETE /templates/{id}
+func (c *Client) DeleteTemplate(ctx context.Context, id string) error {
+	req, err := c.newRequest(ctx, http.MethodDelete, path.Join("templates", id), nil)
+	if err != nil {
+		return err
+	}
+	return c.do(req, nil)
+}
+
+// -------- Volumes --------
+type CreateVolumeRequest struct {
+	Name       string            `json:"name"`
+	Driver     *string           `json:"driver,omitempty"`
+	DriverOpts map[string]string `json:"driverOpts,omitempty"`
+	Labels     map[string]string `json:"labels,omitempty"`
+}
+
+type Volume struct {
+	ID         string            `json:"id"`
+	Name       string            `json:"name"`
+	Driver     string            `json:"driver"`
+	Mountpoint string            `json:"mountpoint"`
+	Scope      string            `json:"scope"`
+	Options    map[string]string `json:"options"`
+	Labels     map[string]string `json:"labels"`
+	CreatedAt  string            `json:"createdAt"`
+	InUse      bool              `json:"inUse"`
+	Size       int64             `json:"size"`
+	Containers []string          `json:"containers"`
+}
+
+type volumeEnvelope struct {
+	Success bool   `json:"success"`
+	Data    Volume `json:"data"`
+}
+
+// CreateVolume POST /environments/{id}/volumes
+func (c *Client) CreateVolume(ctx context.Context, envID string, body CreateVolumeRequest) (*Volume, error) {
+	req, err := c.newRequest(ctx, http.MethodPost, path.Join("environments", envID, "volumes"), body)
+	if err != nil {
+		return nil, err
+	}
+	var env volumeEnvelope
+	if err := c.do(req, &env); err != nil {
+		return nil, err
+	}
+	return &env.Data, nil
+}
+
+// GetVolume GET /environments/{id}/volumes/{volumeName}
+func (c *Client) GetVolume(ctx context.Context, envID, volumeName string) (*Volume, error) {
+	req, err := c.newRequest(ctx, http.MethodGet, path.Join("environments", envID, "volumes", volumeName), nil)
+	if err != nil {
+		return nil, err
+	}
+	var env volumeEnvelope
+	if err := c.do(req, &env); err != nil {
+		return nil, err
+	}
+	return &env.Data, nil
+}
+
+// DeleteVolume DELETE /environments/{id}/volumes/{volumeName}
+func (c *Client) DeleteVolume(ctx context.Context, envID, volumeName string) error {
+	req, err := c.newRequest(ctx, http.MethodDelete, path.Join("environments", envID, "volumes", volumeName), nil)
+	if err != nil {
+		return err
+	}
+	return c.do(req, nil)
+}
+
+// -------- Networks --------
+type NetworkCreateOptions struct {
+	Driver         *string           `json:"driver,omitempty"`
+	Attachable     *bool             `json:"attachable,omitempty"`
+	Internal       *bool             `json:"internal,omitempty"`
+	EnableIPv6     *bool             `json:"enableIPv6,omitempty"`
+	CheckDuplicate *bool             `json:"checkDuplicate,omitempty"`
+	Ingress        *bool             `json:"ingress,omitempty"`
+	Labels         map[string]string `json:"labels,omitempty"`
+	Options        map[string]string `json:"options,omitempty"`
+	// Note: IPAM configuration support can be added later if needed
+}
+
+type NetworkCreateRequest struct {
+	Name    string                `json:"name"`
+	Options NetworkCreateOptions `json:"options"`
+}
+
+type NetworkCreateResponse struct {
+	ID      string  `json:"id"`
+	Warning *string `json:"warning,omitempty"`
+}
+
+type NetworkInspect struct {
+	ID         string            `json:"id"`
+	Name       string            `json:"name"`
+	Driver     string            `json:"driver"`
+	Scope      string            `json:"scope"`
+	Attachable bool              `json:"attachable"`
+	Internal   bool              `json:"internal"`
+	EnableIPv4 bool              `json:"enableIPv4"`
+	EnableIPv6 bool              `json:"enableIPv6"`
+	Labels     map[string]string `json:"labels"`
+	Options    map[string]string `json:"options"`
+	Created    string            `json:"created"`
+}
+
+type networkCreateEnvelope struct {
+	Success bool                  `json:"success"`
+	Data    NetworkCreateResponse `json:"data"`
+}
+
+type networkInspectEnvelope struct {
+	Success bool           `json:"success"`
+	Data    NetworkInspect `json:"data"`
+}
+
+// CreateNetwork POST /environments/{id}/networks
+func (c *Client) CreateNetwork(ctx context.Context, envID string, body NetworkCreateRequest) (*NetworkCreateResponse, error) {
+	req, err := c.newRequest(ctx, http.MethodPost, path.Join("environments", envID, "networks"), body)
+	if err != nil {
+		return nil, err
+	}
+	var env networkCreateEnvelope
+	if err := c.do(req, &env); err != nil {
+		return nil, err
+	}
+	return &env.Data, nil
+}
+
+// GetNetwork GET /environments/{id}/networks/{networkId}
+func (c *Client) GetNetwork(ctx context.Context, envID, networkID string) (*NetworkInspect, error) {
+	req, err := c.newRequest(ctx, http.MethodGet, path.Join("environments", envID, "networks", networkID), nil)
+	if err != nil {
+		return nil, err
+	}
+	var env networkInspectEnvelope
+	if err := c.do(req, &env); err != nil {
+		return nil, err
+	}
+	return &env.Data, nil
+}
+
+// DeleteNetwork DELETE /environments/{id}/networks/{networkId}
+func (c *Client) DeleteNetwork(ctx context.Context, envID, networkID string) error {
+	req, err := c.newRequest(ctx, http.MethodDelete, path.Join("environments", envID, "networks", networkID), nil)
+	if err != nil {
+		return err
+	}
+	return c.do(req, nil)
+}
+
 // -------- GitOps Syncs --------
 type GitOpsSyncCreateRequest struct {
 	Name         string  `json:"name"`

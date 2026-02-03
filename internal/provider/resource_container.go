@@ -323,3 +323,11 @@ func normalizePortMap(in map[string]string) map[string]string {
 	}
 	return out
 }
+
+func stringsToList(ctx context.Context, arr []string) types.List {
+	if len(arr) == 0 {
+		return types.ListNull(types.StringType)
+	}
+	list, _ := types.ListValueFrom(ctx, types.StringType, arr)
+	return list
+}
