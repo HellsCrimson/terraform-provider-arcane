@@ -1077,6 +1077,132 @@ func (c *Client) DeleteNetwork(ctx context.Context, envID, networkID string) err
 	return c.do(req, nil)
 }
 
+// -------- Template Registries --------
+type CreateTemplateRegistryRequest struct {
+	Name        string `json:"name"`
+	URL         string `json:"url"`
+	Description string `json:"description"`
+	Enabled     bool   `json:"enabled"`
+}
+
+type UpdateTemplateRegistryRequest struct {
+	Name        string `json:"name"`
+	URL         string `json:"url"`
+	Description string `json:"description"`
+	Enabled     bool   `json:"enabled"`
+}
+
+type TemplateRegistry struct {
+	ID          string `json:"id"`
+	Name        string `json:"name"`
+	URL         string `json:"url"`
+	Description string `json:"description"`
+	Enabled     bool   `json:"enabled"`
+}
+
+type templateRegistryEnvelope struct {
+	Success bool             `json:"success"`
+	Data    TemplateRegistry `json:"data"`
+}
+
+// CreateTemplateRegistry POST /templates/registries
+func (c *Client) CreateTemplateRegistry(ctx context.Context, body CreateTemplateRegistryRequest) (*TemplateRegistry, error) {
+	req, err := c.newRequest(ctx, http.MethodPost, "templates/registries", body)
+	if err != nil {
+		return nil, err
+	}
+	var env templateRegistryEnvelope
+	if err := c.do(req, &env); err != nil {
+		return nil, err
+	}
+	return &env.Data, nil
+}
+
+// GetTemplateRegistry GET /templates/registries/{id}
+func (c *Client) GetTemplateRegistry(ctx context.Context, id string) (*TemplateRegistry, error) {
+	req, err := c.newRequest(ctx, http.MethodGet, path.Join("templates/registries", id), nil)
+	if err != nil {
+		return nil, err
+	}
+	var env templateRegistryEnvelope
+	if err := c.do(req, &env); err != nil {
+		return nil, err
+	}
+	return &env.Data, nil
+}
+
+// UpdateTemplateRegistry PUT /templates/registries/{id}
+func (c *Client) UpdateTemplateRegistry(ctx context.Context, id string, body UpdateTemplateRegistryRequest) (*TemplateRegistry, error) {
+	req, err := c.newRequest(ctx, http.MethodPut, path.Join("templates/registries", id), body)
+	if err != nil {
+		return nil, err
+	}
+	var env templateRegistryEnvelope
+	if err := c.do(req, &env); err != nil {
+		return nil, err
+	}
+	return &env.Data, nil
+}
+
+// DeleteTemplateRegistry DELETE /templates/registries/{id}
+func (c *Client) DeleteTemplateRegistry(ctx context.Context, id string) error {
+	req, err := c.newRequest(ctx, http.MethodDelete, path.Join("templates/registries", id), nil)
+	if err != nil {
+		return err
+	}
+	return c.do(req, nil)
+}
+
+// -------- Job Schedules --------
+type UpdateJobSchedulesRequest struct {
+	AnalyticsHeartbeatInterval *string `json:"analyticsHeartbeatInterval,omitempty"`
+	AutoUpdateInterval         *string `json:"autoUpdateInterval,omitempty"`
+	EnvironmentHealthInterval  *string `json:"environmentHealthInterval,omitempty"`
+	EventCleanupInterval       *string `json:"eventCleanupInterval,omitempty"`
+	GitOpsSyncInterval         *string `json:"gitopsSyncInterval,omitempty"`
+	PollingInterval            *string `json:"pollingInterval,omitempty"`
+	ScheduledPruneInterval     *string `json:"scheduledPruneInterval,omitempty"`
+}
+
+type JobSchedulesConfig struct {
+	AnalyticsHeartbeatInterval string `json:"analyticsHeartbeatInterval"`
+	AutoUpdateInterval         string `json:"autoUpdateInterval"`
+	EnvironmentHealthInterval  string `json:"environmentHealthInterval"`
+	EventCleanupInterval       string `json:"eventCleanupInterval"`
+	GitOpsSyncInterval         string `json:"gitopsSyncInterval"`
+	PollingInterval            string `json:"pollingInterval"`
+	ScheduledPruneInterval     string `json:"scheduledPruneInterval"`
+}
+
+// UpdateJobSchedules PUT /environments/{id}/job-schedules
+func (c *Client) UpdateJobSchedules(ctx context.Context, envID string, body UpdateJobSchedulesRequest) (*JobSchedulesConfig, error) {
+	req, err := c.newRequest(ctx, http.MethodPut, path.Join("environments", envID, "job-schedules"), body)
+	if err != nil {
+		return nil, err
+	}
+	var out struct {
+		Success bool               `json:"success"`
+		Data    JobSchedulesConfig `json:"data"`
+	}
+	if err := c.do(req, &out); err != nil {
+		return nil, err
+	}
+	return &out.Data, nil
+}
+
+// GetJobSchedules GET /environments/{id}/job-schedules
+func (c *Client) GetJobSchedules(ctx context.Context, envID string) (*JobSchedulesConfig, error) {
+	req, err := c.newRequest(ctx, http.MethodGet, path.Join("environments", envID, "job-schedules"), nil)
+	if err != nil {
+		return nil, err
+	}
+	var config JobSchedulesConfig
+	if err := c.do(req, &config); err != nil {
+		return nil, err
+	}
+	return &config, nil
+}
+
 // -------- GitOps Syncs --------
 type GitOpsSyncCreateRequest struct {
 	Name         string  `json:"name"`
