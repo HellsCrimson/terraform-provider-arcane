@@ -76,8 +76,8 @@ func (r *GitOpsSyncResource) Schema(_ context.Context, _ resource.SchemaRequest,
 				Description: "Sync interval in seconds",
 			},
 			"enabled": resourceschema.BoolAttribute{
-				Optional:    true,
-				Description: "Whether the sync is enabled",
+				Computed:    true,
+				Description: "Whether the sync is enabled (read-only)",
 			},
 			"environment_variables": resourceschema.MapAttribute{
 				ElementType: types.StringType,
@@ -228,10 +228,7 @@ func (r *GitOpsSyncResource) Create(ctx context.Context, req resource.CreateRequ
 		v := plan.SyncInterval.ValueInt64()
 		body.SyncInterval = &v
 	}
-	if !plan.Enabled.IsNull() && !plan.Enabled.IsUnknown() {
-		v := plan.Enabled.ValueBool()
-		body.Enabled = &v
-	}
+	// Note: 'enabled' is read-only and not part of the create request
 
 	sync, err := r.client.CreateGitOpsSync(ctx, plan.EnvironmentID.ValueString(), body)
 	if err != nil {
@@ -399,10 +396,7 @@ func (r *GitOpsSyncResource) Update(ctx context.Context, req resource.UpdateRequ
 		v := plan.SyncInterval.ValueInt64()
 		body.SyncInterval = &v
 	}
-	if !plan.Enabled.IsNull() && !plan.Enabled.IsUnknown() {
-		v := plan.Enabled.ValueBool()
-		body.Enabled = &v
-	}
+	// Note: 'enabled' is read-only and not part of the update request
 
 	sync, err := r.client.UpdateGitOpsSync(ctx, state.EnvironmentID.ValueString(), state.ID.ValueString(), body)
 	if err != nil {

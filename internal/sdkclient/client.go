@@ -749,7 +749,7 @@ type GitOpsSyncCreateRequest struct {
 	ProjectName  *string `json:"projectName,omitempty"`
 	AutoSync     *bool   `json:"autoSync,omitempty"`
 	SyncInterval *int64  `json:"syncInterval,omitempty"`
-	Enabled      *bool   `json:"enabled,omitempty"`
+	// Note: 'enabled' is read-only and not included in create requests
 }
 
 type GitOpsSyncUpdateRequest struct {
@@ -760,7 +760,7 @@ type GitOpsSyncUpdateRequest struct {
 	ProjectName  *string `json:"projectName,omitempty"`
 	AutoSync     *bool   `json:"autoSync,omitempty"`
 	SyncInterval *int64  `json:"syncInterval,omitempty"`
-	Enabled      *bool   `json:"enabled,omitempty"`
+	// Note: 'enabled' is read-only and not included in update requests
 }
 
 type GitOpsSync struct {
