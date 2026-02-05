@@ -106,9 +106,31 @@ func (p *ArcaneProvider) Configure(ctx context.Context, req provider.ConfigureRe
 	resp.ResourceData = client
 }
 
-// DataSources returns the provider data sources (none yet).
+// DataSources returns the provider data sources.
 func (p *ArcaneProvider) DataSources(_ context.Context) []func() datasource.DataSource {
-	return []func() datasource.DataSource{}
+	return []func() datasource.DataSource{
+		// Simple ID data sources
+		NewEnvironmentDataSource,
+		NewUserDataSource,
+		NewRegistryDataSource,
+		NewNotificationDataSource,
+		NewGitRepositoryDataSource,
+		NewApiKeyDataSource,
+		NewTemplateDataSource,
+		NewTemplateRegistryDataSource,
+
+		// Composite ID data sources
+		NewProjectDataSource,
+		NewContainerDataSource,
+		NewNetworkDataSource,
+		NewVolumeDataSource,
+		NewGitOpsSyncDataSource,
+		NewProjectPathDataSource,
+		NewJobSchedulesDataSource,
+
+		// Special cases
+		NewSettingsDataSource,
+	}
 }
 
 // Resources returns the provider resources.
