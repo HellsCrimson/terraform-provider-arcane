@@ -78,7 +78,7 @@ func (c *Client) do(req *http.Request, v any) error {
 	return dec.Decode(v)
 }
 
-// Models derived from api-1.json
+// User models
 // components/schemas/UserCreateUser
 type CreateUserRequest struct {
 	DisplayName *string  `json:"displayName,omitempty"`
