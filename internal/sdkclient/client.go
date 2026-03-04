@@ -247,6 +247,11 @@ type ProjectDetails struct {
 	UpdatedAt      string  `json:"updatedAt"`
 	ComposeContent *string `json:"composeContent,omitempty"`
 	EnvContent     *string `json:"envContent,omitempty"`
+	IncludeFiles   []struct {
+		Path         string `json:"path"`
+		RelativePath string `json:"relativePath"`
+		Content      string `json:"content"`
+	} `json:"includeFiles,omitempty"`
 }
 
 type projectDetailsEnvelope struct {
@@ -858,7 +863,7 @@ func (c *Client) DeleteApiKey(ctx context.Context, id string) error {
 type CreateTemplateRequest struct {
 	Name        string `json:"name"`
 	Description string `json:"description"`
-	Content     string `json:"content"`     // docker-compose.yml content
+	Content     string `json:"content"`    // docker-compose.yml content
 	EnvContent  string `json:"envContent"` // .env content
 }
 
@@ -995,6 +1000,69 @@ func (c *Client) DeleteVolume(ctx context.Context, envID, volumeName string) err
 	return c.do(req, nil)
 }
 
+// -------- Volume Backups --------
+type VolumeBackup struct {
+	ID         string  `json:"id"`
+	VolumeName string  `json:"volumeName"`
+	Size       int64   `json:"size"`
+	CreatedAt  string  `json:"createdAt"`
+	UpdatedAt  *string `json:"updatedAt,omitempty"`
+}
+
+type volumeBackupEnvelope struct {
+	Success bool         `json:"success"`
+	Data    VolumeBackup `json:"data"`
+}
+
+type Pagination struct {
+	CurrentPage     int64  `json:"currentPage"`
+	ItemsPerPage    int64  `json:"itemsPerPage"`
+	TotalItems      int64  `json:"totalItems"`
+	TotalPages      int64  `json:"totalPages"`
+	GrandTotalItems *int64 `json:"grandTotalItems,omitempty"`
+}
+
+type volumeBackupListEnvelope struct {
+	Success    bool           `json:"success"`
+	Data       []VolumeBackup `json:"data"`
+	Pagination Pagination     `json:"pagination"`
+}
+
+// CreateVolumeBackup POST /environments/{id}/volumes/{volumeName}/backups
+func (c *Client) CreateVolumeBackup(ctx context.Context, envID, volumeName string) (*VolumeBackup, error) {
+	req, err := c.newRequest(ctx, http.MethodPost, path.Join("environments", envID, "volumes", volumeName, "backups"), nil)
+	if err != nil {
+		return nil, err
+	}
+	var env volumeBackupEnvelope
+	if err := c.do(req, &env); err != nil {
+		return nil, err
+	}
+	return &env.Data, nil
+}
+
+// ListVolumeBackups GET /environments/{id}/volumes/{volumeName}/backups
+func (c *Client) ListVolumeBackups(ctx context.Context, envID, volumeName string) ([]VolumeBackup, error) {
+	req, err := c.newRequest(ctx, http.MethodGet, path.Join("environments", envID, "volumes", volumeName, "backups"), nil)
+	if err != nil {
+		return nil, err
+	}
+	var env volumeBackupListEnvelope
+	if err := c.do(req, &env); err != nil {
+		return nil, err
+	}
+	return env.Data, nil
+}
+
+// DeleteVolumeBackup DELETE /environments/{id}/volumes/backups/{backupId}
+func (c *Client) DeleteVolumeBackup(ctx context.Context, envID, backupID string) error {
+	req, err := c.newRequest(ctx, http.MethodDelete, path.Join("environments", envID, "volumes", "backups", backupID), nil)
+	if err != nil {
+		return err
+	}
+	return c.do(req, nil)
+}
+
 // -------- Networks --------
 type NetworkCreateOptions struct {
 	Driver         *string           `json:"driver,omitempty"`
@@ -1009,7 +1077,7 @@ type NetworkCreateOptions struct {
 }
 
 type NetworkCreateRequest struct {
-	Name    string                `json:"name"`
+	Name    string               `json:"name"`
 	Options NetworkCreateOptions `json:"options"`
 }
 
@@ -1296,4 +1364,386 @@ func (c *Client) DeleteGitOpsSync(ctx context.Context, envID, syncID string) err
 		return err
 	}
 	return c.do(req, nil)
+}
+
+// -------- Vulnerability Ignore --------
+type VulnerabilityIgnorePayload struct {
+	CreatedBy        *string `json:"createdBy,omitempty"`
+	ImageID          string  `json:"imageId"`
+	InstalledVersion *string `json:"installedVersion,omitempty"`
+	PkgName          string  `json:"pkgName"`
+	Reason           *string `json:"reason,omitempty"`
+	VulnerabilityID  string  `json:"vulnerabilityId"`
+}
+
+type IgnoredVulnerability struct {
+	ID               string `json:"id"`
+	EnvironmentID    string `json:"environmentId"`
+	ImageID          string `json:"imageId"`
+	VulnerabilityID  string `json:"vulnerabilityId"`
+	PkgName          string `json:"pkgName"`
+	InstalledVersion string `json:"installedVersion"`
+	CreatedBy        string `json:"createdBy"`
+	CreatedAt        string `json:"createdAt"`
+	Reason           string `json:"reason"`
+}
+
+type ignoredVulnerabilityEnvelope struct {
+	Success bool                 `json:"success"`
+	Data    IgnoredVulnerability `json:"data"`
+}
+
+type ignoredVulnerabilityListEnvelope struct {
+	Success    bool                   `json:"success"`
+	Data       []IgnoredVulnerability `json:"data"`
+	Pagination Pagination             `json:"pagination"`
+}
+
+// IgnoreVulnerability POST /environments/{id}/vulnerabilities/ignore
+func (c *Client) IgnoreVulnerability(ctx context.Context, envID string, body VulnerabilityIgnorePayload) (*IgnoredVulnerability, error) {
+	req, err := c.newRequest(ctx, http.MethodPost, path.Join("environments", envID, "vulnerabilities", "ignore"), body)
+	if err != nil {
+		return nil, err
+	}
+	var env ignoredVulnerabilityEnvelope
+	if err := c.do(req, &env); err != nil {
+		return nil, err
+	}
+	return &env.Data, nil
+}
+
+// ListIgnoredVulnerabilities GET /environments/{id}/vulnerabilities/ignored
+func (c *Client) ListIgnoredVulnerabilities(ctx context.Context, envID string) ([]IgnoredVulnerability, error) {
+	req, err := c.newRequest(ctx, http.MethodGet, path.Join("environments", envID, "vulnerabilities", "ignored"), nil)
+	if err != nil {
+		return nil, err
+	}
+	var env ignoredVulnerabilityListEnvelope
+	if err := c.do(req, &env); err != nil {
+		return nil, err
+	}
+	return env.Data, nil
+}
+
+// UnignoreVulnerability DELETE /environments/{id}/vulnerabilities/ignore/{ignoreId}
+func (c *Client) UnignoreVulnerability(ctx context.Context, envID, ignoreID string) error {
+	req, err := c.newRequest(ctx, http.MethodDelete, path.Join("environments", envID, "vulnerabilities", "ignore", ignoreID), nil)
+	if err != nil {
+		return err
+	}
+	return c.do(req, nil)
+}
+
+// -------- Additional Read Models (Data Sources) --------
+type DeploymentSnippet struct {
+	DockerRun     string `json:"dockerRun"`
+	DockerCompose string `json:"dockerCompose"`
+}
+
+type deploymentSnippetEnvelope struct {
+	Success bool              `json:"success"`
+	Data    DeploymentSnippet `json:"data"`
+}
+
+func (c *Client) GetDeploymentSnippet(ctx context.Context, envID string) (*DeploymentSnippet, error) {
+	req, err := c.newRequest(ctx, http.MethodGet, path.Join("environments", envID, "deployment"), nil)
+	if err != nil {
+		return nil, err
+	}
+	var out deploymentSnippetEnvelope
+	if err := c.do(req, &out); err != nil {
+		return nil, err
+	}
+	return &out.Data, nil
+}
+
+type BackupHasPathResponse struct {
+	Exists bool `json:"exists"`
+}
+
+type backupHasPathEnvelope struct {
+	Success bool                  `json:"success"`
+	Data    BackupHasPathResponse `json:"data"`
+}
+
+func (c *Client) ListVolumeBackupFiles(ctx context.Context, envID, backupID string) ([]string, error) {
+	req, err := c.newRequest(ctx, http.MethodGet, path.Join("environments", envID, "volumes", "backups", backupID, "files"), nil)
+	if err != nil {
+		return nil, err
+	}
+	var out struct {
+		Success bool     `json:"success"`
+		Data    []string `json:"data"`
+	}
+	if err := c.do(req, &out); err != nil {
+		return nil, err
+	}
+	return out.Data, nil
+}
+
+func (c *Client) VolumeBackupHasPath(ctx context.Context, envID, backupID, checkPath string) (bool, error) {
+	p := path.Join("environments", envID, "volumes", "backups", backupID, "has-path")
+	u := *c.BaseURL
+	u.Path = path.Join(c.BaseURL.Path, p)
+	q := u.Query()
+	if checkPath != "" {
+		q.Set("path", checkPath)
+	}
+	u.RawQuery = q.Encode()
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, u.String(), nil)
+	if err != nil {
+		return false, err
+	}
+	req.Header.Set("Accept", "application/json")
+	req.Header.Set("X-API-Key", c.APIKey)
+	var out backupHasPathEnvelope
+	if err := c.do(req, &out); err != nil {
+		return false, err
+	}
+	return out.Data.Exists, nil
+}
+
+type ImageSummary struct {
+	ID          string `json:"id"`
+	Repo        string `json:"repo"`
+	Tag         string `json:"tag"`
+	Created     int64  `json:"created"`
+	Size        int64  `json:"size"`
+	VirtualSize int64  `json:"virtualSize"`
+	InUse       bool   `json:"inUse"`
+}
+
+type imageListEnvelope struct {
+	Success    bool           `json:"success"`
+	Data       []ImageSummary `json:"data"`
+	Pagination Pagination     `json:"pagination"`
+}
+
+func (c *Client) ListImages(ctx context.Context, envID string) ([]ImageSummary, error) {
+	req, err := c.newRequest(ctx, http.MethodGet, path.Join("environments", envID, "images"), nil)
+	if err != nil {
+		return nil, err
+	}
+	var out imageListEnvelope
+	if err := c.do(req, &out); err != nil {
+		return nil, err
+	}
+	return out.Data, nil
+}
+
+type ImageDetail struct {
+	ID           string   `json:"id"`
+	RepoTags     []string `json:"repoTags"`
+	RepoDigests  []string `json:"repoDigests"`
+	Comment      string   `json:"comment"`
+	Created      string   `json:"created"`
+	Author       string   `json:"author"`
+	Architecture string   `json:"architecture"`
+	OS           string   `json:"os"`
+	Size         int64    `json:"size"`
+}
+
+type imageDetailEnvelope struct {
+	Success bool        `json:"success"`
+	Data    ImageDetail `json:"data"`
+}
+
+func (c *Client) GetImage(ctx context.Context, envID, imageID string) (*ImageDetail, error) {
+	req, err := c.newRequest(ctx, http.MethodGet, path.Join("environments", envID, "images", imageID), nil)
+	if err != nil {
+		return nil, err
+	}
+	var out imageDetailEnvelope
+	if err := c.do(req, &out); err != nil {
+		return nil, err
+	}
+	return &out.Data, nil
+}
+
+type JobStatus struct {
+	ID             string `json:"id"`
+	Name           string `json:"name"`
+	Description    string `json:"description"`
+	Category       string `json:"category"`
+	Schedule       string `json:"schedule"`
+	Enabled        bool   `json:"enabled"`
+	ManagerOnly    bool   `json:"managerOnly"`
+	IsContinuous   bool   `json:"isContinuous"`
+	CanRunManually bool   `json:"canRunManually"`
+	NextRun        string `json:"nextRun"`
+}
+
+type JobsListResponse struct {
+	IsAgent bool        `json:"isAgent"`
+	Jobs    []JobStatus `json:"jobs"`
+}
+
+func (c *Client) ListJobs(ctx context.Context, envID string) (*JobsListResponse, error) {
+	req, err := c.newRequest(ctx, http.MethodGet, path.Join("environments", envID, "jobs"), nil)
+	if err != nil {
+		return nil, err
+	}
+	var out JobsListResponse
+	if err := c.do(req, &out); err != nil {
+		return nil, err
+	}
+	return &out, nil
+}
+
+type Category struct {
+	ID          string   `json:"id"`
+	Title       string   `json:"title"`
+	Description string   `json:"description"`
+	Icon        string   `json:"icon"`
+	URL         string   `json:"url"`
+	Keywords    []string `json:"keywords"`
+}
+
+func (c *Client) GetCustomizeCategories(ctx context.Context) ([]Category, error) {
+	req, err := c.newRequest(ctx, http.MethodGet, "customize/categories", nil)
+	if err != nil {
+		return nil, err
+	}
+	var out []Category
+	if err := c.do(req, &out); err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *Client) GetSettingsCategories(ctx context.Context) ([]Category, error) {
+	req, err := c.newRequest(ctx, http.MethodGet, "settings/categories", nil)
+	if err != nil {
+		return nil, err
+	}
+	var out []Category
+	if err := c.do(req, &out); err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+type GitBranch struct {
+	Name      string `json:"name"`
+	IsDefault bool   `json:"isDefault"`
+}
+
+type gitBranchesEnvelope struct {
+	Success bool `json:"success"`
+	Data    struct {
+		Branches []GitBranch `json:"branches"`
+	} `json:"data"`
+}
+
+func (c *Client) ListGitRepositoryBranches(ctx context.Context, repoID string) ([]GitBranch, error) {
+	req, err := c.newRequest(ctx, http.MethodGet, path.Join("customize", "git-repositories", repoID, "branches"), nil)
+	if err != nil {
+		return nil, err
+	}
+	var out gitBranchesEnvelope
+	if err := c.do(req, &out); err != nil {
+		return nil, err
+	}
+	return out.Data.Branches, nil
+}
+
+type GitFileTreeNode struct {
+	Name     string            `json:"name"`
+	Path     string            `json:"path"`
+	Type     string            `json:"type"`
+	Size     int64             `json:"size,omitempty"`
+	Children []GitFileTreeNode `json:"children,omitempty"`
+}
+
+type GitBrowseResponse struct {
+	Path  string            `json:"path"`
+	Files []GitFileTreeNode `json:"files"`
+}
+
+type gitBrowseEnvelope struct {
+	Success bool              `json:"success"`
+	Data    GitBrowseResponse `json:"data"`
+}
+
+func (c *Client) BrowseGitRepositoryFiles(ctx context.Context, repoID, branch, browsePath string) (*GitBrowseResponse, error) {
+	p := path.Join("customize", "git-repositories", repoID, "files")
+	u := *c.BaseURL
+	u.Path = path.Join(c.BaseURL.Path, p)
+	q := u.Query()
+	if branch != "" {
+		q.Set("branch", branch)
+	}
+	if browsePath != "" {
+		q.Set("path", browsePath)
+	}
+	u.RawQuery = q.Encode()
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, u.String(), nil)
+	if err != nil {
+		return nil, err
+	}
+	req.Header.Set("Accept", "application/json")
+	req.Header.Set("X-API-Key", c.APIKey)
+	var out gitBrowseEnvelope
+	if err := c.do(req, &out); err != nil {
+		return nil, err
+	}
+	return &out.Data, nil
+}
+
+type DefaultTemplatesResponse struct {
+	ComposeTemplate string `json:"composeTemplate"`
+	EnvTemplate     string `json:"envTemplate"`
+}
+
+type defaultTemplatesEnvelope struct {
+	Success bool                     `json:"success"`
+	Data    DefaultTemplatesResponse `json:"data"`
+}
+
+func (c *Client) GetDefaultTemplates(ctx context.Context) (*DefaultTemplatesResponse, error) {
+	req, err := c.newRequest(ctx, http.MethodGet, "templates/default", nil)
+	if err != nil {
+		return nil, err
+	}
+	var out defaultTemplatesEnvelope
+	if err := c.do(req, &out); err != nil {
+		return nil, err
+	}
+	return &out.Data, nil
+}
+
+type TemplateVariable struct {
+	Key   string `json:"key"`
+	Value string `json:"value"`
+}
+
+func (c *Client) GetTemplateVariables(ctx context.Context) ([]TemplateVariable, error) {
+	req, err := c.newRequest(ctx, http.MethodGet, "templates/variables", nil)
+	if err != nil {
+		return nil, err
+	}
+	var out struct {
+		Success bool               `json:"success"`
+		Data    []TemplateVariable `json:"data"`
+	}
+	if err := c.do(req, &out); err != nil {
+		return nil, err
+	}
+	return out.Data, nil
+}
+
+func (c *Client) GetPublicSettings(ctx context.Context, envID string) (map[string]string, error) {
+	req, err := c.newRequest(ctx, http.MethodGet, path.Join("environments", envID, "settings", "public"), nil)
+	if err != nil {
+		return nil, err
+	}
+	var arr []SettingsPublicSetting
+	if err := c.do(req, &arr); err != nil {
+		return nil, err
+	}
+	res := make(map[string]string, len(arr))
+	for _, s := range arr {
+		res[s.Key] = s.Value
+	}
+	return res, nil
 }

@@ -137,25 +137,25 @@ func (r *GitOpsSyncResource) Configure(_ context.Context, req resource.Configure
 }
 
 type gitOpsSyncModel struct {
-	ID                    types.String `tfsdk:"id"`
-	EnvironmentID         types.String `tfsdk:"environment_id"`
-	Name                  types.String `tfsdk:"name"`
-	RepositoryID          types.String `tfsdk:"repository_id"`
-	Branch                types.String `tfsdk:"branch"`
-	ComposePath           types.String `tfsdk:"compose_path"`
-	ProjectName           types.String `tfsdk:"project_name"`
-	AutoSync              types.Bool   `tfsdk:"auto_sync"`
-	SyncInterval          types.Int64  `tfsdk:"sync_interval"`
-	Enabled               types.Bool   `tfsdk:"enabled"`
-	EnvironmentVariables  types.Map    `tfsdk:"environment_variables"`
-	StartProject          types.Bool   `tfsdk:"start_project"`
-	ProjectID             types.String `tfsdk:"project_id"`
-	LastSyncAt            types.String `tfsdk:"last_sync_at"`
-	LastSyncCommit        types.String `tfsdk:"last_sync_commit"`
-	LastSyncStatus        types.String `tfsdk:"last_sync_status"`
-	LastSyncError         types.String `tfsdk:"last_sync_error"`
-	CreatedAt             types.String `tfsdk:"created_at"`
-	UpdatedAt             types.String `tfsdk:"updated_at"`
+	ID                   types.String `tfsdk:"id"`
+	EnvironmentID        types.String `tfsdk:"environment_id"`
+	Name                 types.String `tfsdk:"name"`
+	RepositoryID         types.String `tfsdk:"repository_id"`
+	Branch               types.String `tfsdk:"branch"`
+	ComposePath          types.String `tfsdk:"compose_path"`
+	ProjectName          types.String `tfsdk:"project_name"`
+	AutoSync             types.Bool   `tfsdk:"auto_sync"`
+	SyncInterval         types.Int64  `tfsdk:"sync_interval"`
+	Enabled              types.Bool   `tfsdk:"enabled"`
+	EnvironmentVariables types.Map    `tfsdk:"environment_variables"`
+	StartProject         types.Bool   `tfsdk:"start_project"`
+	ProjectID            types.String `tfsdk:"project_id"`
+	LastSyncAt           types.String `tfsdk:"last_sync_at"`
+	LastSyncCommit       types.String `tfsdk:"last_sync_commit"`
+	LastSyncStatus       types.String `tfsdk:"last_sync_status"`
+	LastSyncError        types.String `tfsdk:"last_sync_error"`
+	CreatedAt            types.String `tfsdk:"created_at"`
+	UpdatedAt            types.String `tfsdk:"updated_at"`
 }
 
 // mapToEnvContent converts a Terraform map to .env file format
@@ -504,5 +504,12 @@ func (r *GitOpsSyncResource) Delete(ctx context.Context, req resource.DeleteRequ
 }
 
 func (r *GitOpsSyncResource) ImportState(ctx context.Context, req resource.ImportStateRequest, resp *resource.ImportStateResponse) {
-	resource.ImportStatePassthroughID(ctx, path.Root("id"), req, resp)
+	// envID:syncID
+	parts := strings.SplitN(req.ID, ":", 2)
+	if len(parts) != 2 {
+		resp.Diagnostics.AddError("invalid import id", "expected env_id:sync_id")
+		return
+	}
+	resp.Diagnostics.Append(resp.State.SetAttribute(ctx, path.Root("environment_id"), parts[0])...)
+	resp.Diagnostics.Append(resp.State.SetAttribute(ctx, path.Root("id"), parts[1])...)
 }

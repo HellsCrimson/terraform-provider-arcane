@@ -229,7 +229,7 @@ func (r *VolumeResource) Delete(ctx context.Context, req resource.DeleteRequest,
 
 func (r *VolumeResource) ImportState(ctx context.Context, req resource.ImportStateRequest, resp *resource.ImportStateResponse) {
 	// Import format: environment_id/volume_name
-	parts := strings.Split(req.ID, "/")
+	parts := strings.SplitN(req.ID, "/", 2)
 	if len(parts) != 2 {
 		resp.Diagnostics.AddError("invalid import ID", "Expected format: environment_id/volume_name")
 		return

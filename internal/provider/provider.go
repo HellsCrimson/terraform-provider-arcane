@@ -127,9 +127,24 @@ func (p *ArcaneProvider) DataSources(_ context.Context) []func() datasource.Data
 		NewGitOpsSyncDataSource,
 		NewProjectPathDataSource,
 		NewJobSchedulesDataSource,
+		NewVolumeBackupFilesDataSource,
+		NewVolumeBackupHasPathDataSource,
+		NewIgnoredVulnerabilitiesDataSource,
+		NewDeploymentSnippetDataSource,
+		NewImagesDataSource,
+		NewImageDataSource,
+		NewJobsDataSource,
+		NewProjectIncludesDataSource,
 
 		// Special cases
 		NewSettingsDataSource,
+		NewCustomizeCategoriesDataSource,
+		NewGitRepositoryBranchesDataSource,
+		NewGitRepositoryFilesDataSource,
+		NewSettingsCategoriesDataSource,
+		NewDefaultTemplatesDataSource,
+		NewTemplateVariablesDataSource,
+		NewPublicSettingsDataSource,
 	}
 }
 
@@ -150,7 +165,9 @@ func (p *ArcaneProvider) Resources(_ context.Context) []func() resource.Resource
 		NewTemplateResource,
 		NewTemplateRegistryResource,
 		NewVolumeResource,
+		NewVolumeBackupResource,
 		NewNetworkResource,
 		NewJobSchedulesResource,
+		NewVulnerabilityIgnoreResource,
 	}
 }

@@ -257,7 +257,7 @@ func (r *NetworkResource) Delete(ctx context.Context, req resource.DeleteRequest
 
 func (r *NetworkResource) ImportState(ctx context.Context, req resource.ImportStateRequest, resp *resource.ImportStateResponse) {
 	// Import format: environment_id/network_id
-	parts := strings.Split(req.ID, "/")
+	parts := strings.SplitN(req.ID, "/", 2)
 	if len(parts) != 2 {
 		resp.Diagnostics.AddError("invalid import ID", "Expected format: environment_id/network_id")
 		return

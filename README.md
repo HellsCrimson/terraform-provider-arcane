@@ -162,6 +162,16 @@ Resources
   - All intervals use cron format (e.g., '0 */5 * * * *' for every 5 minutes).
   - Computed: id (same as environment_id).
 
+- arcane_vulnerability_ignore
+  - Manage ignored vulnerability records per environment/image/package.
+  - Attributes: environment_id, image_id, vulnerability_id, pkg_name (required), installed_version, reason, created_by.
+  - Computed: id, created_at.
+
+- arcane_volume_backup
+  - Manage snapshots/backups for volumes.
+  - Attributes: environment_id, volume_name (required).
+  - Computed: id, size, created_at, updated_at.
+
 Imports
 
 - arcane_user: `id`
@@ -180,6 +190,8 @@ Imports
 - arcane_volume: `environment_id/volume_name`
 - arcane_network: `environment_id/network_id`
 - arcane_job_schedules: `environment_id`
+- arcane_vulnerability_ignore: `environment_id/ignore_id`
+- arcane_volume_backup: `environment_id/volume_name/backup_id`
 
 Examples
 
