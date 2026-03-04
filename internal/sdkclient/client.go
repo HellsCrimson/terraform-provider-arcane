@@ -1260,6 +1260,7 @@ func (c *Client) CreateGitOpsSync(ctx context.Context, envID string, body GitOps
 	if err := c.do(req, &env); err != nil {
 		return nil, err
 	}
+	env.Data.EnvironmentID = envID
 	return &env.Data, nil
 }
 
@@ -1272,6 +1273,7 @@ func (c *Client) GetGitOpsSync(ctx context.Context, envID, syncID string) (*GitO
 	if err := c.do(req, &env); err != nil {
 		return nil, err
 	}
+	env.Data.EnvironmentID = envID
 	return &env.Data, nil
 }
 
@@ -1284,6 +1286,7 @@ func (c *Client) UpdateGitOpsSync(ctx context.Context, envID, syncID string, bod
 	if err := c.do(req, &env); err != nil {
 		return nil, err
 	}
+	env.Data.EnvironmentID = envID
 	return &env.Data, nil
 }
 
