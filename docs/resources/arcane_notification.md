@@ -4,7 +4,7 @@ Manages notification settings for a provider.
 
 ## Example Usage
 
-```
+```hcl
 resource "arcane_notification" "slack" {
   environment_id = var.environment_id
   provider_name  = "slack"

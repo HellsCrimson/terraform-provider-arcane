@@ -4,7 +4,7 @@ Manages a compose project sourced from local files.
 
 ## Example Usage
 
-```
+```hcl
 resource "arcane_project_path" "demo" {
   environment_id    = var.environment_id
   name              = "demo"

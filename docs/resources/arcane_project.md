@@ -4,7 +4,7 @@ Manages a compose project with inline content.
 
 ## Example Usage
 
-```
+```hcl
 resource "arcane_project" "demo" {
   environment_id  = var.environment_id
   name            = "demo"

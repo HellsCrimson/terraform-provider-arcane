@@ -4,7 +4,7 @@ Manages a container registry in Arcane.
 
 ## Example Usage
 
-```
+```hcl
 resource "arcane_container_registry" "example" {
   url         = "https://ghcr.io"
   username    = "bot"
@@ -29,4 +29,3 @@ resource "arcane_container_registry" "example" {
 - `id` (String)
 - `created_at` (String)
 - `updated_at` (String)
-

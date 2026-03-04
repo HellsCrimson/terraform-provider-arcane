@@ -4,7 +4,7 @@ Manages Arcane environments (agent connections).
 
 ## Example Usage
 
-```
+```hcl
 resource "arcane_environment" "agent" {
   name     = "Production"
   api_url  = "http://agent-host:8080"
@@ -27,4 +27,3 @@ resource "arcane_environment" "agent" {
 - `id` (String)
 - `status` (String)
 - `api_key` (String, Sensitive) — only returned on create when `use_api_key = true`.
-

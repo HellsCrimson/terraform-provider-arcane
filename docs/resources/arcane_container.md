@@ -6,7 +6,7 @@ Most config changes force replacement.
 
 ## Example Usage
 
-```
+```hcl
 resource "arcane_container" "alpine" {
   environment_id = var.environment_id
   name           = "hello"

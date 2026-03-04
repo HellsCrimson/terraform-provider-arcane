@@ -4,7 +4,7 @@ Manages an Arcane user.
 
 ## Example Usage
 
-```
+```hcl
 resource "arcane_user" "example" {
   username     = "johndoe"
   password     = "SuperSecret123!"
@@ -28,4 +28,3 @@ resource "arcane_user" "example" {
 - `id` (String)
 - `created_at` (String)
 - `updated_at` (String)
-

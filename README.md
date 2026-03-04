@@ -15,7 +15,7 @@ Requirements
 Installation
 
 - From Registry (recommended):
-```
+```hcl
 terraform {
   required_providers {
     arcane = {
@@ -35,7 +35,7 @@ go build ./cmd/terraform-provider-arcane
 
   2) Add a dev override in your CLI config (e.g. `~/.terraformrc`):
 
-```
+```hcl
 dependency_lock_file_path = "./.terraform.lock.hcl"
 provider_installation {
   dev_overrides {
@@ -47,7 +47,7 @@ provider_installation {
 
   3) In your configuration, set:
 
-```
+```hcl
 terraform {
   required_providers {
     arcane = { source = "hellscrimson/arcane" }
@@ -64,7 +64,7 @@ Quick Start
 
 See `examples/basic/main.tf` for a working setup that demonstrates projects, file-based projects (with content hashing), notifications and containers. Example provider block:
 
-```
+```hcl
 provider "arcane" {
   api_key  = var.arcane_api_key
   endpoint = "http://localhost:3552/api"

@@ -4,7 +4,7 @@ The Arcane provider allows managing Arcane via its HTTP API using an API key.
 
 ## Example Usage
 
-```
+```hcl
 provider "arcane" {
   api_key  = var.arcane_api_key
   endpoint = "http://localhost:3552/api"
@@ -19,4 +19,3 @@ provider "arcane" {
 ## Authentication
 
 Uses header `X-API-Key` per the OpenAPI spec.
-

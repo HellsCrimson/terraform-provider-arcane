@@ -4,7 +4,7 @@ Updates Arcane environment settings using explicit fields.
 
 ## Example Usage
 
-```
+```hcl
 resource "arcane_settings" "env" {
   environment_id          = var.environment_id
   base_server_url         = "http://localhost:3552"
