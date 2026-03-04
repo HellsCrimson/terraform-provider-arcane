@@ -11,7 +11,7 @@ data "arcane_project_includes" "project_files" {
 }
 
 output "include_count" {
-  value = data.arcane_project_includes.project_files.count
+  value = data.arcane_project_includes.project_files.total_count
 }
 ```
 
@@ -22,5 +22,5 @@ output "include_count" {
 
 ## Attributes Reference
 
-- `count` (Number) - number of include files.
+- `total_count` (Number) - number of include files.
 - `includes_json` (String) - full include file payload as JSON.

@@ -24,7 +24,7 @@ func (d *ProjectIncludesDataSource) Schema(_ context.Context, _ datasource.Schem
 	resp.Schema = schema.Schema{Attributes: map[string]schema.Attribute{
 		"environment_id": schema.StringAttribute{Required: true},
 		"project_id":     schema.StringAttribute{Required: true},
-		"count":          schema.Int64Attribute{Computed: true},
+		"total_count":    schema.Int64Attribute{Computed: true},
 		"includes_json":  schema.StringAttribute{Computed: true},
 	}}
 }
@@ -36,7 +36,7 @@ func (d *ProjectIncludesDataSource) Configure(_ context.Context, req datasource.
 type projectIncludesModel struct {
 	EnvironmentID types.String `tfsdk:"environment_id"`
 	ProjectID     types.String `tfsdk:"project_id"`
-	Count         types.Int64  `tfsdk:"count"`
+	TotalCount    types.Int64  `tfsdk:"total_count"`
 	IncludesJSON  types.String `tfsdk:"includes_json"`
 }
 
@@ -51,7 +51,7 @@ func (d *ProjectIncludesDataSource) Read(ctx context.Context, req datasource.Rea
 		resp.Diagnostics.AddError("failed to read project", err.Error())
 		return
 	}
-	state.Count = types.Int64Value(int64(len(out.IncludeFiles)))
+	state.TotalCount = types.Int64Value(int64(len(out.IncludeFiles)))
 	state.IncludesJSON = types.StringValue(mustJSON(out.IncludeFiles))
 	resp.Diagnostics.Append(resp.State.Set(ctx, &state)...)
 }

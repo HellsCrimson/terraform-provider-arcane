@@ -25,7 +25,7 @@ func (d *IgnoredVulnerabilitiesDataSource) Metadata(_ context.Context, req datas
 func (d *IgnoredVulnerabilitiesDataSource) Schema(_ context.Context, _ datasource.SchemaRequest, resp *datasource.SchemaResponse) {
 	resp.Schema = schema.Schema{Attributes: map[string]schema.Attribute{
 		"environment_id": schema.StringAttribute{Required: true},
-		"count":          schema.Int64Attribute{Computed: true},
+		"total_count":    schema.Int64Attribute{Computed: true},
 		"data_json":      schema.StringAttribute{Computed: true},
 	}}
 }
@@ -36,7 +36,7 @@ func (d *IgnoredVulnerabilitiesDataSource) Configure(_ context.Context, req data
 
 type ignoredVulnerabilitiesModel struct {
 	EnvironmentID types.String `tfsdk:"environment_id"`
-	Count         types.Int64  `tfsdk:"count"`
+	TotalCount    types.Int64  `tfsdk:"total_count"`
 	DataJSON      types.String `tfsdk:"data_json"`
 }
 
@@ -51,7 +51,7 @@ func (d *IgnoredVulnerabilitiesDataSource) Read(ctx context.Context, req datasou
 		resp.Diagnostics.AddError("failed to list ignored vulnerabilities", err.Error())
 		return
 	}
-	state.Count = types.Int64Value(int64(len(items)))
+	state.TotalCount = types.Int64Value(int64(len(items)))
 	state.DataJSON = types.StringValue(mustJSON(items))
 	resp.Diagnostics.Append(resp.State.Set(ctx, &state)...)
 }

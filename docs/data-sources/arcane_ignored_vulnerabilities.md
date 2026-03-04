@@ -10,7 +10,7 @@ data "arcane_ignored_vulnerabilities" "ignored" {
 }
 
 output "ignored_count" {
-  value = data.arcane_ignored_vulnerabilities.ignored.count
+  value = data.arcane_ignored_vulnerabilities.ignored.total_count
 }
 ```
 
@@ -20,5 +20,5 @@ output "ignored_count" {
 
 ## Attributes Reference
 
-- `count` (Number) - number of ignored vulnerability records.
+- `total_count` (Number) - number of ignored vulnerability records.
 - `data_json` (String) - full ignored vulnerability payload as JSON.

@@ -23,7 +23,7 @@ func (d *ImagesDataSource) Metadata(_ context.Context, req datasource.MetadataRe
 func (d *ImagesDataSource) Schema(_ context.Context, _ datasource.SchemaRequest, resp *datasource.SchemaResponse) {
 	resp.Schema = schema.Schema{Attributes: map[string]schema.Attribute{
 		"environment_id": schema.StringAttribute{Required: true},
-		"count":          schema.Int64Attribute{Computed: true},
+		"total_count":    schema.Int64Attribute{Computed: true},
 		"data_json":      schema.StringAttribute{Computed: true},
 	}}
 }
@@ -34,7 +34,7 @@ func (d *ImagesDataSource) Configure(_ context.Context, req datasource.Configure
 
 type imagesModel struct {
 	EnvironmentID types.String `tfsdk:"environment_id"`
-	Count         types.Int64  `tfsdk:"count"`
+	TotalCount    types.Int64  `tfsdk:"total_count"`
 	DataJSON      types.String `tfsdk:"data_json"`
 }
 
@@ -49,7 +49,7 @@ func (d *ImagesDataSource) Read(ctx context.Context, req datasource.ReadRequest,
 		resp.Diagnostics.AddError("failed to list images", err.Error())
 		return
 	}
-	state.Count = types.Int64Value(int64(len(items)))
+	state.TotalCount = types.Int64Value(int64(len(items)))
 	state.DataJSON = types.StringValue(mustJSON(items))
 	resp.Diagnostics.Append(resp.State.Set(ctx, &state)...)
 }

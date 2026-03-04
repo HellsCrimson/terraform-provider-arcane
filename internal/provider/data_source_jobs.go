@@ -24,7 +24,7 @@ func (d *JobsDataSource) Schema(_ context.Context, _ datasource.SchemaRequest, r
 	resp.Schema = schema.Schema{Attributes: map[string]schema.Attribute{
 		"environment_id": schema.StringAttribute{Required: true},
 		"is_agent":       schema.BoolAttribute{Computed: true},
-		"count":          schema.Int64Attribute{Computed: true},
+		"total_count":    schema.Int64Attribute{Computed: true},
 		"jobs_json":      schema.StringAttribute{Computed: true},
 	}}
 }
@@ -36,7 +36,7 @@ func (d *JobsDataSource) Configure(_ context.Context, req datasource.ConfigureRe
 type jobsModel struct {
 	EnvironmentID types.String `tfsdk:"environment_id"`
 	IsAgent       types.Bool   `tfsdk:"is_agent"`
-	Count         types.Int64  `tfsdk:"count"`
+	TotalCount    types.Int64  `tfsdk:"total_count"`
 	JobsJSON      types.String `tfsdk:"jobs_json"`
 }
 
@@ -52,7 +52,7 @@ func (d *JobsDataSource) Read(ctx context.Context, req datasource.ReadRequest, r
 		return
 	}
 	state.IsAgent = types.BoolValue(out.IsAgent)
-	state.Count = types.Int64Value(int64(len(out.Jobs)))
+	state.TotalCount = types.Int64Value(int64(len(out.Jobs)))
 	state.JobsJSON = types.StringValue(mustJSON(out.Jobs))
 	resp.Diagnostics.Append(resp.State.Set(ctx, &state)...)
 }

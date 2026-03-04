@@ -10,7 +10,7 @@ data "arcane_jobs" "env_jobs" {
 }
 
 output "job_count" {
-  value = data.arcane_jobs.env_jobs.count
+  value = data.arcane_jobs.env_jobs.total_count
 }
 ```
 
@@ -21,5 +21,5 @@ output "job_count" {
 ## Attributes Reference
 
 - `is_agent` (Bool) - whether the environment is agent-based.
-- `count` (Number) - number of jobs returned.
+- `total_count` (Number) - number of jobs returned.
 - `jobs_json` (String) - full jobs payload as JSON.

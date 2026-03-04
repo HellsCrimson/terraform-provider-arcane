@@ -10,7 +10,7 @@ data "arcane_images" "all" {
 }
 
 output "image_count" {
-  value = data.arcane_images.all.count
+  value = data.arcane_images.all.total_count
 }
 ```
 
@@ -20,5 +20,5 @@ output "image_count" {
 
 ## Attributes Reference
 
-- `count` (Number) - number of images returned.
+- `total_count` (Number) - number of images returned.
 - `data_json` (String) - full image list payload as JSON.

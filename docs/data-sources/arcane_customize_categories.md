@@ -8,7 +8,7 @@ Lists customization categories.
 data "arcane_customize_categories" "all" {}
 
 output "category_count" {
-  value = data.arcane_customize_categories.all.count
+  value = data.arcane_customize_categories.all.total_count
 }
 ```
 
@@ -18,5 +18,5 @@ This data source has no arguments.
 
 ## Attributes Reference
 
-- `count` (Number) - number of categories.
+- `total_count` (Number) - number of categories.
 - `data_json` (String) - full category list payload as JSON.

@@ -22,8 +22,8 @@ func (d *SettingsCategoriesDataSource) Metadata(_ context.Context, req datasourc
 
 func (d *SettingsCategoriesDataSource) Schema(_ context.Context, _ datasource.SchemaRequest, resp *datasource.SchemaResponse) {
 	resp.Schema = schema.Schema{Attributes: map[string]schema.Attribute{
-		"count":     schema.Int64Attribute{Computed: true},
-		"data_json": schema.StringAttribute{Computed: true},
+		"total_count": schema.Int64Attribute{Computed: true},
+		"data_json":   schema.StringAttribute{Computed: true},
 	}}
 }
 
@@ -42,7 +42,7 @@ func (d *SettingsCategoriesDataSource) Read(ctx context.Context, req datasource.
 		resp.Diagnostics.AddError("failed to read settings categories", err.Error())
 		return
 	}
-	state.Count = types.Int64Value(int64(len(items)))
+	state.TotalCount = types.Int64Value(int64(len(items)))
 	state.DataJSON = types.StringValue(mustJSON(items))
 	resp.Diagnostics.Append(resp.State.Set(ctx, &state)...)
 }

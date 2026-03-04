@@ -27,6 +27,6 @@ func mustJSON(v any) string {
 }
 
 type categoriesModel struct {
-	Count    types.Int64  `tfsdk:"count"`
-	DataJSON types.String `tfsdk:"data_json"`
+	TotalCount types.Int64  `tfsdk:"total_count"`
+	DataJSON   types.String `tfsdk:"data_json"`
 }
