@@ -495,11 +495,44 @@ func (r *GitOpsSyncResource) Delete(ctx context.Context, req resource.DeleteRequ
 		return
 	}
 
-	if err := r.client.DeleteGitOpsSync(ctx, state.EnvironmentID.ValueString(), state.ID.ValueString()); err != nil {
-		if strings.Contains(strings.ToLower(err.Error()), "404") {
-			return
+	envID := state.EnvironmentID.ValueString()
+	syncID := state.ID.ValueString()
+
+	// Prefer project_id from state, fallback to live lookup when state does not have it yet.
+	projectID := ""
+	if !state.ProjectID.IsNull() && !state.ProjectID.IsUnknown() {
+		projectID = state.ProjectID.ValueString()
+	}
+	if projectID == "" {
+		sync, err := r.client.GetGitOpsSync(ctx, envID, syncID)
+		if err != nil {
+			if !strings.Contains(strings.ToLower(err.Error()), "404") {
+				resp.Diagnostics.AddError("read gitops sync before delete failed", err.Error())
+			}
+		} else if sync.ProjectID != nil {
+			projectID = *sync.ProjectID
 		}
-		resp.Diagnostics.AddError("delete gitops sync failed", err.Error())
+	}
+
+	if err := r.client.DeleteGitOpsSync(ctx, envID, syncID); err != nil {
+		if strings.Contains(strings.ToLower(err.Error()), "404") {
+			// Continue so we can still try to cleanup the project if we have an ID.
+		} else {
+			resp.Diagnostics.AddError("delete gitops sync failed", err.Error())
+		}
+	}
+
+	if projectID != "" {
+		opts := sdkclient.ProjectDestroyOptions{
+			RemoveFiles:   false,
+			RemoveVolumes: false,
+		}
+		if err := r.client.DestroyProject(ctx, envID, projectID, opts); err != nil {
+			if strings.Contains(strings.ToLower(err.Error()), "404") {
+				return
+			}
+			resp.Diagnostics.AddError("destroy gitops sync project failed", err.Error())
+		}
 	}
 }
 
