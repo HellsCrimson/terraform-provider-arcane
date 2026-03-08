@@ -2,6 +2,8 @@ package provider
 
 import (
 	"context"
+	"fmt"
+	"net/url"
 	"strings"
 
 	"terraform-provider-arcane/internal/sdkclient"
@@ -82,6 +84,14 @@ func (r *TemplateRegistryResource) Create(ctx context.Context, req resource.Crea
 	if resp.Diagnostics.HasError() {
 		return
 	}
+	if err := validateTemplateRegistryURL(plan.URL.ValueString()); err != nil {
+		resp.Diagnostics.AddAttributeError(
+			path.Root("url"),
+			"Invalid template registry URL",
+			err.Error(),
+		)
+		return
+	}
 
 	body := sdkclient.CreateTemplateRegistryRequest{
 		Name:        plan.Name.ValueString(),
@@ -98,10 +108,10 @@ func (r *TemplateRegistryResource) Create(ctx context.Context, req resource.Crea
 
 	state := templateRegistryModel{
 		ID:          types.StringValue(registry.ID),
-		Name:        types.StringValue(registry.Name),
-		URL:         types.StringValue(registry.URL),
-		Description: types.StringValue(registry.Description),
-		Enabled:     types.BoolValue(registry.Enabled),
+		Name:        plan.Name,
+		URL:         plan.URL,
+		Description: plan.Description,
+		Enabled:     plan.Enabled,
 	}
 
 	resp.Diagnostics.Append(resp.State.Set(ctx, &state)...)
@@ -138,6 +148,14 @@ func (r *TemplateRegistryResource) Update(ctx context.Context, req resource.Upda
 	resp.Diagnostics.Append(req.Plan.Get(ctx, &plan)...)
 	resp.Diagnostics.Append(req.State.Get(ctx, &state)...)
 	if resp.Diagnostics.HasError() {
+		return
+	}
+	if err := validateTemplateRegistryURL(plan.URL.ValueString()); err != nil {
+		resp.Diagnostics.AddAttributeError(
+			path.Root("url"),
+			"Invalid template registry URL",
+			err.Error(),
+		)
 		return
 	}
 
@@ -177,4 +195,19 @@ func (r *TemplateRegistryResource) Delete(ctx context.Context, req resource.Dele
 
 func (r *TemplateRegistryResource) ImportState(ctx context.Context, req resource.ImportStateRequest, resp *resource.ImportStateResponse) {
 	resource.ImportStatePassthroughID(ctx, path.Root("id"), req, resp)
+}
+
+func validateTemplateRegistryURL(raw string) error {
+	// Parse-only validation: this must not make any network calls.
+	parsed, err := url.ParseRequestURI(raw)
+	if err != nil {
+		return fmt.Errorf("URL must be a valid absolute URL: %w", err)
+	}
+	if parsed.Host == "" {
+		return fmt.Errorf("URL must include a host")
+	}
+	if parsed.Scheme != "http" && parsed.Scheme != "https" {
+		return fmt.Errorf("URL scheme must be http or https")
+	}
+	return nil
 }
