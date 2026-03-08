@@ -45,11 +45,23 @@ func (r *SettingsResource) Schema(_ context.Context, _ resource.SchemaRequest, r
 			"auth_oidc_config":              resourceschema.StringAttribute{Optional: true, Description: "authOidcConfig"},
 			"auth_password_policy":          resourceschema.StringAttribute{Optional: true, Description: "authPasswordPolicy"},
 			"auth_session_timeout":          resourceschema.StringAttribute{Optional: true, Description: "authSessionTimeout"},
+			"auto_heal_enabled":             resourceschema.StringAttribute{Optional: true, Description: "autoHealEnabled"},
+			"auto_heal_excluded_containers": resourceschema.StringAttribute{Optional: true, Description: "autoHealExcludedContainers"},
+			"auto_heal_interval":            resourceschema.StringAttribute{Optional: true, Description: "autoHealInterval"},
+			"auto_heal_max_restarts":        resourceschema.StringAttribute{Optional: true, Description: "autoHealMaxRestarts"},
+			"auto_heal_restart_window":      resourceschema.StringAttribute{Optional: true, Description: "autoHealRestartWindow"},
 			"auto_inject_env":               resourceschema.StringAttribute{Optional: true, Description: "autoInjectEnv"},
 			"auto_update":                   resourceschema.StringAttribute{Optional: true, Description: "autoUpdate"},
+			"auto_update_excluded_containers": resourceschema.StringAttribute{Optional: true, Description: "autoUpdateExcludedContainers"},
 			"auto_update_interval":          resourceschema.StringAttribute{Optional: true, Description: "autoUpdateInterval"},
 			"base_server_url":               resourceschema.StringAttribute{Optional: true, Description: "baseServerUrl"},
+			"build_provider":                resourceschema.StringAttribute{Optional: true, Description: "buildProvider"},
+			"build_timeout":                 resourceschema.StringAttribute{Optional: true, Description: "buildTimeout"},
+			"builds_directory":              resourceschema.StringAttribute{Optional: true, Description: "buildsDirectory"},
+			"default_deploy_pull_policy":    resourceschema.StringAttribute{Optional: true, Description: "defaultDeployPullPolicy"},
 			"default_shell":                 resourceschema.StringAttribute{Optional: true, Description: "defaultShell"},
+			"depot_project_id":              resourceschema.StringAttribute{Optional: true, Description: "depotProjectId"},
+			"depot_token":                   resourceschema.StringAttribute{Optional: true, Description: "depotToken"},
 			"disk_usage_path":               resourceschema.StringAttribute{Optional: true, Description: "diskUsagePath"},
 			"docker_host":                   resourceschema.StringAttribute{Optional: true, Description: "dockerHost"},
 			"docker_prune_mode":                resourceschema.StringAttribute{Optional: true, Description: "dockerPruneMode"},
@@ -75,6 +87,7 @@ func (r *SettingsResource) Schema(_ context.Context, _ resource.SchemaRequest, r
 			"oidc_provider_name":            resourceschema.StringAttribute{Optional: true, Description: "oidcProviderName"},
 			"oidc_scopes":                   resourceschema.StringAttribute{Optional: true, Description: "oidcScopes"},
 			"oidc_skip_tls_verify":          resourceschema.StringAttribute{Optional: true, Description: "oidcSkipTlsVerify"},
+			"oled_mode":                     resourceschema.StringAttribute{Optional: true, Description: "oledMode"},
 			"polling_enabled":               resourceschema.StringAttribute{Optional: true, Description: "pollingEnabled"},
 			"polling_interval":              resourceschema.StringAttribute{Optional: true, Description: "pollingInterval"},
 			"projects_directory":            resourceschema.StringAttribute{Optional: true, Description: "projectsDirectory"},
@@ -88,6 +101,15 @@ func (r *SettingsResource) Schema(_ context.Context, _ resource.SchemaRequest, r
 			"scheduled_prune_networks":      resourceschema.StringAttribute{Optional: true, Description: "scheduledPruneNetworks"},
 			"scheduled_prune_volumes":       resourceschema.StringAttribute{Optional: true, Description: "scheduledPruneVolumes"},
 			"sidebar_hover_expansion":       resourceschema.StringAttribute{Optional: true, Description: "sidebarHoverExpansion"},
+			"trivy_concurrent_scan_containers": resourceschema.StringAttribute{Optional: true, Description: "trivyConcurrentScanContainers"},
+			"trivy_cpu_limit":                  resourceschema.StringAttribute{Optional: true, Description: "trivyCpuLimit"},
+			"trivy_image":                      resourceschema.StringAttribute{Optional: true, Description: "trivyImage"},
+			"trivy_memory_limit_mb":            resourceschema.StringAttribute{Optional: true, Description: "trivyMemoryLimitMb"},
+			"trivy_network":                    resourceschema.StringAttribute{Optional: true, Description: "trivyNetwork"},
+			"trivy_resource_limits_enabled":    resourceschema.StringAttribute{Optional: true, Description: "trivyResourceLimitsEnabled"},
+			"trivy_scan_timeout":               resourceschema.StringAttribute{Optional: true, Description: "trivyScanTimeout"},
+			"vulnerability_scan_enabled":       resourceschema.StringAttribute{Optional: true, Description: "vulnerabilityScanEnabled"},
+			"vulnerability_scan_interval":      resourceschema.StringAttribute{Optional: true, Description: "vulnerabilityScanInterval"},
 
 			// Computed applied map
 			"applied": resourceschema.MapAttribute{
@@ -115,11 +137,23 @@ type settingsModel struct {
 	AuthOidcConfig             types.String `tfsdk:"auth_oidc_config"`
 	AuthPasswordPolicy         types.String `tfsdk:"auth_password_policy"`
 	AuthSessionTimeout         types.String `tfsdk:"auth_session_timeout"`
+	AutoHealEnabled            types.String `tfsdk:"auto_heal_enabled"`
+	AutoHealExcludedContainers types.String `tfsdk:"auto_heal_excluded_containers"`
+	AutoHealInterval           types.String `tfsdk:"auto_heal_interval"`
+	AutoHealMaxRestarts        types.String `tfsdk:"auto_heal_max_restarts"`
+	AutoHealRestartWindow      types.String `tfsdk:"auto_heal_restart_window"`
 	AutoInjectEnv              types.String `tfsdk:"auto_inject_env"`
 	AutoUpdate                 types.String `tfsdk:"auto_update"`
+	AutoUpdateExcludedContainers types.String `tfsdk:"auto_update_excluded_containers"`
 	AutoUpdateInterval         types.String `tfsdk:"auto_update_interval"`
 	BaseServerUrl              types.String `tfsdk:"base_server_url"`
+	BuildProvider              types.String `tfsdk:"build_provider"`
+	BuildTimeout               types.String `tfsdk:"build_timeout"`
+	BuildsDirectory            types.String `tfsdk:"builds_directory"`
+	DefaultDeployPullPolicy    types.String `tfsdk:"default_deploy_pull_policy"`
 	DefaultShell               types.String `tfsdk:"default_shell"`
+	DepotProjectId             types.String `tfsdk:"depot_project_id"`
+	DepotToken                 types.String `tfsdk:"depot_token"`
 	DiskUsagePath              types.String `tfsdk:"disk_usage_path"`
 	DockerApiTimeout           types.String `tfsdk:"docker_api_timeout"`
 	DockerHost                 types.String `tfsdk:"docker_host"`
@@ -145,6 +179,7 @@ type settingsModel struct {
 	OidcProviderName           types.String `tfsdk:"oidc_provider_name"`
 	OidcScopes                 types.String `tfsdk:"oidc_scopes"`
 	OidcSkipTlsVerify          types.String `tfsdk:"oidc_skip_tls_verify"`
+	OledMode                   types.String `tfsdk:"oled_mode"`
 	PollingEnabled             types.String `tfsdk:"polling_enabled"`
 	PollingInterval            types.String `tfsdk:"polling_interval"`
 	ProjectsDirectory          types.String `tfsdk:"projects_directory"`
@@ -158,6 +193,15 @@ type settingsModel struct {
 	ScheduledPruneNetworks     types.String `tfsdk:"scheduled_prune_networks"`
 	ScheduledPruneVolumes      types.String `tfsdk:"scheduled_prune_volumes"`
 	SidebarHoverExpansion      types.String `tfsdk:"sidebar_hover_expansion"`
+	TrivyConcurrentScanContainers types.String `tfsdk:"trivy_concurrent_scan_containers"`
+	TrivyCpuLimit                 types.String `tfsdk:"trivy_cpu_limit"`
+	TrivyImage                    types.String `tfsdk:"trivy_image"`
+	TrivyMemoryLimitMb            types.String `tfsdk:"trivy_memory_limit_mb"`
+	TrivyNetwork                  types.String `tfsdk:"trivy_network"`
+	TrivyResourceLimitsEnabled    types.String `tfsdk:"trivy_resource_limits_enabled"`
+	TrivyScanTimeout              types.String `tfsdk:"trivy_scan_timeout"`
+	VulnerabilityScanEnabled      types.String `tfsdk:"vulnerability_scan_enabled"`
+	VulnerabilityScanInterval     types.String `tfsdk:"vulnerability_scan_interval"`
 	Applied                    types.Map    `tfsdk:"applied"`
 }
 
@@ -260,11 +304,23 @@ func buildSettingsMapFromModel(s settingsModel) map[string]string {
 	addIfSet(out, "authOidcConfig", s.AuthOidcConfig)
 	addIfSet(out, "authPasswordPolicy", s.AuthPasswordPolicy)
 	addIfSet(out, "authSessionTimeout", s.AuthSessionTimeout)
+	addIfSet(out, "autoHealEnabled", s.AutoHealEnabled)
+	addIfSet(out, "autoHealExcludedContainers", s.AutoHealExcludedContainers)
+	addIfSet(out, "autoHealInterval", s.AutoHealInterval)
+	addIfSet(out, "autoHealMaxRestarts", s.AutoHealMaxRestarts)
+	addIfSet(out, "autoHealRestartWindow", s.AutoHealRestartWindow)
 	addIfSet(out, "autoInjectEnv", s.AutoInjectEnv)
 	addIfSet(out, "autoUpdate", s.AutoUpdate)
+	addIfSet(out, "autoUpdateExcludedContainers", s.AutoUpdateExcludedContainers)
 	addIfSet(out, "autoUpdateInterval", s.AutoUpdateInterval)
 	addIfSet(out, "baseServerUrl", s.BaseServerUrl)
+	addIfSet(out, "buildProvider", s.BuildProvider)
+	addIfSet(out, "buildTimeout", s.BuildTimeout)
+	addIfSet(out, "buildsDirectory", s.BuildsDirectory)
+	addIfSet(out, "defaultDeployPullPolicy", s.DefaultDeployPullPolicy)
 	addIfSet(out, "defaultShell", s.DefaultShell)
+	addIfSet(out, "depotProjectId", s.DepotProjectId)
+	addIfSet(out, "depotToken", s.DepotToken)
 	addIfSet(out, "diskUsagePath", s.DiskUsagePath)
 	addIfSet(out, "dockerApiTimeout", s.DockerApiTimeout)
 	addIfSet(out, "dockerHost", s.DockerHost)
@@ -290,6 +346,7 @@ func buildSettingsMapFromModel(s settingsModel) map[string]string {
 	addIfSet(out, "oidcProviderName", s.OidcProviderName)
 	addIfSet(out, "oidcScopes", s.OidcScopes)
 	addIfSet(out, "oidcSkipTlsVerify", s.OidcSkipTlsVerify)
+	addIfSet(out, "oledMode", s.OledMode)
 	addIfSet(out, "pollingEnabled", s.PollingEnabled)
 	addIfSet(out, "pollingInterval", s.PollingInterval)
 	addIfSet(out, "projectsDirectory", s.ProjectsDirectory)
@@ -303,6 +360,15 @@ func buildSettingsMapFromModel(s settingsModel) map[string]string {
 	addIfSet(out, "scheduledPruneNetworks", s.ScheduledPruneNetworks)
 	addIfSet(out, "scheduledPruneVolumes", s.ScheduledPruneVolumes)
 	addIfSet(out, "sidebarHoverExpansion", s.SidebarHoverExpansion)
+	addIfSet(out, "trivyConcurrentScanContainers", s.TrivyConcurrentScanContainers)
+	addIfSet(out, "trivyCpuLimit", s.TrivyCpuLimit)
+	addIfSet(out, "trivyImage", s.TrivyImage)
+	addIfSet(out, "trivyMemoryLimitMb", s.TrivyMemoryLimitMb)
+	addIfSet(out, "trivyNetwork", s.TrivyNetwork)
+	addIfSet(out, "trivyResourceLimitsEnabled", s.TrivyResourceLimitsEnabled)
+	addIfSet(out, "trivyScanTimeout", s.TrivyScanTimeout)
+	addIfSet(out, "vulnerabilityScanEnabled", s.VulnerabilityScanEnabled)
+	addIfSet(out, "vulnerabilityScanInterval", s.VulnerabilityScanInterval)
 	return out
 }
 

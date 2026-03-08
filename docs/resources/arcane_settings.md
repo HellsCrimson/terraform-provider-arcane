@@ -46,7 +46,15 @@ All optional attributes are strings:
 **Auto Update Settings**
 - `auto_update` - Enable auto updates.
 - `auto_update_interval` - Auto update check interval.
+- `auto_update_excluded_containers` - Excluded containers for auto updates.
 - `auto_inject_env` - Auto inject environment variables.
+
+**Auto Heal Settings**
+- `auto_heal_enabled` - Enable auto heal.
+- `auto_heal_excluded_containers` - Excluded containers for auto heal.
+- `auto_heal_interval` - Auto heal interval.
+- `auto_heal_max_restarts` - Maximum auto heal restarts.
+- `auto_heal_restart_window` - Auto heal restart window.
 
 **Scheduled Prune Settings**
 - `scheduled_prune_enabled` - Enable scheduled pruning.
@@ -77,6 +85,14 @@ All optional attributes are strings:
 - `oidc_provider_logo_url` - OIDC provider logo URL.
 - `oidc_skip_tls_verify` - Skip TLS verification for OIDC.
 
+**Build Settings**
+- `build_provider` - Build provider.
+- `build_timeout` - Build timeout.
+- `builds_directory` - Builds directory.
+- `default_deploy_pull_policy` - Default deploy pull policy.
+- `depot_project_id` - Depot project ID.
+- `depot_token` - Depot token.
+
 **Timeout Settings**
 - `environment_health_interval` - Environment health check interval.
 - `git_operation_timeout` - Git operation timeout.
@@ -88,6 +104,18 @@ All optional attributes are strings:
 - `mobile_navigation_mode` - Mobile navigation mode.
 - `mobile_navigation_show_labels` - Show labels in mobile navigation.
 - `sidebar_hover_expansion` - Enable sidebar hover expansion.
+- `oled_mode` - OLED mode.
+
+**Vulnerability Scan Settings**
+- `trivy_concurrent_scan_containers` - Trivy concurrent scan containers.
+- `trivy_cpu_limit` - Trivy CPU limit.
+- `trivy_image` - Trivy image.
+- `trivy_memory_limit_mb` - Trivy memory limit in MB.
+- `trivy_network` - Trivy network.
+- `trivy_resource_limits_enabled` - Enable Trivy resource limits.
+- `trivy_scan_timeout` - Trivy scan timeout.
+- `vulnerability_scan_enabled` - Enable vulnerability scanning.
+- `vulnerability_scan_interval` - Vulnerability scan interval.
 
 ## Attributes Reference
 
