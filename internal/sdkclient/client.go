@@ -3,6 +3,7 @@ package sdkclient
 import (
 	"bytes"
 	"context"
+	"crypto/tls"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -25,6 +26,10 @@ func NewClient(endpoint, apiKey string) *Client {
 }
 
 func NewClientWithTimeout(endpoint, apiKey string, timeout time.Duration) *Client {
+	return NewClientWithOptions(endpoint, apiKey, timeout, false)
+}
+
+func NewClientWithOptions(endpoint, apiKey string, timeout time.Duration, insecure bool) *Client {
 	if !strings.HasSuffix(endpoint, "/") {
 		endpoint += "/"
 	}
@@ -32,7 +37,12 @@ func NewClientWithTimeout(endpoint, apiKey string, timeout time.Duration) *Clien
 	return &Client{
 		BaseURL: u,
 		APIKey:  apiKey,
-		http:    &http.Client{Timeout: timeout},
+		http: &http.Client{
+			Timeout: timeout,
+			Transport: &http.Transport{
+				TLSClientConfig: &tls.Config{InsecureSkipVerify: insecure},
+			},
+		},
 	}
 }
 
