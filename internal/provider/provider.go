@@ -56,6 +56,10 @@ func (p *ArcaneProvider) Schema(_ context.Context, _ provider.SchemaRequest, res
 				Description: "HTTP request timeout (e.g., 120s, 2m). Defaults to 120s if unset or invalid.",
 				Optional:    true,
 			},
+			"insecure": schema.BoolAttribute{
+				Description: "Disable TLS certificate verification for API requests. Use only with self-signed.",
+				Optional:    true,
+			},
 		},
 	}
 }
@@ -66,6 +70,7 @@ func (p *ArcaneProvider) Configure(ctx context.Context, req provider.ConfigureRe
 		Endpoint    types.String `tfsdk:"endpoint"`
 		APIKey      types.String `tfsdk:"api_key"`
 		HTTPTimeout types.String `tfsdk:"http_timeout"`
+		Insecure    types.Bool   `tfsdk:"insecure"`
 	}
 
 	diags := req.Config.Get(ctx, &config)
@@ -99,8 +104,17 @@ func (p *ArcaneProvider) Configure(ctx context.Context, req provider.ConfigureRe
 			timeout = d
 		}
 	}
-	client := sdkclient.NewClientWithTimeout(endpoint, apiKey, timeout)
-	tflog.Info(ctx, "Configured Arcane provider", map[string]any{"endpoint": endpoint, "timeout": timeout.String()})
+	insecure := false
+	if !config.Insecure.IsNull() && !config.Insecure.IsUnknown() {
+		insecure = config.Insecure.ValueBool()
+	}
+
+	client := sdkclient.NewClientWithOptions(endpoint, apiKey, timeout, insecure)
+	tflog.Info(ctx, "Configured Arcane provider", map[string]any{
+		"endpoint": endpoint,
+		"timeout":  timeout.String(),
+		"insecure": insecure,
+	})
 
 	resp.DataSourceData = client
 	resp.ResourceData = client

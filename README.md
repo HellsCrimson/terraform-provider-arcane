@@ -59,6 +59,7 @@ Authentication
 
 - API key: provider attribute `api_key` or environment `ARCANE_API_KEY`.
 - Endpoint: provider attribute `endpoint` (defaults to `http://localhost:3552/api`).
+- TLS verification: provider attribute `insecure` (defaults to `false`). Set to `true` to allow self-signed certificates.
 
 Quick Start
 
@@ -68,6 +69,7 @@ See `examples/basic/main.tf` for a working setup that demonstrates projects, fil
 provider "arcane" {
   api_key  = var.arcane_api_key
   endpoint = "http://localhost:3552/api"
+  insecure = true
 }
 
 variable "environment_id" {
