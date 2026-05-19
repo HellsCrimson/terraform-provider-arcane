@@ -32,4 +32,4 @@ resource "arcane_container" "alpine" {
 
 ## Attributes Reference
 
-- `id`, `created`, `status`
+- `id`, `created`, `status`, `redeploy_disabled`

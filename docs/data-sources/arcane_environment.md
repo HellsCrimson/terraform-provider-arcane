@@ -25,3 +25,6 @@ output "environment_status" {
 - `status` (String) — environment status.
 - `enabled` (Bool) — whether the environment is enabled.
 - `api_key` (String, Sensitive) — environment API key (if available).
+- `edge_agent_instance`, `edge_security_mode`, `edge_session_id` (String)
+- `edge_capabilities` (List of String)
+- `edge_mtls_certificate_json` (String) — edge mTLS certificate metadata as JSON.

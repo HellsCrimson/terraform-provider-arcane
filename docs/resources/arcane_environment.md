@@ -27,3 +27,6 @@ resource "arcane_environment" "agent" {
 - `id` (String)
 - `status` (String)
 - `api_key` (String, Sensitive) — only returned on create when `use_api_key = true`.
+- `edge_agent_instance`, `edge_security_mode`, `edge_session_id` (String)
+- `edge_capabilities` (List of String)
+- `edge_mtls_certificate_json` (String) — edge mTLS certificate metadata as JSON.

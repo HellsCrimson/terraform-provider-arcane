@@ -29,6 +29,8 @@ All optional attributes are strings:
 - `default_shell` - Default shell for terminal sessions.
 - `disk_usage_path` - Path for disk usage monitoring.
 - `projects_directory` - Directory for compose projects.
+- `swarm_stack_sources_directory` - Directory for swarm stack sources.
+- `templates_directory` - Directory for templates.
 - `enable_gravatar` - Enable Gravatar for user avatars.
 - `keyboard_shortcuts_enabled` - Enable keyboard shortcuts.
 - `max_image_upload_size` - Maximum image upload size.
@@ -36,6 +38,7 @@ All optional attributes are strings:
 **Docker Settings**
 - `docker_host` - Docker host socket/URL.
 - `docker_api_timeout` - Docker API timeout.
+- `docker_client_refresh_interval` - Docker client refresh interval.
 - `docker_image_pull_timeout` - Timeout for pulling images.
 - `docker_prune_mode` - Docker prune mode.
 
@@ -64,6 +67,11 @@ All optional attributes are strings:
 - `scheduled_prune_images` - Prune images.
 - `scheduled_prune_networks` - Prune networks.
 - `scheduled_prune_volumes` - Prune volumes.
+- `prune_build_cache_mode`, `prune_build_cache_until`
+- `prune_container_mode`, `prune_container_until`
+- `prune_image_mode`, `prune_image_until`
+- `prune_network_mode`, `prune_network_until`
+- `prune_volume_mode`
 
 **Authentication Settings**
 - `auth_local_enabled` - Enable local authentication.
@@ -112,8 +120,11 @@ All optional attributes are strings:
 - `trivy_image` - Trivy image.
 - `trivy_memory_limit_mb` - Trivy memory limit in MB.
 - `trivy_network` - Trivy network.
+- `trivy_preserve_cache_on_volume_prune` - Preserve Trivy cache on volume prune.
+- `trivy_privileged` - Run Trivy with privileged mode.
 - `trivy_resource_limits_enabled` - Enable Trivy resource limits.
 - `trivy_scan_timeout` - Trivy scan timeout.
+- `trivy_security_opts` - Trivy security options.
 - `vulnerability_scan_enabled` - Enable vulnerability scanning.
 - `vulnerability_scan_interval` - Vulnerability scan interval.
 
