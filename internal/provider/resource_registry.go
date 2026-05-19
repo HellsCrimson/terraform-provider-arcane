@@ -10,6 +10,7 @@ import (
 	"github.com/hashicorp/terraform-plugin-framework/resource"
 	resourceschema "github.com/hashicorp/terraform-plugin-framework/resource/schema"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema/planmodifier"
+	"github.com/hashicorp/terraform-plugin-framework/resource/schema/stringdefault"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema/stringplanmodifier"
 	"github.com/hashicorp/terraform-plugin-framework/types"
 )
@@ -35,7 +36,7 @@ func (r *RegistryResource) Schema(_ context.Context, _ resource.SchemaRequest, r
 			"description":           resourceschema.StringAttribute{Optional: true},
 			"insecure":              resourceschema.BoolAttribute{Optional: true},
 			"enabled":               resourceschema.BoolAttribute{Optional: true},
-			"registry_type":         resourceschema.StringAttribute{Optional: true, Description: "Registry implementation type"},
+			"registry_type":         resourceschema.StringAttribute{Optional: true, Computed: true, Default: stringdefault.StaticString("generic"), Description: "Registry implementation type"},
 			"aws_access_key_id":     resourceschema.StringAttribute{Optional: true, Sensitive: true},
 			"aws_secret_access_key": resourceschema.StringAttribute{Optional: true, Sensitive: true},
 			"aws_region":            resourceschema.StringAttribute{Optional: true},
@@ -79,9 +80,10 @@ func (r *RegistryResource) Create(ctx context.Context, req resource.CreateReques
 	}
 
 	body := sdkclient.CreateContainerRegistryRequest{
-		URL:      plan.URL.ValueString(),
-		Username: plan.Username.ValueString(),
-		Token:    plan.Token.ValueString(),
+		URL:          plan.URL.ValueString(),
+		Username:     plan.Username.ValueString(),
+		Token:        plan.Token.ValueString(),
+		RegistryType: "generic",
 	}
 	if !plan.Description.IsNull() && !plan.Description.IsUnknown() {
 		v := plan.Description.ValueString()
@@ -96,20 +98,16 @@ func (r *RegistryResource) Create(ctx context.Context, req resource.CreateReques
 		body.Enabled = &v
 	}
 	if !plan.RegistryType.IsNull() && !plan.RegistryType.IsUnknown() {
-		v := plan.RegistryType.ValueString()
-		body.RegistryType = &v
+		body.RegistryType = plan.RegistryType.ValueString()
 	}
 	if !plan.AWSAccessKeyID.IsNull() && !plan.AWSAccessKeyID.IsUnknown() {
-		v := plan.AWSAccessKeyID.ValueString()
-		body.AWSAccessKeyID = &v
+		body.AWSAccessKeyID = plan.AWSAccessKeyID.ValueString()
 	}
 	if !plan.AWSSecretAccessKey.IsNull() && !plan.AWSSecretAccessKey.IsUnknown() {
-		v := plan.AWSSecretAccessKey.ValueString()
-		body.AWSSecretAccessKey = &v
+		body.AWSSecretAccessKey = plan.AWSSecretAccessKey.ValueString()
 	}
 	if !plan.AWSRegion.IsNull() && !plan.AWSRegion.IsUnknown() {
-		v := plan.AWSRegion.ValueString()
-		body.AWSRegion = &v
+		body.AWSRegion = plan.AWSRegion.ValueString()
 	}
 
 	reg, err := r.client.CreateContainerRegistry(ctx, body)
@@ -156,13 +154,23 @@ func (r *RegistryResource) Read(ctx context.Context, req resource.ReadRequest, r
 
 	state.URL = types.StringValue(reg.URL)
 	state.Username = types.StringValue(reg.Username)
-	state.Description = types.StringValue(reg.Description)
-	state.Insecure = types.BoolValue(reg.Insecure)
-	state.Enabled = types.BoolValue(reg.Enabled)
-	state.RegistryType = types.StringValue(reg.RegistryType)
+	if !state.Description.IsNull() && !state.Description.IsUnknown() {
+		state.Description = types.StringValue(reg.Description)
+	}
+	if !state.Insecure.IsNull() && !state.Insecure.IsUnknown() {
+		state.Insecure = types.BoolValue(reg.Insecure)
+	}
+	if !state.Enabled.IsNull() && !state.Enabled.IsUnknown() {
+		state.Enabled = types.BoolValue(reg.Enabled)
+	}
+	if reg.RegistryType != "" {
+		state.RegistryType = types.StringValue(reg.RegistryType)
+	}
 	state.AWSAccessKeyID = state.AWSAccessKeyID
 	state.AWSSecretAccessKey = state.AWSSecretAccessKey
-	state.AWSRegion = types.StringValue(reg.AWSRegion)
+	if !state.AWSRegion.IsNull() && !state.AWSRegion.IsUnknown() {
+		state.AWSRegion = types.StringValue(reg.AWSRegion)
+	}
 	state.CreatedAt = types.StringValue(reg.CreatedAt)
 	state.UpdatedAt = types.StringValue(reg.UpdatedAt)
 	// Token remains as last set
@@ -228,17 +236,37 @@ func (r *RegistryResource) Update(ctx context.Context, req resource.UpdateReques
 
 	state.URL = types.StringValue(reg.URL)
 	state.Username = types.StringValue(reg.Username)
-	state.Description = types.StringValue(reg.Description)
-	state.Insecure = types.BoolValue(reg.Insecure)
-	state.Enabled = types.BoolValue(reg.Enabled)
-	state.RegistryType = types.StringValue(reg.RegistryType)
+	if !plan.Description.IsNull() && !plan.Description.IsUnknown() {
+		state.Description = types.StringValue(reg.Description)
+	} else {
+		state.Description = plan.Description
+	}
+	if !plan.Insecure.IsNull() && !plan.Insecure.IsUnknown() {
+		state.Insecure = types.BoolValue(reg.Insecure)
+	} else {
+		state.Insecure = plan.Insecure
+	}
+	if !plan.Enabled.IsNull() && !plan.Enabled.IsUnknown() {
+		state.Enabled = types.BoolValue(reg.Enabled)
+	} else {
+		state.Enabled = plan.Enabled
+	}
+	if !plan.RegistryType.IsNull() && !plan.RegistryType.IsUnknown() {
+		state.RegistryType = types.StringValue(reg.RegistryType)
+	} else {
+		state.RegistryType = plan.RegistryType
+	}
 	if !plan.AWSAccessKeyID.IsNull() && !plan.AWSAccessKeyID.IsUnknown() {
 		state.AWSAccessKeyID = plan.AWSAccessKeyID
 	}
 	if !plan.AWSSecretAccessKey.IsNull() && !plan.AWSSecretAccessKey.IsUnknown() {
 		state.AWSSecretAccessKey = plan.AWSSecretAccessKey
 	}
-	state.AWSRegion = types.StringValue(reg.AWSRegion)
+	if !plan.AWSRegion.IsNull() && !plan.AWSRegion.IsUnknown() {
+		state.AWSRegion = types.StringValue(reg.AWSRegion)
+	} else {
+		state.AWSRegion = plan.AWSRegion
+	}
 	state.CreatedAt = types.StringValue(reg.CreatedAt)
 	state.UpdatedAt = types.StringValue(reg.UpdatedAt)
 	// Keep token in state if provided

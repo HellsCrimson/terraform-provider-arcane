@@ -499,26 +499,26 @@ type CreateContainerRegistryRequest struct {
 	URL                string  `json:"url"`
 	Username           string  `json:"username"`
 	Token              string  `json:"token"`
-	Description        *string `json:"description,omitempty"`
-	Insecure           *bool   `json:"insecure,omitempty"`
-	Enabled            *bool   `json:"enabled,omitempty"`
-	RegistryType       *string `json:"registryType,omitempty"`
-	AWSAccessKeyID     *string `json:"awsAccessKeyId,omitempty"`
-	AWSSecretAccessKey *string `json:"awsSecretAccessKey,omitempty"`
-	AWSRegion          *string `json:"awsRegion,omitempty"`
+	Description        *string `json:"description"`
+	Insecure           *bool   `json:"insecure"`
+	Enabled            *bool   `json:"enabled"`
+	RegistryType       string  `json:"registryType"`
+	AWSAccessKeyID     string  `json:"awsAccessKeyId"`
+	AWSSecretAccessKey string  `json:"awsSecretAccessKey"`
+	AWSRegion          string  `json:"awsRegion"`
 }
 
 type UpdateContainerRegistryRequest struct {
-	URL                *string `json:"url,omitempty"`
-	Username           *string `json:"username,omitempty"`
-	Token              *string `json:"token,omitempty"`
-	Description        *string `json:"description,omitempty"`
-	Insecure           *bool   `json:"insecure,omitempty"`
-	Enabled            *bool   `json:"enabled,omitempty"`
-	RegistryType       *string `json:"registryType,omitempty"`
-	AWSAccessKeyID     *string `json:"awsAccessKeyId,omitempty"`
-	AWSSecretAccessKey *string `json:"awsSecretAccessKey,omitempty"`
-	AWSRegion          *string `json:"awsRegion,omitempty"`
+	URL                *string `json:"url"`
+	Username           *string `json:"username"`
+	Token              *string `json:"token"`
+	Description        *string `json:"description"`
+	Insecure           *bool   `json:"insecure"`
+	Enabled            *bool   `json:"enabled"`
+	RegistryType       *string `json:"registryType"`
+	AWSAccessKeyID     *string `json:"awsAccessKeyId"`
+	AWSSecretAccessKey *string `json:"awsSecretAccessKey"`
+	AWSRegion          *string `json:"awsRegion"`
 }
 
 type ContainerRegistry struct {

@@ -187,24 +187,14 @@ func (r *GitRepositoryResource) Create(ctx context.Context, req resource.CreateR
 		Name:                   types.StringValue(repo.Name),
 		URL:                    types.StringValue(repo.URL),
 		AuthType:               types.StringValue(mapAuthTypeFromAPI(repo.AuthType)),
-		Enabled:                types.BoolValue(repo.Enabled),
+		Enabled:                plan.Enabled,
 		CreatedAt:              types.StringValue(repo.CreatedAt),
 		UpdatedAt:              types.StringValue(repo.UpdatedAt),
 		SSHHostKeyVerification: plan.SSHHostKeyVerification,
 		SSHKey:                 plan.SSHKey,
 		Token:                  plan.Token,
-	}
-
-	// Handle optional fields that may be empty strings from API
-	if repo.Description != "" {
-		state.Description = types.StringValue(repo.Description)
-	} else {
-		state.Description = plan.Description
-	}
-	if repo.Username != "" {
-		state.Username = types.StringValue(repo.Username)
-	} else {
-		state.Username = plan.Username
+		Description:            plan.Description,
+		Username:               plan.Username,
 	}
 
 	resp.Diagnostics.Append(resp.State.Set(ctx, &state)...)
@@ -230,24 +220,22 @@ func (r *GitRepositoryResource) Read(ctx context.Context, req resource.ReadReque
 	state.Name = types.StringValue(repo.Name)
 	state.URL = types.StringValue(repo.URL)
 	state.AuthType = types.StringValue(mapAuthTypeFromAPI(repo.AuthType))
-	state.Enabled = types.BoolValue(repo.Enabled)
-	if repo.SSHHostKeyVerification != "" {
+	if !state.Enabled.IsNull() && !state.Enabled.IsUnknown() {
+		state.Enabled = types.BoolValue(repo.Enabled)
+	}
+	if !state.SSHHostKeyVerification.IsNull() && !state.SSHHostKeyVerification.IsUnknown() && repo.SSHHostKeyVerification != "" {
 		state.SSHHostKeyVerification = types.StringValue(repo.SSHHostKeyVerification)
 	}
 	// Leave created_at and updated_at unchanged to avoid plan inconsistency
 
 	// Handle optional fields that may be empty strings from API
-	if repo.Description != "" {
+	if !state.Description.IsNull() && !state.Description.IsUnknown() && repo.Description != "" {
 		state.Description = types.StringValue(repo.Description)
-	} else if state.Description.IsNull() {
-		state.Description = types.StringNull()
 	}
 	// Keep existing description if API returns empty and we had a value
 
-	if repo.Username != "" {
+	if !state.Username.IsNull() && !state.Username.IsUnknown() && repo.Username != "" {
 		state.Username = types.StringValue(repo.Username)
-	} else if state.Username.IsNull() {
-		state.Username = types.StringNull()
 	}
 	// Keep existing username if API returns empty and we had a value
 
@@ -314,8 +302,12 @@ func (r *GitRepositoryResource) Update(ctx context.Context, req resource.UpdateR
 	state.Name = types.StringValue(repo.Name)
 	state.URL = types.StringValue(repo.URL)
 	state.AuthType = types.StringValue(mapAuthTypeFromAPI(repo.AuthType))
-	state.Enabled = types.BoolValue(repo.Enabled)
-	if repo.SSHHostKeyVerification != "" {
+	if !plan.Enabled.IsNull() && !plan.Enabled.IsUnknown() {
+		state.Enabled = types.BoolValue(repo.Enabled)
+	} else {
+		state.Enabled = plan.Enabled
+	}
+	if !plan.SSHHostKeyVerification.IsNull() && !plan.SSHHostKeyVerification.IsUnknown() && repo.SSHHostKeyVerification != "" {
 		state.SSHHostKeyVerification = types.StringValue(repo.SSHHostKeyVerification)
 	} else {
 		state.SSHHostKeyVerification = plan.SSHHostKeyVerification
@@ -323,13 +315,13 @@ func (r *GitRepositoryResource) Update(ctx context.Context, req resource.UpdateR
 	// Leave created_at and updated_at unchanged to avoid plan inconsistency
 
 	// Handle optional fields that may be empty strings from API
-	if repo.Description != "" {
+	if !plan.Description.IsNull() && !plan.Description.IsUnknown() && repo.Description != "" {
 		state.Description = types.StringValue(repo.Description)
 	} else {
 		state.Description = plan.Description
 	}
 
-	if repo.Username != "" {
+	if !plan.Username.IsNull() && !plan.Username.IsUnknown() && repo.Username != "" {
 		state.Username = types.StringValue(repo.Username)
 	} else {
 		state.Username = plan.Username
