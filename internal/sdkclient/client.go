@@ -88,6 +88,19 @@ func (c *Client) do(req *http.Request, v any) error {
 	return dec.Decode(v)
 }
 
+func (c *Client) doBytes(req *http.Request) ([]byte, error) {
+	res, err := c.http.Do(req)
+	if err != nil {
+		return nil, err
+	}
+	defer res.Body.Close()
+	if res.StatusCode >= 300 {
+		b, _ := io.ReadAll(io.LimitReader(res.Body, 1<<20))
+		return nil, fmt.Errorf("arcane API error: %s: %s", res.Status, strings.TrimSpace(string(b)))
+	}
+	return io.ReadAll(res.Body)
+}
+
 // User models
 // components/schemas/UserCreateUser
 type CreateUserRequest struct {
@@ -231,6 +244,8 @@ type ProjectCreateResponse struct {
 	ServiceCount int    `json:"serviceCount"`
 	RunningCount int    `json:"runningCount"`
 	Status       string `json:"status"`
+	IsArchived   bool   `json:"isArchived"`
+	ArchivedAt   string `json:"archivedAt,omitempty"`
 	CreatedAt    string `json:"createdAt"`
 	UpdatedAt    string `json:"updatedAt"`
 }
@@ -247,17 +262,21 @@ type ProjectUpdateRequest struct {
 }
 
 type ProjectDetails struct {
-	ID             string  `json:"id"`
-	Name           string  `json:"name"`
-	Path           string  `json:"path"`
-	ServiceCount   int     `json:"serviceCount"`
-	RunningCount   int     `json:"runningCount"`
-	Status         string  `json:"status"`
-	CreatedAt      string  `json:"createdAt"`
-	UpdatedAt      string  `json:"updatedAt"`
-	ComposeContent *string `json:"composeContent,omitempty"`
-	EnvContent     *string `json:"envContent,omitempty"`
-	IncludeFiles   []struct {
+	ID               string  `json:"id"`
+	Name             string  `json:"name"`
+	Path             string  `json:"path"`
+	ServiceCount     int     `json:"serviceCount"`
+	RunningCount     int     `json:"runningCount"`
+	Status           string  `json:"status"`
+	IsArchived       bool    `json:"isArchived"`
+	IsDiscovered     bool    `json:"isDiscovered,omitempty"`
+	RedeployDisabled bool    `json:"redeployDisabled,omitempty"`
+	ArchivedAt       string  `json:"archivedAt,omitempty"`
+	CreatedAt        string  `json:"createdAt"`
+	UpdatedAt        string  `json:"updatedAt"`
+	ComposeContent   *string `json:"composeContent,omitempty"`
+	EnvContent       *string `json:"envContent,omitempty"`
+	IncludeFiles     []struct {
 		Path         string `json:"path"`
 		RelativePath string `json:"relativePath"`
 		Content      string `json:"content"`
@@ -416,11 +435,12 @@ type containerCreatedEnvelope struct {
 }
 
 type ContainerDetails struct {
-	ID      string `json:"id"`
-	Name    string `json:"name"`
-	Image   string `json:"image"`
-	Created string `json:"created"`
-	Status  string `json:"status"`
+	ID               string `json:"id"`
+	Name             string `json:"name"`
+	Image            string `json:"image"`
+	Created          string `json:"created"`
+	Status           string `json:"status"`
+	RedeployDisabled bool   `json:"redeployDisabled,omitempty"`
 }
 
 type containerDetailsEnvelope struct {
@@ -476,32 +496,44 @@ func (c *Client) DeleteContainer(ctx context.Context, envID, containerID string,
 
 // -------- Container Registries --------
 type CreateContainerRegistryRequest struct {
-	URL         string  `json:"url"`
-	Username    string  `json:"username"`
-	Token       string  `json:"token"`
-	Description *string `json:"description,omitempty"`
-	Insecure    *bool   `json:"insecure,omitempty"`
-	Enabled     *bool   `json:"enabled,omitempty"`
+	URL                string  `json:"url"`
+	Username           string  `json:"username"`
+	Token              string  `json:"token"`
+	Description        *string `json:"description,omitempty"`
+	Insecure           *bool   `json:"insecure,omitempty"`
+	Enabled            *bool   `json:"enabled,omitempty"`
+	RegistryType       *string `json:"registryType,omitempty"`
+	AWSAccessKeyID     *string `json:"awsAccessKeyId,omitempty"`
+	AWSSecretAccessKey *string `json:"awsSecretAccessKey,omitempty"`
+	AWSRegion          *string `json:"awsRegion,omitempty"`
 }
 
 type UpdateContainerRegistryRequest struct {
-	URL         *string `json:"url,omitempty"`
-	Username    *string `json:"username,omitempty"`
-	Token       *string `json:"token,omitempty"`
-	Description *string `json:"description,omitempty"`
-	Insecure    *bool   `json:"insecure,omitempty"`
-	Enabled     *bool   `json:"enabled,omitempty"`
+	URL                *string `json:"url,omitempty"`
+	Username           *string `json:"username,omitempty"`
+	Token              *string `json:"token,omitempty"`
+	Description        *string `json:"description,omitempty"`
+	Insecure           *bool   `json:"insecure,omitempty"`
+	Enabled            *bool   `json:"enabled,omitempty"`
+	RegistryType       *string `json:"registryType,omitempty"`
+	AWSAccessKeyID     *string `json:"awsAccessKeyId,omitempty"`
+	AWSSecretAccessKey *string `json:"awsSecretAccessKey,omitempty"`
+	AWSRegion          *string `json:"awsRegion,omitempty"`
 }
 
 type ContainerRegistry struct {
-	ID          string `json:"id"`
-	URL         string `json:"url"`
-	Username    string `json:"username"`
-	Description string `json:"description"`
-	Insecure    bool   `json:"insecure"`
-	Enabled     bool   `json:"enabled"`
-	CreatedAt   string `json:"createdAt"`
-	UpdatedAt   string `json:"updatedAt"`
+	ID                 string `json:"id"`
+	URL                string `json:"url"`
+	Username           string `json:"username"`
+	Description        string `json:"description"`
+	Insecure           bool   `json:"insecure"`
+	Enabled            bool   `json:"enabled"`
+	RegistryType       string `json:"registryType"`
+	AWSAccessKeyID     string `json:"awsAccessKeyId"`
+	AWSSecretAccessKey string `json:"awsSecretAccessKey"`
+	AWSRegion          string `json:"awsRegion"`
+	CreatedAt          string `json:"createdAt"`
+	UpdatedAt          string `json:"updatedAt"`
 }
 
 type containerRegistryEnvelope struct {
@@ -553,6 +585,41 @@ func (c *Client) DeleteContainerRegistry(ctx context.Context, id string) error {
 	return c.do(req, nil)
 }
 
+type ContainerRegistryPullUsage struct {
+	AuthMethod    string `json:"authMethod"`
+	AuthUsername  string `json:"authUsername,omitempty"`
+	CheckedAt     string `json:"checkedAt"`
+	DisplayName   string `json:"displayName"`
+	Error         string `json:"error,omitempty"`
+	Limit         int64  `json:"limit,omitempty"`
+	ObservedPulls int64  `json:"observedPulls"`
+	Provider      string `json:"provider"`
+	Registry      string `json:"registry"`
+	RegistryID    string `json:"registryId"`
+	Remaining     int64  `json:"remaining,omitempty"`
+	Repository    string `json:"repository,omitempty"`
+	Source        string `json:"source,omitempty"`
+	Used          int64  `json:"used,omitempty"`
+	WindowSeconds int64  `json:"windowSeconds,omitempty"`
+}
+
+func (c *Client) GetContainerRegistryPullUsage(ctx context.Context) ([]ContainerRegistryPullUsage, error) {
+	req, err := c.newRequest(ctx, http.MethodGet, "container-registries/pull-usage", nil)
+	if err != nil {
+		return nil, err
+	}
+	var out struct {
+		Success bool `json:"success"`
+		Data    struct {
+			Registries []ContainerRegistryPullUsage `json:"registries"`
+		} `json:"data"`
+	}
+	if err := c.do(req, &out); err != nil {
+		return nil, err
+	}
+	return out.Data.Registries, nil
+}
+
 // -------- Environments --------
 type EnvironmentCreateRequest struct {
 	APIURL         string  `json:"apiUrl"`
@@ -560,25 +627,40 @@ type EnvironmentCreateRequest struct {
 	AccessToken    *string `json:"accessToken,omitempty"`
 	BootstrapToken *string `json:"bootstrapToken,omitempty"`
 	Enabled        *bool   `json:"enabled,omitempty"`
+	IsEdge         *bool   `json:"isEdge,omitempty"`
 	UseAPIKey      *bool   `json:"useApiKey,omitempty"`
 }
 
 type EnvironmentUpdateRequest struct {
-	APIURL         *string `json:"apiUrl,omitempty"`
-	Name           *string `json:"name,omitempty"`
-	AccessToken    *string `json:"accessToken,omitempty"`
-	BootstrapToken *string `json:"bootstrapToken,omitempty"`
-	Enabled        *bool   `json:"enabled,omitempty"`
-	RegenerateKey  *bool   `json:"regenerateApiKey,omitempty"`
+	APIURL           *string `json:"apiUrl,omitempty"`
+	Name             *string `json:"name,omitempty"`
+	AccessToken      *string `json:"accessToken,omitempty"`
+	BootstrapToken   *string `json:"bootstrapToken,omitempty"`
+	Enabled          *bool   `json:"enabled,omitempty"`
+	RegenerateAPIKey *bool   `json:"regenerateApiKey,omitempty"`
+}
+
+type EnvironmentEdgeMTLSCertificate struct {
+	CommonName    string `json:"commonName,omitempty"`
+	DaysRemaining int64  `json:"daysRemaining,omitempty"`
+	Expired       bool   `json:"expired"`
+	ExpiresAt     string `json:"expiresAt,omitempty"`
+	ExpiringSoon  bool   `json:"expiringSoon"`
 }
 
 type Environment struct {
-	ID      string `json:"id"`
-	APIURL  string `json:"apiUrl"`
-	Name    string `json:"name"`
-	Status  string `json:"status"`
-	Enabled bool   `json:"enabled"`
-	APIKey  string `json:"apiKey,omitempty"`
+	ID                  string                          `json:"id"`
+	APIURL              string                          `json:"apiUrl"`
+	Name                string                          `json:"name"`
+	Status              string                          `json:"status"`
+	Enabled             bool                            `json:"enabled"`
+	IsEdge              bool                            `json:"isEdge"`
+	APIKey              string                          `json:"apiKey,omitempty"`
+	EdgeAgentInstance   string                          `json:"edgeAgentInstance,omitempty"`
+	EdgeCapabilities    []string                        `json:"edgeCapabilities,omitempty"`
+	EdgeMTLSCertificate *EnvironmentEdgeMTLSCertificate `json:"edgeMTLSCertificate,omitempty"`
+	EdgeSecurityMode    string                          `json:"edgeSecurityMode,omitempty"`
+	EdgeSessionID       string                          `json:"edgeSessionId,omitempty"`
 }
 
 type environmentEnvelope struct {
@@ -656,6 +738,30 @@ func (c *Client) PairEnvironment(ctx context.Context, envID string, rotate bool)
 	return env.Data.Token, nil
 }
 
+func (c *Client) DownloadEdgeMTLSCA(ctx context.Context) ([]byte, error) {
+	req, err := c.newRequest(ctx, http.MethodGet, "edge-mtls/ca", nil)
+	if err != nil {
+		return nil, err
+	}
+	return c.doBytes(req)
+}
+
+func (c *Client) DownloadEnvironmentMTLSBundle(ctx context.Context, envID string) ([]byte, error) {
+	req, err := c.newRequest(ctx, http.MethodGet, path.Join("environments", envID, "deployment", "mtls", "bundle"), nil)
+	if err != nil {
+		return nil, err
+	}
+	return c.doBytes(req)
+}
+
+func (c *Client) DownloadEnvironmentMTLSFile(ctx context.Context, envID, fileName string) ([]byte, error) {
+	req, err := c.newRequest(ctx, http.MethodGet, path.Join("environments", envID, "deployment", "mtls", fileName), nil)
+	if err != nil {
+		return nil, err
+	}
+	return c.doBytes(req)
+}
+
 // Project lifecycle: up/down/restart/redeploy
 func (c *Client) UpProject(ctx context.Context, envID, projectID string) error {
 	req, err := c.newRequest(ctx, http.MethodPost, path.Join("environments", envID, "projects", projectID, "up"), nil)
@@ -690,39 +796,73 @@ func (c *Client) PullProjectImages(ctx context.Context, envID, projectID string)
 	return c.do(req, nil)
 }
 
+func (c *Client) ArchiveProject(ctx context.Context, envID, projectID string) error {
+	req, err := c.newRequest(ctx, http.MethodPost, path.Join("environments", envID, "projects", projectID, "archive"), nil)
+	if err != nil {
+		return err
+	}
+	return c.do(req, nil)
+}
+
+func (c *Client) UnarchiveProject(ctx context.Context, envID, projectID string) error {
+	req, err := c.newRequest(ctx, http.MethodPost, path.Join("environments", envID, "projects", projectID, "unarchive"), nil)
+	if err != nil {
+		return err
+	}
+	return c.do(req, nil)
+}
+
+func (c *Client) GetProjectSectionData(ctx context.Context, envID, projectID, section string) (map[string]any, error) {
+	req, err := c.newRequest(ctx, http.MethodGet, path.Join("environments", envID, "projects", projectID, section), nil)
+	if err != nil {
+		return nil, err
+	}
+	var out struct {
+		Success bool           `json:"success"`
+		Data    map[string]any `json:"data"`
+	}
+	if err := c.do(req, &out); err != nil {
+		return nil, err
+	}
+	return out.Data, nil
+}
+
 // -------- Git Repositories --------
 type GitRepositoryCreateRequest struct {
-	Name        string  `json:"name"`
-	URL         string  `json:"url"`
-	AuthType    string  `json:"authType"`
-	Description *string `json:"description,omitempty"`
-	Enabled     *bool   `json:"enabled,omitempty"`
-	SSHKey      *string `json:"sshKey,omitempty"`
-	Token       *string `json:"token,omitempty"`
-	Username    *string `json:"username,omitempty"`
+	Name                   string  `json:"name"`
+	URL                    string  `json:"url"`
+	AuthType               string  `json:"authType"`
+	Description            *string `json:"description,omitempty"`
+	Enabled                *bool   `json:"enabled,omitempty"`
+	SSHHostKeyVerification *string `json:"sshHostKeyVerification,omitempty"`
+	SSHKey                 *string `json:"sshKey,omitempty"`
+	Token                  *string `json:"token,omitempty"`
+	Username               *string `json:"username,omitempty"`
 }
 
 type GitRepositoryUpdateRequest struct {
-	Name        *string `json:"name,omitempty"`
-	URL         *string `json:"url,omitempty"`
-	AuthType    *string `json:"authType,omitempty"`
-	Description *string `json:"description,omitempty"`
-	Enabled     *bool   `json:"enabled,omitempty"`
-	SSHKey      *string `json:"sshKey,omitempty"`
-	Token       *string `json:"token,omitempty"`
-	Username    *string `json:"username,omitempty"`
+	Name                   *string `json:"name,omitempty"`
+	URL                    *string `json:"url,omitempty"`
+	AuthType               *string `json:"authType,omitempty"`
+	Description            *string `json:"description,omitempty"`
+	Enabled                *bool   `json:"enabled,omitempty"`
+	SSHHostKeyVerification *string `json:"sshHostKeyVerification,omitempty"`
+	SSHKey                 *string `json:"sshKey,omitempty"`
+	Token                  *string `json:"token,omitempty"`
+	Username               *string `json:"username,omitempty"`
 }
 
 type GitRepository struct {
-	ID          string `json:"id"`
-	Name        string `json:"name"`
-	URL         string `json:"url"`
-	AuthType    string `json:"authType"`
-	Enabled     bool   `json:"enabled"`
-	Username    string `json:"username"`
-	Description string `json:"description"`
-	CreatedAt   string `json:"createdAt"`
-	UpdatedAt   string `json:"updatedAt"`
+	ID                     string `json:"id"`
+	Name                   string `json:"name"`
+	URL                    string `json:"url"`
+	AuthType               string `json:"authType"`
+	Enabled                bool   `json:"enabled"`
+	Username               string `json:"username"`
+	Description            string `json:"description"`
+	SSHHostKeyVerification string `json:"sshHostKeyVerification"`
+	CreatedAt              string `json:"createdAt"`
+	UpdatedAt              string `json:"updatedAt"`
 }
 
 type gitRepositoryEnvelope struct {
@@ -1233,23 +1373,31 @@ func (c *Client) DeleteTemplateRegistry(ctx context.Context, id string) error {
 
 // -------- Job Schedules --------
 type UpdateJobSchedulesRequest struct {
-	AnalyticsHeartbeatInterval *string `json:"analyticsHeartbeatInterval,omitempty"`
-	AutoUpdateInterval         *string `json:"autoUpdateInterval,omitempty"`
-	EnvironmentHealthInterval  *string `json:"environmentHealthInterval,omitempty"`
-	EventCleanupInterval       *string `json:"eventCleanupInterval,omitempty"`
-	GitOpsSyncInterval         *string `json:"gitopsSyncInterval,omitempty"`
-	PollingInterval            *string `json:"pollingInterval,omitempty"`
-	ScheduledPruneInterval     *string `json:"scheduledPruneInterval,omitempty"`
+	AnalyticsHeartbeatInterval     *string `json:"analyticsHeartbeatInterval,omitempty"`
+	AutoHealInterval               *string `json:"autoHealInterval,omitempty"`
+	AutoUpdateInterval             *string `json:"autoUpdateInterval,omitempty"`
+	DockerClientRefreshInterval    *string `json:"dockerClientRefreshInterval,omitempty"`
+	EnvironmentHealthInterval      *string `json:"environmentHealthInterval,omitempty"`
+	EventCleanupInterval           *string `json:"eventCleanupInterval,omitempty"`
+	ExpiredSessionsCleanupInterval *string `json:"expiredSessionsCleanupInterval,omitempty"`
+	GitOpsSyncInterval             *string `json:"gitopsSyncInterval,omitempty"`
+	PollingInterval                *string `json:"pollingInterval,omitempty"`
+	ScheduledPruneInterval         *string `json:"scheduledPruneInterval,omitempty"`
+	VulnerabilityScanInterval      *string `json:"vulnerabilityScanInterval,omitempty"`
 }
 
 type JobSchedulesConfig struct {
-	AnalyticsHeartbeatInterval string `json:"analyticsHeartbeatInterval"`
-	AutoUpdateInterval         string `json:"autoUpdateInterval"`
-	EnvironmentHealthInterval  string `json:"environmentHealthInterval"`
-	EventCleanupInterval       string `json:"eventCleanupInterval"`
-	GitOpsSyncInterval         string `json:"gitopsSyncInterval"`
-	PollingInterval            string `json:"pollingInterval"`
-	ScheduledPruneInterval     string `json:"scheduledPruneInterval"`
+	AnalyticsHeartbeatInterval     string `json:"analyticsHeartbeatInterval"`
+	AutoHealInterval               string `json:"autoHealInterval"`
+	AutoUpdateInterval             string `json:"autoUpdateInterval"`
+	DockerClientRefreshInterval    string `json:"dockerClientRefreshInterval"`
+	EnvironmentHealthInterval      string `json:"environmentHealthInterval"`
+	EventCleanupInterval           string `json:"eventCleanupInterval"`
+	ExpiredSessionsCleanupInterval string `json:"expiredSessionsCleanupInterval"`
+	GitOpsSyncInterval             string `json:"gitopsSyncInterval"`
+	PollingInterval                string `json:"pollingInterval"`
+	ScheduledPruneInterval         string `json:"scheduledPruneInterval"`
+	VulnerabilityScanInterval      string `json:"vulnerabilityScanInterval"`
 }
 
 // UpdateJobSchedules PUT /environments/{id}/job-schedules
@@ -1283,45 +1431,60 @@ func (c *Client) GetJobSchedules(ctx context.Context, envID string) (*JobSchedul
 
 // -------- GitOps Syncs --------
 type GitOpsSyncCreateRequest struct {
-	Name         string  `json:"name"`
-	RepositoryID string  `json:"repositoryId"`
-	Branch       string  `json:"branch"`
-	ComposePath  string  `json:"composePath"`
-	ProjectName  *string `json:"projectName,omitempty"`
-	AutoSync     *bool   `json:"autoSync,omitempty"`
-	SyncInterval *int64  `json:"syncInterval,omitempty"`
+	Name              string  `json:"name"`
+	RepositoryID      string  `json:"repositoryId"`
+	Branch            string  `json:"branch"`
+	ComposePath       string  `json:"composePath"`
+	ProjectName       *string `json:"projectName,omitempty"`
+	AutoSync          *bool   `json:"autoSync,omitempty"`
+	SyncInterval      *int64  `json:"syncInterval,omitempty"`
+	MaxSyncBinarySize *int64  `json:"maxSyncBinarySize,omitempty"`
+	MaxSyncFiles      *int64  `json:"maxSyncFiles,omitempty"`
+	MaxSyncTotalSize  *int64  `json:"maxSyncTotalSize,omitempty"`
+	SyncDirectory     *bool   `json:"syncDirectory,omitempty"`
+	TargetType        *string `json:"targetType,omitempty"`
 	// Note: 'enabled' is read-only and not included in create requests
 }
 
 type GitOpsSyncUpdateRequest struct {
-	Name         *string `json:"name,omitempty"`
-	RepositoryID *string `json:"repositoryId,omitempty"`
-	Branch       *string `json:"branch,omitempty"`
-	ComposePath  *string `json:"composePath,omitempty"`
-	ProjectName  *string `json:"projectName,omitempty"`
-	AutoSync     *bool   `json:"autoSync,omitempty"`
-	SyncInterval *int64  `json:"syncInterval,omitempty"`
+	Name              *string `json:"name,omitempty"`
+	RepositoryID      *string `json:"repositoryId,omitempty"`
+	Branch            *string `json:"branch,omitempty"`
+	ComposePath       *string `json:"composePath,omitempty"`
+	ProjectName       *string `json:"projectName,omitempty"`
+	AutoSync          *bool   `json:"autoSync,omitempty"`
+	SyncInterval      *int64  `json:"syncInterval,omitempty"`
+	MaxSyncBinarySize *int64  `json:"maxSyncBinarySize,omitempty"`
+	MaxSyncFiles      *int64  `json:"maxSyncFiles,omitempty"`
+	MaxSyncTotalSize  *int64  `json:"maxSyncTotalSize,omitempty"`
+	SyncDirectory     *bool   `json:"syncDirectory,omitempty"`
+	TargetType        *string `json:"targetType,omitempty"`
 	// Note: 'enabled' is read-only and not included in update requests
 }
 
 type GitOpsSync struct {
-	ID             string  `json:"id"`
-	Name           string  `json:"name"`
-	EnvironmentID  string  `json:"environmentId"`
-	RepositoryID   string  `json:"repositoryId"`
-	Branch         string  `json:"branch"`
-	ComposePath    string  `json:"composePath"`
-	ProjectName    string  `json:"projectName"`
-	ProjectID      *string `json:"projectId,omitempty"`
-	AutoSync       bool    `json:"autoSync"`
-	SyncInterval   int64   `json:"syncInterval"`
-	Enabled        bool    `json:"enabled"`
-	LastSyncAt     *string `json:"lastSyncAt,omitempty"`
-	LastSyncCommit *string `json:"lastSyncCommit,omitempty"`
-	LastSyncStatus *string `json:"lastSyncStatus,omitempty"`
-	LastSyncError  *string `json:"lastSyncError,omitempty"`
-	CreatedAt      string  `json:"createdAt"`
-	UpdatedAt      string  `json:"updatedAt"`
+	ID                string  `json:"id"`
+	Name              string  `json:"name"`
+	EnvironmentID     string  `json:"environmentId"`
+	RepositoryID      string  `json:"repositoryId"`
+	Branch            string  `json:"branch"`
+	ComposePath       string  `json:"composePath"`
+	ProjectName       string  `json:"projectName"`
+	ProjectID         *string `json:"projectId,omitempty"`
+	AutoSync          bool    `json:"autoSync"`
+	SyncInterval      int64   `json:"syncInterval"`
+	MaxSyncBinarySize int64   `json:"maxSyncBinarySize"`
+	MaxSyncFiles      int64   `json:"maxSyncFiles"`
+	MaxSyncTotalSize  int64   `json:"maxSyncTotalSize"`
+	SyncDirectory     bool    `json:"syncDirectory"`
+	TargetType        string  `json:"targetType"`
+	Enabled           bool    `json:"enabled"`
+	LastSyncAt        *string `json:"lastSyncAt,omitempty"`
+	LastSyncCommit    *string `json:"lastSyncCommit,omitempty"`
+	LastSyncStatus    *string `json:"lastSyncStatus,omitempty"`
+	LastSyncError     *string `json:"lastSyncError,omitempty"`
+	CreatedAt         string  `json:"createdAt"`
+	UpdatedAt         string  `json:"updatedAt"`
 }
 
 type gitOpsSyncEnvelope struct {
@@ -1446,8 +1609,25 @@ func (c *Client) UnignoreVulnerability(ctx context.Context, envID, ignoreID stri
 
 // -------- Additional Read Models (Data Sources) --------
 type DeploymentSnippet struct {
-	DockerRun     string `json:"dockerRun"`
-	DockerCompose string `json:"dockerCompose"`
+	DockerRun     string                 `json:"dockerRun"`
+	DockerCompose string                 `json:"dockerCompose"`
+	MTLS          *DeploymentSnippetMTLS `json:"mtls,omitempty"`
+}
+
+type DeploymentSnippetMTLS struct {
+	DockerRun     string                  `json:"dockerRun"`
+	DockerCompose string                  `json:"dockerCompose"`
+	Files         []DeploymentSnippetFile `json:"files"`
+	HostDirHint   string                  `json:"hostDirHint"`
+}
+
+type DeploymentSnippetFile struct {
+	ContainerPath string `json:"containerPath"`
+	Content       string `json:"content,omitempty"`
+	DownloadURL   string `json:"downloadUrl,omitempty"`
+	Name          string `json:"name"`
+	Permissions   string `json:"permissions"`
+	Sensitive     bool   `json:"sensitive,omitempty"`
 }
 
 type deploymentSnippetEnvelope struct {

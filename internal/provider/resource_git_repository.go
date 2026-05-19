@@ -79,6 +79,10 @@ func (r *GitRepositoryResource) Schema(_ context.Context, _ resource.SchemaReque
 				Optional:    true,
 				Description: "Whether the repository is enabled",
 			},
+			"ssh_host_key_verification": resourceschema.StringAttribute{
+				Optional:    true,
+				Description: "SSH host key verification mode",
+			},
 			"ssh_key": resourceschema.StringAttribute{
 				Optional:    true,
 				Sensitive:   true,
@@ -120,17 +124,18 @@ func (r *GitRepositoryResource) Configure(_ context.Context, req resource.Config
 }
 
 type gitRepositoryModel struct {
-	ID          types.String `tfsdk:"id"`
-	Name        types.String `tfsdk:"name"`
-	URL         types.String `tfsdk:"url"`
-	AuthType    types.String `tfsdk:"auth_type"`
-	Description types.String `tfsdk:"description"`
-	Enabled     types.Bool   `tfsdk:"enabled"`
-	SSHKey      types.String `tfsdk:"ssh_key"`
-	Token       types.String `tfsdk:"token"`
-	Username    types.String `tfsdk:"username"`
-	CreatedAt   types.String `tfsdk:"created_at"`
-	UpdatedAt   types.String `tfsdk:"updated_at"`
+	ID                     types.String `tfsdk:"id"`
+	Name                   types.String `tfsdk:"name"`
+	URL                    types.String `tfsdk:"url"`
+	AuthType               types.String `tfsdk:"auth_type"`
+	Description            types.String `tfsdk:"description"`
+	Enabled                types.Bool   `tfsdk:"enabled"`
+	SSHHostKeyVerification types.String `tfsdk:"ssh_host_key_verification"`
+	SSHKey                 types.String `tfsdk:"ssh_key"`
+	Token                  types.String `tfsdk:"token"`
+	Username               types.String `tfsdk:"username"`
+	CreatedAt              types.String `tfsdk:"created_at"`
+	UpdatedAt              types.String `tfsdk:"updated_at"`
 }
 
 func (r *GitRepositoryResource) Create(ctx context.Context, req resource.CreateRequest, resp *resource.CreateResponse) {
@@ -154,6 +159,10 @@ func (r *GitRepositoryResource) Create(ctx context.Context, req resource.CreateR
 		v := plan.Enabled.ValueBool()
 		body.Enabled = &v
 	}
+	if !plan.SSHHostKeyVerification.IsNull() && !plan.SSHHostKeyVerification.IsUnknown() && plan.SSHHostKeyVerification.ValueString() != "" {
+		v := plan.SSHHostKeyVerification.ValueString()
+		body.SSHHostKeyVerification = &v
+	}
 	if !plan.SSHKey.IsNull() && !plan.SSHKey.IsUnknown() && plan.SSHKey.ValueString() != "" {
 		v := plan.SSHKey.ValueString()
 		body.SSHKey = &v
@@ -174,15 +183,16 @@ func (r *GitRepositoryResource) Create(ctx context.Context, req resource.CreateR
 	}
 
 	state := gitRepositoryModel{
-		ID:        types.StringValue(repo.ID),
-		Name:      types.StringValue(repo.Name),
-		URL:       types.StringValue(repo.URL),
-		AuthType:  types.StringValue(mapAuthTypeFromAPI(repo.AuthType)),
-		Enabled:   types.BoolValue(repo.Enabled),
-		CreatedAt: types.StringValue(repo.CreatedAt),
-		UpdatedAt: types.StringValue(repo.UpdatedAt),
-		SSHKey:    plan.SSHKey,
-		Token:     plan.Token,
+		ID:                     types.StringValue(repo.ID),
+		Name:                   types.StringValue(repo.Name),
+		URL:                    types.StringValue(repo.URL),
+		AuthType:               types.StringValue(mapAuthTypeFromAPI(repo.AuthType)),
+		Enabled:                types.BoolValue(repo.Enabled),
+		CreatedAt:              types.StringValue(repo.CreatedAt),
+		UpdatedAt:              types.StringValue(repo.UpdatedAt),
+		SSHHostKeyVerification: plan.SSHHostKeyVerification,
+		SSHKey:                 plan.SSHKey,
+		Token:                  plan.Token,
 	}
 
 	// Handle optional fields that may be empty strings from API
@@ -221,6 +231,9 @@ func (r *GitRepositoryResource) Read(ctx context.Context, req resource.ReadReque
 	state.URL = types.StringValue(repo.URL)
 	state.AuthType = types.StringValue(mapAuthTypeFromAPI(repo.AuthType))
 	state.Enabled = types.BoolValue(repo.Enabled)
+	if repo.SSHHostKeyVerification != "" {
+		state.SSHHostKeyVerification = types.StringValue(repo.SSHHostKeyVerification)
+	}
 	// Leave created_at and updated_at unchanged to avoid plan inconsistency
 
 	// Handle optional fields that may be empty strings from API
@@ -275,6 +288,10 @@ func (r *GitRepositoryResource) Update(ctx context.Context, req resource.UpdateR
 		v := plan.Enabled.ValueBool()
 		body.Enabled = &v
 	}
+	if !plan.SSHHostKeyVerification.IsNull() && !plan.SSHHostKeyVerification.IsUnknown() && plan.SSHHostKeyVerification.ValueString() != "" {
+		v := plan.SSHHostKeyVerification.ValueString()
+		body.SSHHostKeyVerification = &v
+	}
 	if !plan.SSHKey.IsNull() && !plan.SSHKey.IsUnknown() && plan.SSHKey.ValueString() != "" {
 		v := plan.SSHKey.ValueString()
 		body.SSHKey = &v
@@ -298,6 +315,11 @@ func (r *GitRepositoryResource) Update(ctx context.Context, req resource.UpdateR
 	state.URL = types.StringValue(repo.URL)
 	state.AuthType = types.StringValue(mapAuthTypeFromAPI(repo.AuthType))
 	state.Enabled = types.BoolValue(repo.Enabled)
+	if repo.SSHHostKeyVerification != "" {
+		state.SSHHostKeyVerification = types.StringValue(repo.SSHHostKeyVerification)
+	} else {
+		state.SSHHostKeyVerification = plan.SSHHostKeyVerification
+	}
 	// Leave created_at and updated_at unchanged to avoid plan inconsistency
 
 	// Handle optional fields that may be empty strings from API

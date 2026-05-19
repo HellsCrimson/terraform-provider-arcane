@@ -41,9 +41,17 @@ func (d *JobSchedulesDataSource) Schema(ctx context.Context, req datasource.Sche
 				Computed:    true,
 				Description: "Analytics heartbeat cron expression",
 			},
+			"auto_heal_interval": schema.StringAttribute{
+				Computed:    true,
+				Description: "Auto-heal cron expression",
+			},
 			"auto_update_interval": schema.StringAttribute{
 				Computed:    true,
 				Description: "Auto-update check cron expression",
+			},
+			"docker_client_refresh_interval": schema.StringAttribute{
+				Computed:    true,
+				Description: "Docker client refresh cron expression",
 			},
 			"environment_health_interval": schema.StringAttribute{
 				Computed:    true,
@@ -52,6 +60,10 @@ func (d *JobSchedulesDataSource) Schema(ctx context.Context, req datasource.Sche
 			"event_cleanup_interval": schema.StringAttribute{
 				Computed:    true,
 				Description: "Event cleanup cron expression",
+			},
+			"expired_sessions_cleanup_interval": schema.StringAttribute{
+				Computed:    true,
+				Description: "Expired sessions cleanup cron expression",
 			},
 			"gitops_sync_interval": schema.StringAttribute{
 				Computed:    true,
@@ -64,6 +76,10 @@ func (d *JobSchedulesDataSource) Schema(ctx context.Context, req datasource.Sche
 			"scheduled_prune_interval": schema.StringAttribute{
 				Computed:    true,
 				Description: "Scheduled prune cron expression",
+			},
+			"vulnerability_scan_interval": schema.StringAttribute{
+				Computed:    true,
+				Description: "Vulnerability scan cron expression",
 			},
 		},
 	}
@@ -82,15 +98,19 @@ func (d *JobSchedulesDataSource) Configure(ctx context.Context, req datasource.C
 }
 
 type jobSchedulesDataSourceModel struct {
-	ID                         types.String `tfsdk:"id"`
-	EnvironmentID              types.String `tfsdk:"environment_id"`
-	AnalyticsHeartbeatInterval types.String `tfsdk:"analytics_heartbeat_interval"`
-	AutoUpdateInterval         types.String `tfsdk:"auto_update_interval"`
-	EnvironmentHealthInterval  types.String `tfsdk:"environment_health_interval"`
-	EventCleanupInterval       types.String `tfsdk:"event_cleanup_interval"`
-	GitOpsSyncInterval         types.String `tfsdk:"gitops_sync_interval"`
-	PollingInterval            types.String `tfsdk:"polling_interval"`
-	ScheduledPruneInterval     types.String `tfsdk:"scheduled_prune_interval"`
+	ID                             types.String `tfsdk:"id"`
+	EnvironmentID                  types.String `tfsdk:"environment_id"`
+	AnalyticsHeartbeatInterval     types.String `tfsdk:"analytics_heartbeat_interval"`
+	AutoHealInterval               types.String `tfsdk:"auto_heal_interval"`
+	AutoUpdateInterval             types.String `tfsdk:"auto_update_interval"`
+	DockerClientRefreshInterval    types.String `tfsdk:"docker_client_refresh_interval"`
+	EnvironmentHealthInterval      types.String `tfsdk:"environment_health_interval"`
+	EventCleanupInterval           types.String `tfsdk:"event_cleanup_interval"`
+	ExpiredSessionsCleanupInterval types.String `tfsdk:"expired_sessions_cleanup_interval"`
+	GitOpsSyncInterval             types.String `tfsdk:"gitops_sync_interval"`
+	PollingInterval                types.String `tfsdk:"polling_interval"`
+	ScheduledPruneInterval         types.String `tfsdk:"scheduled_prune_interval"`
+	VulnerabilityScanInterval      types.String `tfsdk:"vulnerability_scan_interval"`
 }
 
 func (d *JobSchedulesDataSource) Read(ctx context.Context, req datasource.ReadRequest, resp *datasource.ReadResponse) {
@@ -111,15 +131,19 @@ func (d *JobSchedulesDataSource) Read(ctx context.Context, req datasource.ReadRe
 	}
 
 	state := jobSchedulesDataSourceModel{
-		ID:                         config.EnvironmentID,
-		EnvironmentID:              config.EnvironmentID,
-		AnalyticsHeartbeatInterval: types.StringValue(schedules.AnalyticsHeartbeatInterval),
-		AutoUpdateInterval:         types.StringValue(schedules.AutoUpdateInterval),
-		EnvironmentHealthInterval:  types.StringValue(schedules.EnvironmentHealthInterval),
-		EventCleanupInterval:       types.StringValue(schedules.EventCleanupInterval),
-		GitOpsSyncInterval:         types.StringValue(schedules.GitOpsSyncInterval),
-		PollingInterval:            types.StringValue(schedules.PollingInterval),
-		ScheduledPruneInterval:     types.StringValue(schedules.ScheduledPruneInterval),
+		ID:                             config.EnvironmentID,
+		EnvironmentID:                  config.EnvironmentID,
+		AnalyticsHeartbeatInterval:     types.StringValue(schedules.AnalyticsHeartbeatInterval),
+		AutoHealInterval:               types.StringValue(schedules.AutoHealInterval),
+		AutoUpdateInterval:             types.StringValue(schedules.AutoUpdateInterval),
+		DockerClientRefreshInterval:    types.StringValue(schedules.DockerClientRefreshInterval),
+		EnvironmentHealthInterval:      types.StringValue(schedules.EnvironmentHealthInterval),
+		EventCleanupInterval:           types.StringValue(schedules.EventCleanupInterval),
+		ExpiredSessionsCleanupInterval: types.StringValue(schedules.ExpiredSessionsCleanupInterval),
+		GitOpsSyncInterval:             types.StringValue(schedules.GitOpsSyncInterval),
+		PollingInterval:                types.StringValue(schedules.PollingInterval),
+		ScheduledPruneInterval:         types.StringValue(schedules.ScheduledPruneInterval),
+		VulnerabilityScanInterval:      types.StringValue(schedules.VulnerabilityScanInterval),
 	}
 
 	resp.Diagnostics.Append(resp.State.Set(ctx, &state)...)

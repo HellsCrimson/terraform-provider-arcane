@@ -10,6 +10,7 @@ import (
 	"github.com/hashicorp/terraform-plugin-framework/resource"
 	resourceschema "github.com/hashicorp/terraform-plugin-framework/resource/schema"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema/booldefault"
+	"github.com/hashicorp/terraform-plugin-framework/resource/schema/boolplanmodifier"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema/planmodifier"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema/stringplanmodifier"
 	"github.com/hashicorp/terraform-plugin-framework/types"
@@ -39,16 +40,20 @@ func (r *ProjectResource) Schema(_ context.Context, _ resource.SchemaRequest, re
 			"compose_content":    resourceschema.StringAttribute{Required: true, Description: "docker-compose.yml content"},
 			"env_content":        resourceschema.StringAttribute{Optional: true, Description: ".env content"},
 			"running":            resourceschema.BoolAttribute{Optional: true, Description: "If true, ensure project is running (compose up); if false, compose down. If unset, no lifecycle management."},
+			"archived":           resourceschema.BoolAttribute{Optional: true, Computed: true, Description: "Whether the project is archived.", PlanModifiers: []planmodifier.Bool{boolplanmodifier.UseStateForUnknown()}},
 			"redeploy_on_update": resourceschema.BoolAttribute{Optional: true, Computed: true, Description: "Redeploy the project after updating compose/env content.", Default: booldefault.StaticBool(true)},
 			"pull_on_update":     resourceschema.BoolAttribute{Optional: true, Computed: true, Description: "Pull images before redeploy when compose/env changes.", Default: booldefault.StaticBool(false)},
 
 			// Computed fields
-			"path":          resourceschema.StringAttribute{Computed: true, PlanModifiers: []planmodifier.String{stringplanmodifier.UseStateForUnknown()}},
-			"status":        resourceschema.StringAttribute{Computed: true},
-			"service_count": resourceschema.Int64Attribute{Computed: true},
-			"running_count": resourceschema.Int64Attribute{Computed: true},
-			"created_at":    resourceschema.StringAttribute{Computed: true, PlanModifiers: []planmodifier.String{stringplanmodifier.UseStateForUnknown()}},
-			"updated_at":    resourceschema.StringAttribute{Computed: true, PlanModifiers: []planmodifier.String{stringplanmodifier.UseStateForUnknown()}},
+			"path":              resourceschema.StringAttribute{Computed: true, PlanModifiers: []planmodifier.String{stringplanmodifier.UseStateForUnknown()}},
+			"status":            resourceschema.StringAttribute{Computed: true},
+			"service_count":     resourceschema.Int64Attribute{Computed: true},
+			"running_count":     resourceschema.Int64Attribute{Computed: true},
+			"created_at":        resourceschema.StringAttribute{Computed: true, PlanModifiers: []planmodifier.String{stringplanmodifier.UseStateForUnknown()}},
+			"updated_at":        resourceschema.StringAttribute{Computed: true, PlanModifiers: []planmodifier.String{stringplanmodifier.UseStateForUnknown()}},
+			"archived_at":       resourceschema.StringAttribute{Computed: true},
+			"is_discovered":     resourceschema.BoolAttribute{Computed: true},
+			"redeploy_disabled": resourceschema.BoolAttribute{Computed: true},
 
 			// Delete options
 			"remove_files":   resourceschema.BoolAttribute{Optional: true, Description: "Remove files on destroy"},
@@ -72,6 +77,7 @@ type projectModel struct {
 	Compose          types.String `tfsdk:"compose_content"`
 	Env              types.String `tfsdk:"env_content"`
 	Running          types.Bool   `tfsdk:"running"`
+	Archived         types.Bool   `tfsdk:"archived"`
 	RedeployOnUpdate types.Bool   `tfsdk:"redeploy_on_update"`
 	PullOnUpdate     types.Bool   `tfsdk:"pull_on_update"`
 	Path             types.String `tfsdk:"path"`
@@ -80,6 +86,9 @@ type projectModel struct {
 	RunningCount     types.Int64  `tfsdk:"running_count"`
 	CreatedAt        types.String `tfsdk:"created_at"`
 	UpdatedAt        types.String `tfsdk:"updated_at"`
+	ArchivedAt       types.String `tfsdk:"archived_at"`
+	IsDiscovered     types.Bool   `tfsdk:"is_discovered"`
+	RedeployDisabled types.Bool   `tfsdk:"redeploy_disabled"`
 	RemoveFiles      types.Bool   `tfsdk:"remove_files"`
 	RemoveVolumes    types.Bool   `tfsdk:"remove_volumes"`
 }
@@ -88,6 +97,10 @@ func (r *ProjectResource) Create(ctx context.Context, req resource.CreateRequest
 	var plan projectModel
 	resp.Diagnostics.Append(req.Plan.Get(ctx, &plan)...)
 	if resp.Diagnostics.HasError() {
+		return
+	}
+	if boolValue(plan.Archived) && boolValue(plan.Running) {
+		resp.Diagnostics.AddError("invalid project lifecycle", "archived cannot be true when running is true")
 		return
 	}
 
@@ -125,6 +138,25 @@ func (r *ProjectResource) Create(ctx context.Context, req resource.CreateRequest
 		}
 	}
 
+	if boolValue(plan.Archived) {
+		if err := r.client.DownProject(ctx, envID, out.ID); err != nil {
+			resp.Diagnostics.AddError("project down before archive failed", err.Error())
+			return
+		}
+		if err := r.client.ArchiveProject(ctx, envID, out.ID); err != nil {
+			resp.Diagnostics.AddError("project archive failed", err.Error())
+			return
+		}
+		if det, derr := r.client.GetProject(ctx, envID, out.ID); derr == nil {
+			out.Status = det.Status
+			out.RunningCount = det.RunningCount
+			out.ServiceCount = det.ServiceCount
+			out.IsArchived = det.IsArchived
+			out.ArchivedAt = det.ArchivedAt
+			out.UpdatedAt = det.UpdatedAt
+		}
+	}
+
 	state := projectModel{
 		ID:               types.StringValue(out.ID),
 		EnvironmentID:    plan.EnvironmentID,
@@ -137,6 +169,8 @@ func (r *ProjectResource) Create(ctx context.Context, req resource.CreateRequest
 		RunningCount:     types.Int64Value(int64(out.RunningCount)),
 		CreatedAt:        types.StringValue(out.CreatedAt),
 		UpdatedAt:        types.StringValue(out.UpdatedAt),
+		Archived:         types.BoolValue(out.IsArchived),
+		ArchivedAt:       nullableString(out.ArchivedAt),
 		RemoveFiles:      plan.RemoveFiles,
 		RemoveVolumes:    plan.RemoveVolumes,
 		Running:          plan.Running,
@@ -170,6 +204,10 @@ func (r *ProjectResource) Read(ctx context.Context, req resource.ReadRequest, re
 	state.Status = types.StringValue(out.Status)
 	state.ServiceCount = types.Int64Value(int64(out.ServiceCount))
 	state.RunningCount = types.Int64Value(int64(out.RunningCount))
+	state.Archived = types.BoolValue(out.IsArchived)
+	state.ArchivedAt = nullableString(out.ArchivedAt)
+	state.IsDiscovered = types.BoolValue(out.IsDiscovered)
+	state.RedeployDisabled = types.BoolValue(out.RedeployDisabled)
 	// Leave created_at and updated_at unchanged to avoid plan inconsistency on server-side timestamp changes
 	if out.ComposeContent != nil {
 		state.Compose = types.StringValue(*out.ComposeContent)
@@ -189,6 +227,10 @@ func (r *ProjectResource) Update(ctx context.Context, req resource.UpdateRequest
 	resp.Diagnostics.Append(req.Plan.Get(ctx, &plan)...)
 	resp.Diagnostics.Append(req.State.Get(ctx, &state)...)
 	if resp.Diagnostics.HasError() {
+		return
+	}
+	if boolValue(plan.Archived) && boolValue(plan.Running) {
+		resp.Diagnostics.AddError("invalid project lifecycle", "archived cannot be true when running is true")
 		return
 	}
 
@@ -248,8 +290,42 @@ func (r *ProjectResource) Update(ctx context.Context, req resource.UpdateRequest
 		}
 	}
 
+	if !plan.Archived.IsNull() && !plan.Archived.IsUnknown() {
+		desiredArchived := plan.Archived.ValueBool()
+		currentArchived := false
+		if !state.Archived.IsNull() && !state.Archived.IsUnknown() {
+			currentArchived = state.Archived.ValueBool()
+		}
+		if desiredArchived != currentArchived {
+			if desiredArchived {
+				if err := r.client.DownProject(ctx, envID, projID); err != nil {
+					resp.Diagnostics.AddError("project down before archive failed", err.Error())
+					return
+				}
+				if err := r.client.ArchiveProject(ctx, envID, projID); err != nil {
+					resp.Diagnostics.AddError("project archive failed", err.Error())
+					return
+				}
+			} else {
+				if err := r.client.UnarchiveProject(ctx, envID, projID); err != nil {
+					resp.Diagnostics.AddError("project unarchive failed", err.Error())
+					return
+				}
+			}
+			if det, derr := r.client.GetProject(ctx, envID, projID); derr == nil {
+				out.Status = det.Status
+				out.ServiceCount = det.ServiceCount
+				out.RunningCount = det.RunningCount
+				out.IsArchived = det.IsArchived
+				out.ArchivedAt = det.ArchivedAt
+				out.IsDiscovered = det.IsDiscovered
+				out.RedeployDisabled = det.RedeployDisabled
+			}
+		}
+	}
+
 	// Lifecycle manage if configured
-	if !plan.Running.IsNull() && !plan.Running.IsUnknown() {
+	if !boolValue(plan.Archived) && !plan.Running.IsNull() && !plan.Running.IsUnknown() {
 		desired := plan.Running.ValueBool()
 		current := state.Running.ValueBool()
 		if desired != current {
@@ -276,6 +352,10 @@ func (r *ProjectResource) Update(ctx context.Context, req resource.UpdateRequest
 	state.Status = types.StringValue(out.Status)
 	state.ServiceCount = types.Int64Value(int64(out.ServiceCount))
 	state.RunningCount = types.Int64Value(int64(out.RunningCount))
+	state.Archived = types.BoolValue(out.IsArchived)
+	state.ArchivedAt = nullableString(out.ArchivedAt)
+	state.IsDiscovered = types.BoolValue(out.IsDiscovered)
+	state.RedeployDisabled = types.BoolValue(out.RedeployDisabled)
 	// Leave created_at and updated_at unchanged to avoid plan inconsistency
 	state.Compose = plan.Compose
 	state.Env = plan.Env

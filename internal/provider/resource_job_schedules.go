@@ -45,9 +45,17 @@ func (r *JobSchedulesResource) Schema(_ context.Context, _ resource.SchemaReques
 				Optional:    true,
 				Description: "Cron expression for analytics heartbeat (e.g., '0 */5 * * * *' for every 5 minutes)",
 			},
+			"auto_heal_interval": resourceschema.StringAttribute{
+				Optional:    true,
+				Description: "Cron expression for auto-heal checks",
+			},
 			"auto_update_interval": resourceschema.StringAttribute{
 				Optional:    true,
 				Description: "Cron expression for auto-update checks (e.g., '0 0 2 * * *' for daily at 2 AM)",
+			},
+			"docker_client_refresh_interval": resourceschema.StringAttribute{
+				Optional:    true,
+				Description: "Cron expression for Docker client refresh",
 			},
 			"environment_health_interval": resourceschema.StringAttribute{
 				Optional:    true,
@@ -56,6 +64,10 @@ func (r *JobSchedulesResource) Schema(_ context.Context, _ resource.SchemaReques
 			"event_cleanup_interval": resourceschema.StringAttribute{
 				Optional:    true,
 				Description: "Cron expression for event log cleanup (e.g., '0 0 3 * * *' for daily at 3 AM)",
+			},
+			"expired_sessions_cleanup_interval": resourceschema.StringAttribute{
+				Optional:    true,
+				Description: "Cron expression for expired session cleanup",
 			},
 			"gitops_sync_interval": resourceschema.StringAttribute{
 				Optional:    true,
@@ -68,6 +80,10 @@ func (r *JobSchedulesResource) Schema(_ context.Context, _ resource.SchemaReques
 			"scheduled_prune_interval": resourceschema.StringAttribute{
 				Optional:    true,
 				Description: "Cron expression for scheduled pruning of Docker resources (e.g., '0 0 1 * * 0' for weekly on Sunday at 1 AM)",
+			},
+			"vulnerability_scan_interval": resourceschema.StringAttribute{
+				Optional:    true,
+				Description: "Cron expression for vulnerability scans",
 			},
 		},
 	}
@@ -82,15 +98,19 @@ func (r *JobSchedulesResource) Configure(_ context.Context, req resource.Configu
 }
 
 type jobSchedulesModel struct {
-	ID                         types.String `tfsdk:"id"`
-	EnvironmentID              types.String `tfsdk:"environment_id"`
-	AnalyticsHeartbeatInterval types.String `tfsdk:"analytics_heartbeat_interval"`
-	AutoUpdateInterval         types.String `tfsdk:"auto_update_interval"`
-	EnvironmentHealthInterval  types.String `tfsdk:"environment_health_interval"`
-	EventCleanupInterval       types.String `tfsdk:"event_cleanup_interval"`
-	GitOpsSyncInterval         types.String `tfsdk:"gitops_sync_interval"`
-	PollingInterval            types.String `tfsdk:"polling_interval"`
-	ScheduledPruneInterval     types.String `tfsdk:"scheduled_prune_interval"`
+	ID                             types.String `tfsdk:"id"`
+	EnvironmentID                  types.String `tfsdk:"environment_id"`
+	AnalyticsHeartbeatInterval     types.String `tfsdk:"analytics_heartbeat_interval"`
+	AutoHealInterval               types.String `tfsdk:"auto_heal_interval"`
+	AutoUpdateInterval             types.String `tfsdk:"auto_update_interval"`
+	DockerClientRefreshInterval    types.String `tfsdk:"docker_client_refresh_interval"`
+	EnvironmentHealthInterval      types.String `tfsdk:"environment_health_interval"`
+	EventCleanupInterval           types.String `tfsdk:"event_cleanup_interval"`
+	ExpiredSessionsCleanupInterval types.String `tfsdk:"expired_sessions_cleanup_interval"`
+	GitOpsSyncInterval             types.String `tfsdk:"gitops_sync_interval"`
+	PollingInterval                types.String `tfsdk:"polling_interval"`
+	ScheduledPruneInterval         types.String `tfsdk:"scheduled_prune_interval"`
+	VulnerabilityScanInterval      types.String `tfsdk:"vulnerability_scan_interval"`
 }
 
 func (r *JobSchedulesResource) Create(ctx context.Context, req resource.CreateRequest, resp *resource.CreateResponse) {
@@ -192,9 +212,17 @@ func buildJobSchedulesRequest(m jobSchedulesModel) sdkclient.UpdateJobSchedulesR
 		v := m.AnalyticsHeartbeatInterval.ValueString()
 		req.AnalyticsHeartbeatInterval = &v
 	}
+	if !m.AutoHealInterval.IsNull() && !m.AutoHealInterval.IsUnknown() {
+		v := m.AutoHealInterval.ValueString()
+		req.AutoHealInterval = &v
+	}
 	if !m.AutoUpdateInterval.IsNull() && !m.AutoUpdateInterval.IsUnknown() {
 		v := m.AutoUpdateInterval.ValueString()
 		req.AutoUpdateInterval = &v
+	}
+	if !m.DockerClientRefreshInterval.IsNull() && !m.DockerClientRefreshInterval.IsUnknown() {
+		v := m.DockerClientRefreshInterval.ValueString()
+		req.DockerClientRefreshInterval = &v
 	}
 	if !m.EnvironmentHealthInterval.IsNull() && !m.EnvironmentHealthInterval.IsUnknown() {
 		v := m.EnvironmentHealthInterval.ValueString()
@@ -203,6 +231,10 @@ func buildJobSchedulesRequest(m jobSchedulesModel) sdkclient.UpdateJobSchedulesR
 	if !m.EventCleanupInterval.IsNull() && !m.EventCleanupInterval.IsUnknown() {
 		v := m.EventCleanupInterval.ValueString()
 		req.EventCleanupInterval = &v
+	}
+	if !m.ExpiredSessionsCleanupInterval.IsNull() && !m.ExpiredSessionsCleanupInterval.IsUnknown() {
+		v := m.ExpiredSessionsCleanupInterval.ValueString()
+		req.ExpiredSessionsCleanupInterval = &v
 	}
 	if !m.GitOpsSyncInterval.IsNull() && !m.GitOpsSyncInterval.IsUnknown() {
 		v := m.GitOpsSyncInterval.ValueString()
@@ -216,6 +248,10 @@ func buildJobSchedulesRequest(m jobSchedulesModel) sdkclient.UpdateJobSchedulesR
 		v := m.ScheduledPruneInterval.ValueString()
 		req.ScheduledPruneInterval = &v
 	}
+	if !m.VulnerabilityScanInterval.IsNull() && !m.VulnerabilityScanInterval.IsUnknown() {
+		v := m.VulnerabilityScanInterval.ValueString()
+		req.VulnerabilityScanInterval = &v
+	}
 
 	return req
 }
@@ -226,14 +262,23 @@ func applyJobSchedulesConfig(m *jobSchedulesModel, config *sdkclient.JobSchedule
 	if !m.AnalyticsHeartbeatInterval.IsNull() {
 		m.AnalyticsHeartbeatInterval = types.StringValue(config.AnalyticsHeartbeatInterval)
 	}
+	if !m.AutoHealInterval.IsNull() {
+		m.AutoHealInterval = types.StringValue(config.AutoHealInterval)
+	}
 	if !m.AutoUpdateInterval.IsNull() {
 		m.AutoUpdateInterval = types.StringValue(config.AutoUpdateInterval)
+	}
+	if !m.DockerClientRefreshInterval.IsNull() {
+		m.DockerClientRefreshInterval = types.StringValue(config.DockerClientRefreshInterval)
 	}
 	if !m.EnvironmentHealthInterval.IsNull() {
 		m.EnvironmentHealthInterval = types.StringValue(config.EnvironmentHealthInterval)
 	}
 	if !m.EventCleanupInterval.IsNull() {
 		m.EventCleanupInterval = types.StringValue(config.EventCleanupInterval)
+	}
+	if !m.ExpiredSessionsCleanupInterval.IsNull() {
+		m.ExpiredSessionsCleanupInterval = types.StringValue(config.ExpiredSessionsCleanupInterval)
 	}
 	if !m.GitOpsSyncInterval.IsNull() {
 		m.GitOpsSyncInterval = types.StringValue(config.GitOpsSyncInterval)
@@ -243,5 +288,8 @@ func applyJobSchedulesConfig(m *jobSchedulesModel, config *sdkclient.JobSchedule
 	}
 	if !m.ScheduledPruneInterval.IsNull() {
 		m.ScheduledPruneInterval = types.StringValue(config.ScheduledPruneInterval)
+	}
+	if !m.VulnerabilityScanInterval.IsNull() {
+		m.VulnerabilityScanInterval = types.StringValue(config.VulnerabilityScanInterval)
 	}
 }

@@ -26,6 +26,17 @@ func mustJSON(v any) string {
 	return string(b)
 }
 
+func nullableString(v string) types.String {
+	if v == "" {
+		return types.StringNull()
+	}
+	return types.StringValue(v)
+}
+
+func boolValue(v types.Bool) bool {
+	return !v.IsNull() && !v.IsUnknown() && v.ValueBool()
+}
+
 type categoriesModel struct {
 	TotalCount types.Int64  `tfsdk:"total_count"`
 	DataJSON   types.String `tfsdk:"data_json"`
