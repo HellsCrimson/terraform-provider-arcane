@@ -317,25 +317,61 @@ func (r *GitOpsSyncResource) Create(ctx context.Context, req resource.CreateRequ
 	}
 
 	state := gitOpsSyncModel{
-		ID:                   types.StringValue(sync.ID),
-		EnvironmentID:        types.StringValue(sync.EnvironmentID),
-		Name:                 types.StringValue(sync.Name),
-		RepositoryID:         types.StringValue(sync.RepositoryID),
-		Branch:               types.StringValue(sync.Branch),
-		ComposePath:          types.StringValue(sync.ComposePath),
-		ProjectName:          types.StringValue(sync.ProjectName),
-		AutoSync:             types.BoolValue(sync.AutoSync),
-		SyncInterval:         types.Int64Value(sync.SyncInterval),
-		MaxSyncBinarySize:    types.Int64Value(sync.MaxSyncBinarySize),
-		MaxSyncFiles:         types.Int64Value(sync.MaxSyncFiles),
-		MaxSyncTotalSize:     types.Int64Value(sync.MaxSyncTotalSize),
-		SyncDirectory:        types.BoolValue(sync.SyncDirectory),
-		TargetType:           types.StringValue(sync.TargetType),
-		Enabled:              types.BoolValue(sync.Enabled),
+		ID:            types.StringValue(sync.ID),
+		EnvironmentID: types.StringValue(sync.EnvironmentID),
+		Name:          types.StringValue(sync.Name),
+		RepositoryID:  types.StringValue(sync.RepositoryID),
+		Branch:        types.StringValue(sync.Branch),
+		ComposePath:   types.StringValue(sync.ComposePath),
+		// Optional fields below are set conditionally so we preserve
+		// the user's plan (null) when they didn't provide a value.
 		EnvironmentVariables: plan.EnvironmentVariables,
 		StartProject:         plan.StartProject, // Preserve the user's preference
 		CreatedAt:            types.StringValue(sync.CreatedAt),
 		UpdatedAt:            types.StringValue(sync.UpdatedAt),
+	}
+
+	// Preserve plan nulls for optional fields: use server value only when
+	// the user provided a value in the plan; otherwise keep plan (null).
+	if !plan.ProjectName.IsNull() && !plan.ProjectName.IsUnknown() {
+		state.ProjectName = types.StringValue(sync.ProjectName)
+	} else {
+		state.ProjectName = plan.ProjectName
+	}
+	if !plan.AutoSync.IsNull() && !plan.AutoSync.IsUnknown() {
+		state.AutoSync = types.BoolValue(sync.AutoSync)
+	} else {
+		state.AutoSync = plan.AutoSync
+	}
+	if !plan.SyncInterval.IsNull() && !plan.SyncInterval.IsUnknown() {
+		state.SyncInterval = types.Int64Value(sync.SyncInterval)
+	} else {
+		state.SyncInterval = plan.SyncInterval
+	}
+	if !plan.MaxSyncBinarySize.IsNull() && !plan.MaxSyncBinarySize.IsUnknown() {
+		state.MaxSyncBinarySize = types.Int64Value(sync.MaxSyncBinarySize)
+	} else {
+		state.MaxSyncBinarySize = plan.MaxSyncBinarySize
+	}
+	if !plan.MaxSyncFiles.IsNull() && !plan.MaxSyncFiles.IsUnknown() {
+		state.MaxSyncFiles = types.Int64Value(sync.MaxSyncFiles)
+	} else {
+		state.MaxSyncFiles = plan.MaxSyncFiles
+	}
+	if !plan.MaxSyncTotalSize.IsNull() && !plan.MaxSyncTotalSize.IsUnknown() {
+		state.MaxSyncTotalSize = types.Int64Value(sync.MaxSyncTotalSize)
+	} else {
+		state.MaxSyncTotalSize = plan.MaxSyncTotalSize
+	}
+	if !plan.SyncDirectory.IsNull() && !plan.SyncDirectory.IsUnknown() {
+		state.SyncDirectory = types.BoolValue(sync.SyncDirectory)
+	} else {
+		state.SyncDirectory = plan.SyncDirectory
+	}
+	if !plan.TargetType.IsNull() && !plan.TargetType.IsUnknown() {
+		state.TargetType = types.StringValue(sync.TargetType)
+	} else {
+		state.TargetType = plan.TargetType
 	}
 
 	if sync.ProjectID != nil {
@@ -378,36 +414,43 @@ func (r *GitOpsSyncResource) Read(ctx context.Context, req resource.ReadRequest,
 	state.RepositoryID = types.StringValue(sync.RepositoryID)
 	state.Branch = types.StringValue(sync.Branch)
 	state.ComposePath = types.StringValue(sync.ComposePath)
-	state.ProjectName = types.StringValue(sync.ProjectName)
-	state.AutoSync = types.BoolValue(sync.AutoSync)
-	state.SyncInterval = types.Int64Value(sync.SyncInterval)
-	state.MaxSyncBinarySize = types.Int64Value(sync.MaxSyncBinarySize)
-	state.MaxSyncFiles = types.Int64Value(sync.MaxSyncFiles)
-	state.MaxSyncTotalSize = types.Int64Value(sync.MaxSyncTotalSize)
-	state.SyncDirectory = types.BoolValue(sync.SyncDirectory)
-	state.TargetType = types.StringValue(sync.TargetType)
+	// Preserve existing state nulls for optional fields: only overwrite
+	// with server values when the state already had a non-null value.
+	if !state.ProjectName.IsNull() && !state.ProjectName.IsUnknown() {
+		state.ProjectName = types.StringValue(sync.ProjectName)
+	}
+	if !state.AutoSync.IsNull() && !state.AutoSync.IsUnknown() {
+		state.AutoSync = types.BoolValue(sync.AutoSync)
+	}
+	if !state.SyncInterval.IsNull() && !state.SyncInterval.IsUnknown() {
+		state.SyncInterval = types.Int64Value(sync.SyncInterval)
+	}
+	if !state.MaxSyncBinarySize.IsNull() && !state.MaxSyncBinarySize.IsUnknown() {
+		state.MaxSyncBinarySize = types.Int64Value(sync.MaxSyncBinarySize)
+	}
+	if !state.MaxSyncFiles.IsNull() && !state.MaxSyncFiles.IsUnknown() {
+		state.MaxSyncFiles = types.Int64Value(sync.MaxSyncFiles)
+	}
+	if !state.MaxSyncTotalSize.IsNull() && !state.MaxSyncTotalSize.IsUnknown() {
+		state.MaxSyncTotalSize = types.Int64Value(sync.MaxSyncTotalSize)
+	}
+	if !state.SyncDirectory.IsNull() && !state.SyncDirectory.IsUnknown() {
+		state.SyncDirectory = types.BoolValue(sync.SyncDirectory)
+	}
+	if !state.TargetType.IsNull() && !state.TargetType.IsUnknown() {
+		state.TargetType = types.StringValue(sync.TargetType)
+	}
 	state.Enabled = types.BoolValue(sync.Enabled)
 	// Leave updated_at and created_at unchanged to avoid plan inconsistency on server-side timestamp changes
 	// start_project is preserved from state as it's a lifecycle control, not an API field
 
 	if sync.ProjectID != nil {
 		state.ProjectID = types.StringValue(*sync.ProjectID)
-		// Fetch environment variables from the project if it exists
-		project, err := r.client.GetProject(ctx, state.EnvironmentID.ValueString(), *sync.ProjectID)
-		if err == nil && project.EnvContent != nil {
-			envMap, err := envContentToMap(ctx, *project.EnvContent)
-			if err != nil {
-				resp.Diagnostics.AddError("parse environment variables failed", err.Error())
-				return
-			}
-			state.EnvironmentVariables = envMap
-		} else {
-			state.EnvironmentVariables = types.MapNull(types.StringType)
-		}
 	} else {
 		state.ProjectID = types.StringNull()
-		state.EnvironmentVariables = types.MapNull(types.StringType)
 	}
+	// Preserve the configured environment variables in state so refreshes do
+	// not turn them into a fresh API-derived value every time.
 	if sync.LastSyncAt != nil {
 		state.LastSyncAt = types.StringValue(*sync.LastSyncAt)
 	} else {
@@ -423,10 +466,8 @@ func (r *GitOpsSyncResource) Read(ctx context.Context, req resource.ReadRequest,
 	} else {
 		state.LastSyncStatus = types.StringNull()
 	}
-	if sync.LastSyncError != nil {
+	if sync.LastSyncError != nil && *sync.LastSyncError != "" {
 		state.LastSyncError = types.StringValue(*sync.LastSyncError)
-	} else {
-		state.LastSyncError = types.StringNull()
 	}
 
 	resp.Diagnostics.Append(resp.State.Set(ctx, &state)...)
@@ -525,14 +566,47 @@ func (r *GitOpsSyncResource) Update(ctx context.Context, req resource.UpdateRequ
 	state.RepositoryID = types.StringValue(sync.RepositoryID)
 	state.Branch = types.StringValue(sync.Branch)
 	state.ComposePath = types.StringValue(sync.ComposePath)
-	state.ProjectName = types.StringValue(sync.ProjectName)
-	state.AutoSync = types.BoolValue(sync.AutoSync)
-	state.SyncInterval = types.Int64Value(sync.SyncInterval)
-	state.MaxSyncBinarySize = types.Int64Value(sync.MaxSyncBinarySize)
-	state.MaxSyncFiles = types.Int64Value(sync.MaxSyncFiles)
-	state.MaxSyncTotalSize = types.Int64Value(sync.MaxSyncTotalSize)
-	state.SyncDirectory = types.BoolValue(sync.SyncDirectory)
-	state.TargetType = types.StringValue(sync.TargetType)
+	// Preserve plan nulls for optional fields
+	if !plan.ProjectName.IsNull() && !plan.ProjectName.IsUnknown() {
+		state.ProjectName = types.StringValue(sync.ProjectName)
+	} else {
+		state.ProjectName = plan.ProjectName
+	}
+	if !plan.AutoSync.IsNull() && !plan.AutoSync.IsUnknown() {
+		state.AutoSync = types.BoolValue(sync.AutoSync)
+	} else {
+		state.AutoSync = plan.AutoSync
+	}
+	if !plan.SyncInterval.IsNull() && !plan.SyncInterval.IsUnknown() {
+		state.SyncInterval = types.Int64Value(sync.SyncInterval)
+	} else {
+		state.SyncInterval = plan.SyncInterval
+	}
+	if !plan.MaxSyncBinarySize.IsNull() && !plan.MaxSyncBinarySize.IsUnknown() {
+		state.MaxSyncBinarySize = types.Int64Value(sync.MaxSyncBinarySize)
+	} else {
+		state.MaxSyncBinarySize = plan.MaxSyncBinarySize
+	}
+	if !plan.MaxSyncFiles.IsNull() && !plan.MaxSyncFiles.IsUnknown() {
+		state.MaxSyncFiles = types.Int64Value(sync.MaxSyncFiles)
+	} else {
+		state.MaxSyncFiles = plan.MaxSyncFiles
+	}
+	if !plan.MaxSyncTotalSize.IsNull() && !plan.MaxSyncTotalSize.IsUnknown() {
+		state.MaxSyncTotalSize = types.Int64Value(sync.MaxSyncTotalSize)
+	} else {
+		state.MaxSyncTotalSize = plan.MaxSyncTotalSize
+	}
+	if !plan.SyncDirectory.IsNull() && !plan.SyncDirectory.IsUnknown() {
+		state.SyncDirectory = types.BoolValue(sync.SyncDirectory)
+	} else {
+		state.SyncDirectory = plan.SyncDirectory
+	}
+	if !plan.TargetType.IsNull() && !plan.TargetType.IsUnknown() {
+		state.TargetType = types.StringValue(sync.TargetType)
+	} else {
+		state.TargetType = plan.TargetType
+	}
 	state.Enabled = types.BoolValue(sync.Enabled)
 	// Leave updated_at unchanged to avoid plan inconsistency on server-side timestamp changes
 	state.EnvironmentVariables = plan.EnvironmentVariables

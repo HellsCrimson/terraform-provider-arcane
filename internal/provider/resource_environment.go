@@ -178,15 +178,27 @@ func (r *EnvironmentResource) Create(ctx context.Context, req resource.CreateReq
 
 	state := environmentModel{
 		ID:               types.StringValue(env.ID),
-		Name:             plan.Name,
 		APIURL:           types.StringValue(env.APIURL),
 		AccessToken:      plan.AccessToken,
 		BootstrapToken:   plan.BootstrapToken,
 		UseAPIKey:        plan.UseAPIKey,
-		IsEdge:           types.BoolValue(env.IsEdge),
-		Enabled:          plan.Enabled,
 		RegenerateAPIKey: plan.RegenerateAPIKey,
 		Status:           types.StringValue(env.Status),
+	}
+	if !plan.Name.IsNull() && !plan.Name.IsUnknown() {
+		state.Name = types.StringValue(env.Name)
+	} else {
+		state.Name = plan.Name
+	}
+	if !plan.IsEdge.IsNull() && !plan.IsEdge.IsUnknown() {
+		state.IsEdge = types.BoolValue(env.IsEdge)
+	} else {
+		state.IsEdge = plan.IsEdge
+	}
+	if !plan.Enabled.IsNull() && !plan.Enabled.IsUnknown() {
+		state.Enabled = types.BoolValue(env.Enabled)
+	} else {
+		state.Enabled = plan.Enabled
 	}
 	if env.APIKey != "" {
 		state.APIKey = types.StringValue(env.APIKey)
@@ -213,11 +225,17 @@ func (r *EnvironmentResource) Read(ctx context.Context, req resource.ReadRequest
 		return
 	}
 
-	state.Name = types.StringValue(env.Name)
 	state.APIURL = types.StringValue(env.APIURL)
 	state.Status = types.StringValue(env.Status)
-	state.Enabled = types.BoolValue(env.Enabled)
-	state.IsEdge = types.BoolValue(env.IsEdge)
+	if !state.Name.IsNull() && !state.Name.IsUnknown() {
+		state.Name = types.StringValue(env.Name)
+	}
+	if !state.Enabled.IsNull() && !state.Enabled.IsUnknown() {
+		state.Enabled = types.BoolValue(env.Enabled)
+	}
+	if !state.IsEdge.IsNull() && !state.IsEdge.IsUnknown() {
+		state.IsEdge = types.BoolValue(env.IsEdge)
+	}
 	applyEnvironmentEdgeFields(ctx, &state, env)
 	// access_token/bootstrap_token/use_api_key remain as configured
 	resp.Diagnostics.Append(resp.State.Set(ctx, &state)...)

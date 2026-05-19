@@ -190,14 +190,31 @@ func (r *NetworkResource) Create(ctx context.Context, req resource.CreateRequest
 		ID:            types.StringValue(networkDetails.ID),
 		EnvironmentID: plan.EnvironmentID,
 		Name:          types.StringValue(networkDetails.Name),
-		Driver:        types.StringValue(networkDetails.Driver),
-		Attachable:    types.BoolValue(networkDetails.Attachable),
-		Internal:      types.BoolValue(networkDetails.Internal),
-		EnableIPv6:    types.BoolValue(networkDetails.EnableIPv6),
 		Scope:         types.StringValue(networkDetails.Scope),
 		Created:       types.StringValue(networkDetails.Created),
 		Labels:        plan.Labels,
 		Options:       plan.Options,
+	}
+
+	if !plan.Driver.IsNull() && !plan.Driver.IsUnknown() {
+		state.Driver = types.StringValue(networkDetails.Driver)
+	} else {
+		state.Driver = plan.Driver
+	}
+	if !plan.Attachable.IsNull() && !plan.Attachable.IsUnknown() {
+		state.Attachable = types.BoolValue(networkDetails.Attachable)
+	} else {
+		state.Attachable = plan.Attachable
+	}
+	if !plan.Internal.IsNull() && !plan.Internal.IsUnknown() {
+		state.Internal = types.BoolValue(networkDetails.Internal)
+	} else {
+		state.Internal = plan.Internal
+	}
+	if !plan.EnableIPv6.IsNull() && !plan.EnableIPv6.IsUnknown() {
+		state.EnableIPv6 = types.BoolValue(networkDetails.EnableIPv6)
+	} else {
+		state.EnableIPv6 = plan.EnableIPv6
 	}
 
 	// Preserve optional bools from plan
@@ -225,10 +242,18 @@ func (r *NetworkResource) Read(ctx context.Context, req resource.ReadRequest, re
 	}
 
 	state.Name = types.StringValue(network.Name)
-	state.Driver = types.StringValue(network.Driver)
-	state.Attachable = types.BoolValue(network.Attachable)
-	state.Internal = types.BoolValue(network.Internal)
-	state.EnableIPv6 = types.BoolValue(network.EnableIPv6)
+	if !state.Driver.IsNull() && !state.Driver.IsUnknown() {
+		state.Driver = types.StringValue(network.Driver)
+	}
+	if !state.Attachable.IsNull() && !state.Attachable.IsUnknown() {
+		state.Attachable = types.BoolValue(network.Attachable)
+	}
+	if !state.Internal.IsNull() && !state.Internal.IsUnknown() {
+		state.Internal = types.BoolValue(network.Internal)
+	}
+	if !state.EnableIPv6.IsNull() && !state.EnableIPv6.IsUnknown() {
+		state.EnableIPv6 = types.BoolValue(network.EnableIPv6)
+	}
 	state.Scope = types.StringValue(network.Scope)
 	state.Created = types.StringValue(network.Created)
 
