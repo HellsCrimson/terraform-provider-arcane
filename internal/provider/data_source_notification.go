@@ -45,9 +45,8 @@ func (d *NotificationDataSource) Schema(ctx context.Context, req datasource.Sche
 				Computed:    true,
 				Description: "Whether the notification is enabled",
 			},
-			"config": schema.MapAttribute{
+			"config": schema.DynamicAttribute{
 				Computed:    true,
-				ElementType: types.StringType,
 				Description: "Provider-specific configuration",
 			},
 		},
@@ -67,11 +66,11 @@ func (d *NotificationDataSource) Configure(ctx context.Context, req datasource.C
 }
 
 type notificationDataSourceModel struct {
-	ID            types.String `tfsdk:"id"`
-	EnvironmentID types.String `tfsdk:"environment_id"`
-	ProviderName  types.String `tfsdk:"provider_name"`
-	Enabled       types.Bool   `tfsdk:"enabled"`
-	Config        types.Map    `tfsdk:"config"`
+	ID            types.String  `tfsdk:"id"`
+	EnvironmentID types.String  `tfsdk:"environment_id"`
+	ProviderName  types.String  `tfsdk:"provider_name"`
+	Enabled       types.Bool    `tfsdk:"enabled"`
+	Config        types.Dynamic `tfsdk:"config"`
 }
 
 func (d *NotificationDataSource) Read(ctx context.Context, req datasource.ReadRequest, resp *datasource.ReadResponse) {
@@ -96,7 +95,7 @@ func (d *NotificationDataSource) Read(ctx context.Context, req datasource.ReadRe
 		EnvironmentID: config.EnvironmentID,
 		ProviderName:  types.StringValue(notification.Provider),
 		Enabled:       types.BoolValue(notification.Enabled),
-		Config:        anyMapToStringMap(ctx, notification.Config),
+		Config:        anyMapToDynamicConfig(ctx, notification.Config),
 	}
 
 	resp.Diagnostics.Append(resp.State.Set(ctx, &state)...)

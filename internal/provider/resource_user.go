@@ -154,22 +154,26 @@ func (r *UserResource) Create(ctx context.Context, req resource.CreateRequest, r
 	}
 	// Keep provided password in state to avoid sensitive inconsistency after apply
 	state.Password = plan.Password
-	if u.Display != nil {
+	if !plan.DisplayName.IsNull() && !plan.DisplayName.IsUnknown() && u.Display != nil {
 		state.DisplayName = types.StringValue(*u.Display)
 	} else {
-		state.DisplayName = types.StringNull()
+		state.DisplayName = plan.DisplayName
 	}
-	if u.Email != nil {
+	if !plan.Email.IsNull() && !plan.Email.IsUnknown() && u.Email != nil {
 		state.Email = types.StringValue(*u.Email)
 	} else {
-		state.Email = types.StringNull()
+		state.Email = plan.Email
 	}
-	if u.Locale != nil {
+	if !plan.Locale.IsNull() && !plan.Locale.IsUnknown() && u.Locale != nil {
 		state.Locale = types.StringValue(*u.Locale)
 	} else {
-		state.Locale = types.StringNull()
+		state.Locale = plan.Locale
 	}
-	state.Roles = stringSliceToSet(ctx, u.Roles)
+	if !plan.Roles.IsNull() && !plan.Roles.IsUnknown() {
+		state.Roles = stringSliceToSet(ctx, u.Roles)
+	} else {
+		state.Roles = plan.Roles
+	}
 
 	diags = resp.State.Set(ctx, &state)
 	resp.Diagnostics.Append(diags...)
@@ -198,22 +202,18 @@ func (r *UserResource) Read(ctx context.Context, req resource.ReadRequest, resp 
 	state.Username = types.StringValue(u.Username)
 	state.CreatedAt = stringOrNull(u.CreatedAt)
 	state.UpdatedAt = stringOrNull(u.UpdatedAt)
-	if u.Display != nil {
+	if !state.DisplayName.IsNull() && !state.DisplayName.IsUnknown() && u.Display != nil {
 		state.DisplayName = types.StringValue(*u.Display)
-	} else {
-		state.DisplayName = types.StringNull()
 	}
-	if u.Email != nil {
+	if !state.Email.IsNull() && !state.Email.IsUnknown() && u.Email != nil {
 		state.Email = types.StringValue(*u.Email)
-	} else {
-		state.Email = types.StringNull()
 	}
-	if u.Locale != nil {
+	if !state.Locale.IsNull() && !state.Locale.IsUnknown() && u.Locale != nil {
 		state.Locale = types.StringValue(*u.Locale)
-	} else {
-		state.Locale = types.StringNull()
 	}
-	state.Roles = stringSliceToSet(ctx, u.Roles)
+	if !state.Roles.IsNull() && !state.Roles.IsUnknown() {
+		state.Roles = stringSliceToSet(ctx, u.Roles)
+	}
 
 	diags = resp.State.Set(ctx, &state)
 	resp.Diagnostics.Append(diags...)
@@ -258,22 +258,26 @@ func (r *UserResource) Update(ctx context.Context, req resource.UpdateRequest, r
 	state.Username = types.StringValue(u.Username)
 	state.CreatedAt = stringOrNull(u.CreatedAt)
 	state.UpdatedAt = stringOrNull(u.UpdatedAt)
-	if u.Display != nil {
+	if !plan.DisplayName.IsNull() && !plan.DisplayName.IsUnknown() && u.Display != nil {
 		state.DisplayName = types.StringValue(*u.Display)
 	} else {
-		state.DisplayName = types.StringNull()
+		state.DisplayName = plan.DisplayName
 	}
-	if u.Email != nil {
+	if !plan.Email.IsNull() && !plan.Email.IsUnknown() && u.Email != nil {
 		state.Email = types.StringValue(*u.Email)
 	} else {
-		state.Email = types.StringNull()
+		state.Email = plan.Email
 	}
-	if u.Locale != nil {
+	if !plan.Locale.IsNull() && !plan.Locale.IsUnknown() && u.Locale != nil {
 		state.Locale = types.StringValue(*u.Locale)
 	} else {
-		state.Locale = types.StringNull()
+		state.Locale = plan.Locale
 	}
-	state.Roles = stringSliceToSet(ctx, u.Roles)
+	if !plan.Roles.IsNull() && !plan.Roles.IsUnknown() {
+		state.Roles = stringSliceToSet(ctx, u.Roles)
+	} else {
+		state.Roles = plan.Roles
+	}
 	// If password provided in plan, keep it in state to match planned value
 	if !plan.Password.IsNull() && !plan.Password.IsUnknown() && plan.Password.ValueString() != "" {
 		state.Password = plan.Password

@@ -30,3 +30,4 @@ output "container_image" {
 - `image` (String) — container image.
 - `created` (String) — creation timestamp.
 - `status` (String) — container status.
+- `redeploy_disabled` (Bool) — whether redeploy/update actions are disabled for this container.

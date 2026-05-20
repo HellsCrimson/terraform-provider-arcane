@@ -53,6 +53,10 @@ func (d *ContainerDataSource) Schema(ctx context.Context, req datasource.SchemaR
 				Computed:    true,
 				Description: "Container status",
 			},
+			"redeploy_disabled": schema.BoolAttribute{
+				Computed:    true,
+				Description: "Whether redeploy/update actions are disabled for this container",
+			},
 		},
 	}
 }
@@ -70,12 +74,13 @@ func (d *ContainerDataSource) Configure(ctx context.Context, req datasource.Conf
 }
 
 type containerDataSourceModel struct {
-	EnvironmentID types.String `tfsdk:"environment_id"`
-	ID            types.String `tfsdk:"id"`
-	Name          types.String `tfsdk:"name"`
-	Image         types.String `tfsdk:"image"`
-	Created       types.String `tfsdk:"created"`
-	Status        types.String `tfsdk:"status"`
+	EnvironmentID    types.String `tfsdk:"environment_id"`
+	ID               types.String `tfsdk:"id"`
+	Name             types.String `tfsdk:"name"`
+	Image            types.String `tfsdk:"image"`
+	Created          types.String `tfsdk:"created"`
+	Status           types.String `tfsdk:"status"`
+	RedeployDisabled types.Bool   `tfsdk:"redeploy_disabled"`
 }
 
 func (d *ContainerDataSource) Read(ctx context.Context, req datasource.ReadRequest, resp *datasource.ReadResponse) {
@@ -96,12 +101,13 @@ func (d *ContainerDataSource) Read(ctx context.Context, req datasource.ReadReque
 	}
 
 	state := containerDataSourceModel{
-		EnvironmentID: config.EnvironmentID,
-		ID:            types.StringValue(container.ID),
-		Name:          types.StringValue(container.Name),
-		Image:         types.StringValue(container.Image),
-		Created:       types.StringValue(container.Created),
-		Status:        types.StringValue(container.Status),
+		EnvironmentID:    config.EnvironmentID,
+		ID:               types.StringValue(container.ID),
+		Name:             types.StringValue(container.Name),
+		Image:            types.StringValue(container.Image),
+		Created:          types.StringValue(container.Created),
+		Status:           types.StringValue(container.Status),
+		RedeployDisabled: types.BoolValue(container.RedeployDisabled),
 	}
 
 	resp.Diagnostics.Append(resp.State.Set(ctx, &state)...)

@@ -24,4 +24,4 @@ output "notification_enabled" {
 
 - `id` (String) — notification ID (environment_id:provider_name).
 - `enabled` (Bool) — whether the notification is enabled.
-- `config` (Map of String) — provider-specific configuration.
+- `config` (Dynamic) — provider-specific configuration object. Nested objects are preserved.

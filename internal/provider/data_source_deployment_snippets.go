@@ -22,9 +22,13 @@ func (d *DeploymentSnippetDataSource) Metadata(_ context.Context, req datasource
 
 func (d *DeploymentSnippetDataSource) Schema(_ context.Context, _ datasource.SchemaRequest, resp *datasource.SchemaResponse) {
 	resp.Schema = schema.Schema{Attributes: map[string]schema.Attribute{
-		"environment_id": schema.StringAttribute{Required: true},
-		"docker_run":     schema.StringAttribute{Computed: true},
-		"docker_compose": schema.StringAttribute{Computed: true},
+		"environment_id":      schema.StringAttribute{Required: true},
+		"docker_run":          schema.StringAttribute{Computed: true},
+		"docker_compose":      schema.StringAttribute{Computed: true},
+		"mtls_docker_run":     schema.StringAttribute{Computed: true},
+		"mtls_docker_compose": schema.StringAttribute{Computed: true},
+		"mtls_host_dir_hint":  schema.StringAttribute{Computed: true},
+		"mtls_files_json":     schema.StringAttribute{Computed: true, Sensitive: true},
 	}}
 }
 
@@ -33,9 +37,13 @@ func (d *DeploymentSnippetDataSource) Configure(_ context.Context, req datasourc
 }
 
 type deploymentSnippetModel struct {
-	EnvironmentID types.String `tfsdk:"environment_id"`
-	DockerRun     types.String `tfsdk:"docker_run"`
-	DockerCompose types.String `tfsdk:"docker_compose"`
+	EnvironmentID     types.String `tfsdk:"environment_id"`
+	DockerRun         types.String `tfsdk:"docker_run"`
+	DockerCompose     types.String `tfsdk:"docker_compose"`
+	MTLSDockerRun     types.String `tfsdk:"mtls_docker_run"`
+	MTLSDockerCompose types.String `tfsdk:"mtls_docker_compose"`
+	MTLSHostDirHint   types.String `tfsdk:"mtls_host_dir_hint"`
+	MTLSFilesJSON     types.String `tfsdk:"mtls_files_json"`
 }
 
 func (d *DeploymentSnippetDataSource) Read(ctx context.Context, req datasource.ReadRequest, resp *datasource.ReadResponse) {
@@ -51,5 +59,16 @@ func (d *DeploymentSnippetDataSource) Read(ctx context.Context, req datasource.R
 	}
 	state.DockerRun = types.StringValue(out.DockerRun)
 	state.DockerCompose = types.StringValue(out.DockerCompose)
+	if out.MTLS != nil {
+		state.MTLSDockerRun = types.StringValue(out.MTLS.DockerRun)
+		state.MTLSDockerCompose = types.StringValue(out.MTLS.DockerCompose)
+		state.MTLSHostDirHint = types.StringValue(out.MTLS.HostDirHint)
+		state.MTLSFilesJSON = types.StringValue(mustJSON(out.MTLS.Files))
+	} else {
+		state.MTLSDockerRun = types.StringNull()
+		state.MTLSDockerCompose = types.StringNull()
+		state.MTLSHostDirHint = types.StringNull()
+		state.MTLSFilesJSON = types.StringNull()
+	}
 	resp.Diagnostics.Append(resp.State.Set(ctx, &state)...)
 }

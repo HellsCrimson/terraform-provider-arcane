@@ -2,6 +2,8 @@ Arcane Terraform Provider
 
 Manage Arcane using Terraform or OpenTofu. This provider talks to the Arcane HTTP API using an API key and implements common workflows: users, environment settings, compose projects (inline or from files), project state (up/down), notifications, and single containers.
 
+API schema version used for this version: `v1.19.4`.
+
 Overview
 
 - Auth via `X-API-Key` header.

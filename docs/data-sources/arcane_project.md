@@ -35,3 +35,7 @@ output "running_services" {
 - `running_count` (Number) — number of running services.
 - `created_at` (String) — creation timestamp.
 - `updated_at` (String) — last update timestamp.
+- `archived` (Bool) — whether the project is archived.
+- `archived_at` (String) — archive timestamp.
+- `is_discovered` (Bool) — whether the project was discovered.
+- `redeploy_disabled` (Bool) — whether redeploy/update actions are disabled for this project.

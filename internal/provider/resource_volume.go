@@ -153,7 +153,6 @@ func (r *VolumeResource) Create(ctx context.Context, req resource.CreateRequest,
 		ID:            types.StringValue(volume.ID),
 		EnvironmentID: plan.EnvironmentID,
 		Name:          types.StringValue(volume.Name),
-		Driver:        types.StringValue(volume.Driver),
 		Mountpoint:    types.StringValue(volume.Mountpoint),
 		Scope:         types.StringValue(volume.Scope),
 		CreatedAt:     types.StringValue(volume.CreatedAt),
@@ -161,6 +160,12 @@ func (r *VolumeResource) Create(ctx context.Context, req resource.CreateRequest,
 		Size:          types.Int64Value(volume.Size),
 		DriverOpts:    plan.DriverOpts,
 		Labels:        plan.Labels,
+	}
+
+	if !plan.Driver.IsNull() && !plan.Driver.IsUnknown() {
+		state.Driver = types.StringValue(volume.Driver)
+	} else {
+		state.Driver = plan.Driver
 	}
 
 	if len(volume.Containers) > 0 {
@@ -191,7 +196,9 @@ func (r *VolumeResource) Read(ctx context.Context, req resource.ReadRequest, res
 
 	state.ID = types.StringValue(volume.ID)
 	state.Name = types.StringValue(volume.Name)
-	state.Driver = types.StringValue(volume.Driver)
+	if !state.Driver.IsNull() && !state.Driver.IsUnknown() {
+		state.Driver = types.StringValue(volume.Driver)
+	}
 	state.Mountpoint = types.StringValue(volume.Mountpoint)
 	state.Scope = types.StringValue(volume.Scope)
 	state.CreatedAt = types.StringValue(volume.CreatedAt)

@@ -54,6 +54,27 @@ func (d *EnvironmentDataSource) Schema(ctx context.Context, req datasource.Schem
 				Sensitive:   true,
 				Description: "Environment API key",
 			},
+			"edge_agent_instance": schema.StringAttribute{
+				Computed:    true,
+				Description: "Edge agent instance identifier",
+			},
+			"edge_capabilities": schema.ListAttribute{
+				Computed:    true,
+				ElementType: types.StringType,
+				Description: "Capabilities reported by the edge agent",
+			},
+			"edge_mtls_certificate_json": schema.StringAttribute{
+				Computed:    true,
+				Description: "Edge mTLS certificate metadata as JSON",
+			},
+			"edge_security_mode": schema.StringAttribute{
+				Computed:    true,
+				Description: "Edge security mode",
+			},
+			"edge_session_id": schema.StringAttribute{
+				Computed:    true,
+				Description: "Edge session identifier",
+			},
 		},
 	}
 }
@@ -71,12 +92,17 @@ func (d *EnvironmentDataSource) Configure(ctx context.Context, req datasource.Co
 }
 
 type environmentDataSourceModel struct {
-	ID      types.String `tfsdk:"id"`
-	Name    types.String `tfsdk:"name"`
-	APIURL  types.String `tfsdk:"api_url"`
-	Status  types.String `tfsdk:"status"`
-	Enabled types.Bool   `tfsdk:"enabled"`
-	APIKey  types.String `tfsdk:"api_key"`
+	ID                      types.String `tfsdk:"id"`
+	Name                    types.String `tfsdk:"name"`
+	APIURL                  types.String `tfsdk:"api_url"`
+	Status                  types.String `tfsdk:"status"`
+	Enabled                 types.Bool   `tfsdk:"enabled"`
+	APIKey                  types.String `tfsdk:"api_key"`
+	EdgeAgentInstance       types.String `tfsdk:"edge_agent_instance"`
+	EdgeCapabilities        types.List   `tfsdk:"edge_capabilities"`
+	EdgeMTLSCertificateJSON types.String `tfsdk:"edge_mtls_certificate_json"`
+	EdgeSecurityMode        types.String `tfsdk:"edge_security_mode"`
+	EdgeSessionID           types.String `tfsdk:"edge_session_id"`
 }
 
 func (d *EnvironmentDataSource) Read(ctx context.Context, req datasource.ReadRequest, resp *datasource.ReadResponse) {
@@ -97,11 +123,20 @@ func (d *EnvironmentDataSource) Read(ctx context.Context, req datasource.ReadReq
 	}
 
 	state := environmentDataSourceModel{
-		ID:      types.StringValue(env.ID),
-		Name:    types.StringValue(env.Name),
-		APIURL:  types.StringValue(env.APIURL),
-		Status:  types.StringValue(env.Status),
-		Enabled: types.BoolValue(env.Enabled),
+		ID:                types.StringValue(env.ID),
+		Name:              types.StringValue(env.Name),
+		APIURL:            types.StringValue(env.APIURL),
+		Status:            types.StringValue(env.Status),
+		Enabled:           types.BoolValue(env.Enabled),
+		EdgeAgentInstance: nullableString(env.EdgeAgentInstance),
+		EdgeCapabilities:  stringsToList(ctx, env.EdgeCapabilities),
+		EdgeSecurityMode:  nullableString(env.EdgeSecurityMode),
+		EdgeSessionID:     nullableString(env.EdgeSessionID),
+	}
+	if env.EdgeMTLSCertificate != nil {
+		state.EdgeMTLSCertificateJSON = types.StringValue(mustJSON(env.EdgeMTLSCertificate))
+	} else {
+		state.EdgeMTLSCertificateJSON = types.StringNull()
 	}
 	if env.APIKey != "" {
 		state.APIKey = types.StringValue(env.APIKey)

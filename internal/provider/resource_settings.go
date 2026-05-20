@@ -40,76 +40,96 @@ func (r *SettingsResource) Schema(_ context.Context, _ resource.SchemaRequest, r
 				Description: "Environment ID.",
 			},
 			// SettingsUpdate attributes (all strings per OpenAPI schema)
-			"accent_color":                  resourceschema.StringAttribute{Optional: true, Description: "accentColor"},
-			"auth_local_enabled":            resourceschema.StringAttribute{Optional: true, Description: "authLocalEnabled"},
-			"auth_oidc_config":              resourceschema.StringAttribute{Optional: true, Description: "authOidcConfig"},
-			"auth_password_policy":          resourceschema.StringAttribute{Optional: true, Description: "authPasswordPolicy"},
-			"auth_session_timeout":          resourceschema.StringAttribute{Optional: true, Description: "authSessionTimeout"},
-			"auto_heal_enabled":             resourceschema.StringAttribute{Optional: true, Description: "autoHealEnabled"},
-			"auto_heal_excluded_containers": resourceschema.StringAttribute{Optional: true, Description: "autoHealExcludedContainers"},
-			"auto_heal_interval":            resourceschema.StringAttribute{Optional: true, Description: "autoHealInterval"},
-			"auto_heal_max_restarts":        resourceschema.StringAttribute{Optional: true, Description: "autoHealMaxRestarts"},
-			"auto_heal_restart_window":      resourceschema.StringAttribute{Optional: true, Description: "autoHealRestartWindow"},
-			"auto_inject_env":               resourceschema.StringAttribute{Optional: true, Description: "autoInjectEnv"},
-			"auto_update":                   resourceschema.StringAttribute{Optional: true, Description: "autoUpdate"},
-			"auto_update_excluded_containers": resourceschema.StringAttribute{Optional: true, Description: "autoUpdateExcludedContainers"},
-			"auto_update_interval":          resourceschema.StringAttribute{Optional: true, Description: "autoUpdateInterval"},
-			"base_server_url":               resourceschema.StringAttribute{Optional: true, Description: "baseServerUrl"},
-			"build_provider":                resourceschema.StringAttribute{Optional: true, Description: "buildProvider"},
-			"build_timeout":                 resourceschema.StringAttribute{Optional: true, Description: "buildTimeout"},
-			"builds_directory":              resourceschema.StringAttribute{Optional: true, Description: "buildsDirectory"},
-			"default_deploy_pull_policy":    resourceschema.StringAttribute{Optional: true, Description: "defaultDeployPullPolicy"},
-			"default_shell":                 resourceschema.StringAttribute{Optional: true, Description: "defaultShell"},
-			"depot_project_id":              resourceschema.StringAttribute{Optional: true, Description: "depotProjectId"},
-			"depot_token":                   resourceschema.StringAttribute{Optional: true, Description: "depotToken"},
-			"disk_usage_path":               resourceschema.StringAttribute{Optional: true, Description: "diskUsagePath"},
-			"docker_host":                   resourceschema.StringAttribute{Optional: true, Description: "dockerHost"},
-			"docker_prune_mode":                resourceschema.StringAttribute{Optional: true, Description: "dockerPruneMode"},
-			"docker_api_timeout":               resourceschema.StringAttribute{Optional: true, Description: "dockerApiTimeout"},
-			"docker_image_pull_timeout":        resourceschema.StringAttribute{Optional: true, Description: "dockerImagePullTimeout"},
-			"enable_gravatar":                  resourceschema.StringAttribute{Optional: true, Description: "enableGravatar"},
-			"environment_health_interval":      resourceschema.StringAttribute{Optional: true, Description: "environmentHealthInterval"},
-			"git_operation_timeout":            resourceschema.StringAttribute{Optional: true, Description: "gitOperationTimeout"},
-			"http_client_timeout":              resourceschema.StringAttribute{Optional: true, Description: "httpClientTimeout"},
-			"keyboard_shortcuts_enabled":       resourceschema.StringAttribute{Optional: true, Description: "keyboardShortcutsEnabled"},
-			"max_image_upload_size":            resourceschema.StringAttribute{Optional: true, Description: "maxImageUploadSize"},
-			"mobile_navigation_mode":        resourceschema.StringAttribute{Optional: true, Description: "mobileNavigationMode"},
-			"mobile_navigation_show_labels": resourceschema.StringAttribute{Optional: true, Description: "mobileNavigationShowLabels"},
-			"oidc_admin_claim":                 resourceschema.StringAttribute{Optional: true, Description: "oidcAdminClaim"},
-			"oidc_admin_value":                 resourceschema.StringAttribute{Optional: true, Description: "oidcAdminValue"},
-			"oidc_auto_redirect_to_provider":   resourceschema.StringAttribute{Optional: true, Description: "oidcAutoRedirectToProvider"},
-			"oidc_client_id":                   resourceschema.StringAttribute{Optional: true, Description: "oidcClientId"},
-			"oidc_client_secret":            resourceschema.StringAttribute{Optional: true, Description: "oidcClientSecret"},
-			"oidc_enabled":                  resourceschema.StringAttribute{Optional: true, Description: "oidcEnabled"},
-			"oidc_issuer_url":               resourceschema.StringAttribute{Optional: true, Description: "oidcIssuerUrl"},
-			"oidc_merge_accounts":           resourceschema.StringAttribute{Optional: true, Description: "oidcMergeAccounts"},
-			"oidc_provider_logo_url":        resourceschema.StringAttribute{Optional: true, Description: "oidcProviderLogoUrl"},
-			"oidc_provider_name":            resourceschema.StringAttribute{Optional: true, Description: "oidcProviderName"},
-			"oidc_scopes":                   resourceschema.StringAttribute{Optional: true, Description: "oidcScopes"},
-			"oidc_skip_tls_verify":          resourceschema.StringAttribute{Optional: true, Description: "oidcSkipTlsVerify"},
-			"oled_mode":                     resourceschema.StringAttribute{Optional: true, Description: "oledMode"},
-			"polling_enabled":               resourceschema.StringAttribute{Optional: true, Description: "pollingEnabled"},
-			"polling_interval":              resourceschema.StringAttribute{Optional: true, Description: "pollingInterval"},
-			"projects_directory":            resourceschema.StringAttribute{Optional: true, Description: "projectsDirectory"},
-			"proxy_request_timeout":         resourceschema.StringAttribute{Optional: true, Description: "proxyRequestTimeout"},
-			"registry_timeout":              resourceschema.StringAttribute{Optional: true, Description: "registryTimeout"},
-			"scheduled_prune_build_cache":   resourceschema.StringAttribute{Optional: true, Description: "scheduledPruneBuildCache"},
-			"scheduled_prune_containers":    resourceschema.StringAttribute{Optional: true, Description: "scheduledPruneContainers"},
-			"scheduled_prune_enabled":       resourceschema.StringAttribute{Optional: true, Description: "scheduledPruneEnabled"},
-			"scheduled_prune_images":        resourceschema.StringAttribute{Optional: true, Description: "scheduledPruneImages"},
-			"scheduled_prune_interval":      resourceschema.StringAttribute{Optional: true, Description: "scheduledPruneInterval"},
-			"scheduled_prune_networks":      resourceschema.StringAttribute{Optional: true, Description: "scheduledPruneNetworks"},
-			"scheduled_prune_volumes":       resourceschema.StringAttribute{Optional: true, Description: "scheduledPruneVolumes"},
-			"sidebar_hover_expansion":       resourceschema.StringAttribute{Optional: true, Description: "sidebarHoverExpansion"},
-			"trivy_concurrent_scan_containers": resourceschema.StringAttribute{Optional: true, Description: "trivyConcurrentScanContainers"},
-			"trivy_cpu_limit":                  resourceschema.StringAttribute{Optional: true, Description: "trivyCpuLimit"},
-			"trivy_image":                      resourceschema.StringAttribute{Optional: true, Description: "trivyImage"},
-			"trivy_memory_limit_mb":            resourceschema.StringAttribute{Optional: true, Description: "trivyMemoryLimitMb"},
-			"trivy_network":                    resourceschema.StringAttribute{Optional: true, Description: "trivyNetwork"},
-			"trivy_resource_limits_enabled":    resourceschema.StringAttribute{Optional: true, Description: "trivyResourceLimitsEnabled"},
-			"trivy_scan_timeout":               resourceschema.StringAttribute{Optional: true, Description: "trivyScanTimeout"},
-			"vulnerability_scan_enabled":       resourceschema.StringAttribute{Optional: true, Description: "vulnerabilityScanEnabled"},
-			"vulnerability_scan_interval":      resourceschema.StringAttribute{Optional: true, Description: "vulnerabilityScanInterval"},
+			"accent_color":                         resourceschema.StringAttribute{Optional: true, Description: "accentColor"},
+			"application_theme":                    resourceschema.StringAttribute{Optional: true, Description: "applicationTheme"},
+			"auth_local_enabled":                   resourceschema.StringAttribute{Optional: true, Description: "authLocalEnabled"},
+			"auth_oidc_config":                     resourceschema.StringAttribute{Optional: true, Description: "authOidcConfig"},
+			"auth_password_policy":                 resourceschema.StringAttribute{Optional: true, Description: "authPasswordPolicy"},
+			"auth_session_timeout":                 resourceschema.StringAttribute{Optional: true, Description: "authSessionTimeout"},
+			"auto_heal_enabled":                    resourceschema.StringAttribute{Optional: true, Description: "autoHealEnabled"},
+			"auto_heal_excluded_containers":        resourceschema.StringAttribute{Optional: true, Description: "autoHealExcludedContainers"},
+			"auto_heal_interval":                   resourceschema.StringAttribute{Optional: true, Description: "autoHealInterval"},
+			"auto_heal_max_restarts":               resourceschema.StringAttribute{Optional: true, Description: "autoHealMaxRestarts"},
+			"auto_heal_restart_window":             resourceschema.StringAttribute{Optional: true, Description: "autoHealRestartWindow"},
+			"auto_inject_env":                      resourceschema.StringAttribute{Optional: true, Description: "autoInjectEnv"},
+			"auto_update":                          resourceschema.StringAttribute{Optional: true, Description: "autoUpdate"},
+			"auto_update_excluded_containers":      resourceschema.StringAttribute{Optional: true, Description: "autoUpdateExcludedContainers"},
+			"auto_update_interval":                 resourceschema.StringAttribute{Optional: true, Description: "autoUpdateInterval"},
+			"base_server_url":                      resourceschema.StringAttribute{Optional: true, Description: "baseServerUrl"},
+			"build_provider":                       resourceschema.StringAttribute{Optional: true, Description: "buildProvider"},
+			"build_timeout":                        resourceschema.StringAttribute{Optional: true, Description: "buildTimeout"},
+			"builds_directory":                     resourceschema.StringAttribute{Optional: true, Description: "buildsDirectory"},
+			"default_deploy_pull_policy":           resourceschema.StringAttribute{Optional: true, Description: "defaultDeployPullPolicy"},
+			"default_shell":                        resourceschema.StringAttribute{Optional: true, Description: "defaultShell"},
+			"depot_project_id":                     resourceschema.StringAttribute{Optional: true, Description: "depotProjectId"},
+			"depot_token":                          resourceschema.StringAttribute{Optional: true, Description: "depotToken"},
+			"disk_usage_path":                      resourceschema.StringAttribute{Optional: true, Description: "diskUsagePath"},
+			"docker_host":                          resourceschema.StringAttribute{Optional: true, Description: "dockerHost"},
+			"docker_prune_mode":                    resourceschema.StringAttribute{Optional: true, Description: "dockerPruneMode"},
+			"docker_api_timeout":                   resourceschema.StringAttribute{Optional: true, Description: "dockerApiTimeout"},
+			"docker_client_refresh_interval":       resourceschema.StringAttribute{Optional: true, Description: "dockerClientRefreshInterval"},
+			"docker_image_pull_timeout":            resourceschema.StringAttribute{Optional: true, Description: "dockerImagePullTimeout"},
+			"enable_gravatar":                      resourceschema.StringAttribute{Optional: true, Description: "enableGravatar"},
+			"environment_health_interval":          resourceschema.StringAttribute{Optional: true, Description: "environmentHealthInterval"},
+			"follow_project_symlinks":              resourceschema.StringAttribute{Optional: true, Description: "followProjectSymlinks"},
+			"git_operation_timeout":                resourceschema.StringAttribute{Optional: true, Description: "gitOperationTimeout"},
+			"git_sync_max_binary_size_mb":          resourceschema.StringAttribute{Optional: true, Description: "gitSyncMaxBinarySizeMb"},
+			"git_sync_max_files":                   resourceschema.StringAttribute{Optional: true, Description: "gitSyncMaxFiles"},
+			"git_sync_max_total_size_mb":           resourceschema.StringAttribute{Optional: true, Description: "gitSyncMaxTotalSizeMb"},
+			"http_client_timeout":                  resourceschema.StringAttribute{Optional: true, Description: "httpClientTimeout"},
+			"keyboard_shortcuts_enabled":           resourceschema.StringAttribute{Optional: true, Description: "keyboardShortcutsEnabled"},
+			"max_image_upload_size":                resourceschema.StringAttribute{Optional: true, Description: "maxImageUploadSize"},
+			"mobile_navigation_mode":               resourceschema.StringAttribute{Optional: true, Description: "mobileNavigationMode"},
+			"mobile_navigation_show_labels":        resourceschema.StringAttribute{Optional: true, Description: "mobileNavigationShowLabels"},
+			"oidc_admin_claim":                     resourceschema.StringAttribute{Optional: true, Description: "oidcAdminClaim"},
+			"oidc_admin_value":                     resourceschema.StringAttribute{Optional: true, Description: "oidcAdminValue"},
+			"oidc_auto_redirect_to_provider":       resourceschema.StringAttribute{Optional: true, Description: "oidcAutoRedirectToProvider"},
+			"oidc_client_id":                       resourceschema.StringAttribute{Optional: true, Description: "oidcClientId"},
+			"oidc_client_secret":                   resourceschema.StringAttribute{Optional: true, Description: "oidcClientSecret"},
+			"oidc_enabled":                         resourceschema.StringAttribute{Optional: true, Description: "oidcEnabled"},
+			"oidc_issuer_url":                      resourceschema.StringAttribute{Optional: true, Description: "oidcIssuerUrl"},
+			"oidc_merge_accounts":                  resourceschema.StringAttribute{Optional: true, Description: "oidcMergeAccounts"},
+			"oidc_provider_logo_url":               resourceschema.StringAttribute{Optional: true, Description: "oidcProviderLogoUrl"},
+			"oidc_provider_name":                   resourceschema.StringAttribute{Optional: true, Description: "oidcProviderName"},
+			"oidc_scopes":                          resourceschema.StringAttribute{Optional: true, Description: "oidcScopes"},
+			"oidc_skip_tls_verify":                 resourceschema.StringAttribute{Optional: true, Description: "oidcSkipTlsVerify"},
+			"oled_mode":                            resourceschema.StringAttribute{Optional: true, Description: "oledMode"},
+			"polling_enabled":                      resourceschema.StringAttribute{Optional: true, Description: "pollingEnabled"},
+			"polling_interval":                     resourceschema.StringAttribute{Optional: true, Description: "pollingInterval"},
+			"projects_directory":                   resourceschema.StringAttribute{Optional: true, Description: "projectsDirectory"},
+			"prune_build_cache_mode":               resourceschema.StringAttribute{Optional: true, Description: "pruneBuildCacheMode"},
+			"prune_build_cache_until":              resourceschema.StringAttribute{Optional: true, Description: "pruneBuildCacheUntil"},
+			"prune_container_mode":                 resourceschema.StringAttribute{Optional: true, Description: "pruneContainerMode"},
+			"prune_container_until":                resourceschema.StringAttribute{Optional: true, Description: "pruneContainerUntil"},
+			"prune_image_mode":                     resourceschema.StringAttribute{Optional: true, Description: "pruneImageMode"},
+			"prune_image_until":                    resourceschema.StringAttribute{Optional: true, Description: "pruneImageUntil"},
+			"prune_network_mode":                   resourceschema.StringAttribute{Optional: true, Description: "pruneNetworkMode"},
+			"prune_network_until":                  resourceschema.StringAttribute{Optional: true, Description: "pruneNetworkUntil"},
+			"prune_volume_mode":                    resourceschema.StringAttribute{Optional: true, Description: "pruneVolumeMode"},
+			"proxy_request_timeout":                resourceschema.StringAttribute{Optional: true, Description: "proxyRequestTimeout"},
+			"registry_timeout":                     resourceschema.StringAttribute{Optional: true, Description: "registryTimeout"},
+			"scheduled_prune_build_cache":          resourceschema.StringAttribute{Optional: true, Description: "scheduledPruneBuildCache"},
+			"scheduled_prune_containers":           resourceschema.StringAttribute{Optional: true, Description: "scheduledPruneContainers"},
+			"scheduled_prune_enabled":              resourceschema.StringAttribute{Optional: true, Description: "scheduledPruneEnabled"},
+			"scheduled_prune_images":               resourceschema.StringAttribute{Optional: true, Description: "scheduledPruneImages"},
+			"scheduled_prune_interval":             resourceschema.StringAttribute{Optional: true, Description: "scheduledPruneInterval"},
+			"scheduled_prune_networks":             resourceschema.StringAttribute{Optional: true, Description: "scheduledPruneNetworks"},
+			"scheduled_prune_volumes":              resourceschema.StringAttribute{Optional: true, Description: "scheduledPruneVolumes"},
+			"sidebar_hover_expansion":              resourceschema.StringAttribute{Optional: true, Description: "sidebarHoverExpansion"},
+			"swarm_stack_sources_directory":        resourceschema.StringAttribute{Optional: true, Description: "swarmStackSourcesDirectory"},
+			"templates_directory":                  resourceschema.StringAttribute{Optional: true, Description: "templatesDirectory"},
+			"trivy_concurrent_scan_containers":     resourceschema.StringAttribute{Optional: true, Description: "trivyConcurrentScanContainers"},
+			"trivy_cpu_limit":                      resourceschema.StringAttribute{Optional: true, Description: "trivyCpuLimit"},
+			"trivy_image":                          resourceschema.StringAttribute{Optional: true, Description: "trivyImage"},
+			"trivy_memory_limit_mb":                resourceschema.StringAttribute{Optional: true, Description: "trivyMemoryLimitMb"},
+			"trivy_network":                        resourceschema.StringAttribute{Optional: true, Description: "trivyNetwork"},
+			"trivy_preserve_cache_on_volume_prune": resourceschema.StringAttribute{Optional: true, Description: "trivyPreserveCacheOnVolumePrune"},
+			"trivy_privileged":                     resourceschema.StringAttribute{Optional: true, Description: "trivyPrivileged"},
+			"trivy_resource_limits_enabled":        resourceschema.StringAttribute{Optional: true, Description: "trivyResourceLimitsEnabled"},
+			"trivy_scan_timeout":                   resourceschema.StringAttribute{Optional: true, Description: "trivyScanTimeout"},
+			"trivy_security_opts":                  resourceschema.StringAttribute{Optional: true, Description: "trivySecurityOpts"},
+			"vulnerability_scan_enabled":           resourceschema.StringAttribute{Optional: true, Description: "vulnerabilityScanEnabled"},
+			"vulnerability_scan_interval":          resourceschema.StringAttribute{Optional: true, Description: "vulnerabilityScanInterval"},
 
 			// Computed applied map
 			"applied": resourceschema.MapAttribute{
@@ -130,79 +150,99 @@ func (r *SettingsResource) Configure(_ context.Context, req resource.ConfigureRe
 }
 
 type settingsModel struct {
-	ID                         types.String `tfsdk:"id"`
-	EnvironmentID              types.String `tfsdk:"environment_id"`
-	AccentColor                types.String `tfsdk:"accent_color"`
-	AuthLocalEnabled           types.String `tfsdk:"auth_local_enabled"`
-	AuthOidcConfig             types.String `tfsdk:"auth_oidc_config"`
-	AuthPasswordPolicy         types.String `tfsdk:"auth_password_policy"`
-	AuthSessionTimeout         types.String `tfsdk:"auth_session_timeout"`
-	AutoHealEnabled            types.String `tfsdk:"auto_heal_enabled"`
-	AutoHealExcludedContainers types.String `tfsdk:"auto_heal_excluded_containers"`
-	AutoHealInterval           types.String `tfsdk:"auto_heal_interval"`
-	AutoHealMaxRestarts        types.String `tfsdk:"auto_heal_max_restarts"`
-	AutoHealRestartWindow      types.String `tfsdk:"auto_heal_restart_window"`
-	AutoInjectEnv              types.String `tfsdk:"auto_inject_env"`
-	AutoUpdate                 types.String `tfsdk:"auto_update"`
-	AutoUpdateExcludedContainers types.String `tfsdk:"auto_update_excluded_containers"`
-	AutoUpdateInterval         types.String `tfsdk:"auto_update_interval"`
-	BaseServerUrl              types.String `tfsdk:"base_server_url"`
-	BuildProvider              types.String `tfsdk:"build_provider"`
-	BuildTimeout               types.String `tfsdk:"build_timeout"`
-	BuildsDirectory            types.String `tfsdk:"builds_directory"`
-	DefaultDeployPullPolicy    types.String `tfsdk:"default_deploy_pull_policy"`
-	DefaultShell               types.String `tfsdk:"default_shell"`
-	DepotProjectId             types.String `tfsdk:"depot_project_id"`
-	DepotToken                 types.String `tfsdk:"depot_token"`
-	DiskUsagePath              types.String `tfsdk:"disk_usage_path"`
-	DockerApiTimeout           types.String `tfsdk:"docker_api_timeout"`
-	DockerHost                 types.String `tfsdk:"docker_host"`
-	DockerImagePullTimeout     types.String `tfsdk:"docker_image_pull_timeout"`
-	DockerPruneMode            types.String `tfsdk:"docker_prune_mode"`
-	EnableGravatar             types.String `tfsdk:"enable_gravatar"`
-	EnvironmentHealthInterval  types.String `tfsdk:"environment_health_interval"`
-	GitOperationTimeout        types.String `tfsdk:"git_operation_timeout"`
-	HttpClientTimeout          types.String `tfsdk:"http_client_timeout"`
-	KeyboardShortcutsEnabled   types.String `tfsdk:"keyboard_shortcuts_enabled"`
-	MaxImageUploadSize         types.String `tfsdk:"max_image_upload_size"`
-	MobileNavigationMode       types.String `tfsdk:"mobile_navigation_mode"`
-	MobileNavigationShowLabels types.String `tfsdk:"mobile_navigation_show_labels"`
-	OidcAdminClaim             types.String `tfsdk:"oidc_admin_claim"`
-	OidcAdminValue             types.String `tfsdk:"oidc_admin_value"`
-	OidcAutoRedirectToProvider types.String `tfsdk:"oidc_auto_redirect_to_provider"`
-	OidcClientId               types.String `tfsdk:"oidc_client_id"`
-	OidcClientSecret           types.String `tfsdk:"oidc_client_secret"`
-	OidcEnabled                types.String `tfsdk:"oidc_enabled"`
-	OidcIssuerUrl              types.String `tfsdk:"oidc_issuer_url"`
-	OidcMergeAccounts          types.String `tfsdk:"oidc_merge_accounts"`
-	OidcProviderLogoUrl        types.String `tfsdk:"oidc_provider_logo_url"`
-	OidcProviderName           types.String `tfsdk:"oidc_provider_name"`
-	OidcScopes                 types.String `tfsdk:"oidc_scopes"`
-	OidcSkipTlsVerify          types.String `tfsdk:"oidc_skip_tls_verify"`
-	OledMode                   types.String `tfsdk:"oled_mode"`
-	PollingEnabled             types.String `tfsdk:"polling_enabled"`
-	PollingInterval            types.String `tfsdk:"polling_interval"`
-	ProjectsDirectory          types.String `tfsdk:"projects_directory"`
-	ProxyRequestTimeout        types.String `tfsdk:"proxy_request_timeout"`
-	RegistryTimeout            types.String `tfsdk:"registry_timeout"`
-	ScheduledPruneBuildCache   types.String `tfsdk:"scheduled_prune_build_cache"`
-	ScheduledPruneContainers   types.String `tfsdk:"scheduled_prune_containers"`
-	ScheduledPruneEnabled      types.String `tfsdk:"scheduled_prune_enabled"`
-	ScheduledPruneImages       types.String `tfsdk:"scheduled_prune_images"`
-	ScheduledPruneInterval     types.String `tfsdk:"scheduled_prune_interval"`
-	ScheduledPruneNetworks     types.String `tfsdk:"scheduled_prune_networks"`
-	ScheduledPruneVolumes      types.String `tfsdk:"scheduled_prune_volumes"`
-	SidebarHoverExpansion      types.String `tfsdk:"sidebar_hover_expansion"`
-	TrivyConcurrentScanContainers types.String `tfsdk:"trivy_concurrent_scan_containers"`
-	TrivyCpuLimit                 types.String `tfsdk:"trivy_cpu_limit"`
-	TrivyImage                    types.String `tfsdk:"trivy_image"`
-	TrivyMemoryLimitMb            types.String `tfsdk:"trivy_memory_limit_mb"`
-	TrivyNetwork                  types.String `tfsdk:"trivy_network"`
-	TrivyResourceLimitsEnabled    types.String `tfsdk:"trivy_resource_limits_enabled"`
-	TrivyScanTimeout              types.String `tfsdk:"trivy_scan_timeout"`
-	VulnerabilityScanEnabled      types.String `tfsdk:"vulnerability_scan_enabled"`
-	VulnerabilityScanInterval     types.String `tfsdk:"vulnerability_scan_interval"`
-	Applied                    types.Map    `tfsdk:"applied"`
+	ID                              types.String `tfsdk:"id"`
+	EnvironmentID                   types.String `tfsdk:"environment_id"`
+	AccentColor                     types.String `tfsdk:"accent_color"`
+	ApplicationTheme                types.String `tfsdk:"application_theme"`
+	AuthLocalEnabled                types.String `tfsdk:"auth_local_enabled"`
+	AuthOidcConfig                  types.String `tfsdk:"auth_oidc_config"`
+	AuthPasswordPolicy              types.String `tfsdk:"auth_password_policy"`
+	AuthSessionTimeout              types.String `tfsdk:"auth_session_timeout"`
+	AutoHealEnabled                 types.String `tfsdk:"auto_heal_enabled"`
+	AutoHealExcludedContainers      types.String `tfsdk:"auto_heal_excluded_containers"`
+	AutoHealInterval                types.String `tfsdk:"auto_heal_interval"`
+	AutoHealMaxRestarts             types.String `tfsdk:"auto_heal_max_restarts"`
+	AutoHealRestartWindow           types.String `tfsdk:"auto_heal_restart_window"`
+	AutoInjectEnv                   types.String `tfsdk:"auto_inject_env"`
+	AutoUpdate                      types.String `tfsdk:"auto_update"`
+	AutoUpdateExcludedContainers    types.String `tfsdk:"auto_update_excluded_containers"`
+	AutoUpdateInterval              types.String `tfsdk:"auto_update_interval"`
+	BaseServerUrl                   types.String `tfsdk:"base_server_url"`
+	BuildProvider                   types.String `tfsdk:"build_provider"`
+	BuildTimeout                    types.String `tfsdk:"build_timeout"`
+	BuildsDirectory                 types.String `tfsdk:"builds_directory"`
+	DefaultDeployPullPolicy         types.String `tfsdk:"default_deploy_pull_policy"`
+	DefaultShell                    types.String `tfsdk:"default_shell"`
+	DepotProjectId                  types.String `tfsdk:"depot_project_id"`
+	DepotToken                      types.String `tfsdk:"depot_token"`
+	DiskUsagePath                   types.String `tfsdk:"disk_usage_path"`
+	DockerApiTimeout                types.String `tfsdk:"docker_api_timeout"`
+	DockerClientRefreshInterval     types.String `tfsdk:"docker_client_refresh_interval"`
+	DockerHost                      types.String `tfsdk:"docker_host"`
+	DockerImagePullTimeout          types.String `tfsdk:"docker_image_pull_timeout"`
+	DockerPruneMode                 types.String `tfsdk:"docker_prune_mode"`
+	EnableGravatar                  types.String `tfsdk:"enable_gravatar"`
+	EnvironmentHealthInterval       types.String `tfsdk:"environment_health_interval"`
+	FollowProjectSymlinks           types.String `tfsdk:"follow_project_symlinks"`
+	GitOperationTimeout             types.String `tfsdk:"git_operation_timeout"`
+	GitSyncMaxBinarySizeMb          types.String `tfsdk:"git_sync_max_binary_size_mb"`
+	GitSyncMaxFiles                 types.String `tfsdk:"git_sync_max_files"`
+	GitSyncMaxTotalSizeMb           types.String `tfsdk:"git_sync_max_total_size_mb"`
+	HttpClientTimeout               types.String `tfsdk:"http_client_timeout"`
+	KeyboardShortcutsEnabled        types.String `tfsdk:"keyboard_shortcuts_enabled"`
+	MaxImageUploadSize              types.String `tfsdk:"max_image_upload_size"`
+	MobileNavigationMode            types.String `tfsdk:"mobile_navigation_mode"`
+	MobileNavigationShowLabels      types.String `tfsdk:"mobile_navigation_show_labels"`
+	OidcAdminClaim                  types.String `tfsdk:"oidc_admin_claim"`
+	OidcAdminValue                  types.String `tfsdk:"oidc_admin_value"`
+	OidcAutoRedirectToProvider      types.String `tfsdk:"oidc_auto_redirect_to_provider"`
+	OidcClientId                    types.String `tfsdk:"oidc_client_id"`
+	OidcClientSecret                types.String `tfsdk:"oidc_client_secret"`
+	OidcEnabled                     types.String `tfsdk:"oidc_enabled"`
+	OidcIssuerUrl                   types.String `tfsdk:"oidc_issuer_url"`
+	OidcMergeAccounts               types.String `tfsdk:"oidc_merge_accounts"`
+	OidcProviderLogoUrl             types.String `tfsdk:"oidc_provider_logo_url"`
+	OidcProviderName                types.String `tfsdk:"oidc_provider_name"`
+	OidcScopes                      types.String `tfsdk:"oidc_scopes"`
+	OidcSkipTlsVerify               types.String `tfsdk:"oidc_skip_tls_verify"`
+	OledMode                        types.String `tfsdk:"oled_mode"`
+	PollingEnabled                  types.String `tfsdk:"polling_enabled"`
+	PollingInterval                 types.String `tfsdk:"polling_interval"`
+	ProjectsDirectory               types.String `tfsdk:"projects_directory"`
+	PruneBuildCacheMode             types.String `tfsdk:"prune_build_cache_mode"`
+	PruneBuildCacheUntil            types.String `tfsdk:"prune_build_cache_until"`
+	PruneContainerMode              types.String `tfsdk:"prune_container_mode"`
+	PruneContainerUntil             types.String `tfsdk:"prune_container_until"`
+	PruneImageMode                  types.String `tfsdk:"prune_image_mode"`
+	PruneImageUntil                 types.String `tfsdk:"prune_image_until"`
+	PruneNetworkMode                types.String `tfsdk:"prune_network_mode"`
+	PruneNetworkUntil               types.String `tfsdk:"prune_network_until"`
+	PruneVolumeMode                 types.String `tfsdk:"prune_volume_mode"`
+	ProxyRequestTimeout             types.String `tfsdk:"proxy_request_timeout"`
+	RegistryTimeout                 types.String `tfsdk:"registry_timeout"`
+	ScheduledPruneBuildCache        types.String `tfsdk:"scheduled_prune_build_cache"`
+	ScheduledPruneContainers        types.String `tfsdk:"scheduled_prune_containers"`
+	ScheduledPruneEnabled           types.String `tfsdk:"scheduled_prune_enabled"`
+	ScheduledPruneImages            types.String `tfsdk:"scheduled_prune_images"`
+	ScheduledPruneInterval          types.String `tfsdk:"scheduled_prune_interval"`
+	ScheduledPruneNetworks          types.String `tfsdk:"scheduled_prune_networks"`
+	ScheduledPruneVolumes           types.String `tfsdk:"scheduled_prune_volumes"`
+	SidebarHoverExpansion           types.String `tfsdk:"sidebar_hover_expansion"`
+	SwarmStackSourcesDirectory      types.String `tfsdk:"swarm_stack_sources_directory"`
+	TemplatesDirectory              types.String `tfsdk:"templates_directory"`
+	TrivyConcurrentScanContainers   types.String `tfsdk:"trivy_concurrent_scan_containers"`
+	TrivyCpuLimit                   types.String `tfsdk:"trivy_cpu_limit"`
+	TrivyImage                      types.String `tfsdk:"trivy_image"`
+	TrivyMemoryLimitMb              types.String `tfsdk:"trivy_memory_limit_mb"`
+	TrivyNetwork                    types.String `tfsdk:"trivy_network"`
+	TrivyPreserveCacheOnVolumePrune types.String `tfsdk:"trivy_preserve_cache_on_volume_prune"`
+	TrivyPrivileged                 types.String `tfsdk:"trivy_privileged"`
+	TrivyResourceLimitsEnabled      types.String `tfsdk:"trivy_resource_limits_enabled"`
+	TrivyScanTimeout                types.String `tfsdk:"trivy_scan_timeout"`
+	TrivySecurityOpts               types.String `tfsdk:"trivy_security_opts"`
+	VulnerabilityScanEnabled        types.String `tfsdk:"vulnerability_scan_enabled"`
+	VulnerabilityScanInterval       types.String `tfsdk:"vulnerability_scan_interval"`
+	Applied                         types.Map    `tfsdk:"applied"`
 }
 
 func (r *SettingsResource) Create(ctx context.Context, req resource.CreateRequest, resp *resource.CreateResponse) {
@@ -300,6 +340,7 @@ func addIfSet(m map[string]string, key string, v types.String) {
 func buildSettingsMapFromModel(s settingsModel) map[string]string {
 	out := map[string]string{}
 	addIfSet(out, "accentColor", s.AccentColor)
+	addIfSet(out, "applicationTheme", s.ApplicationTheme)
 	addIfSet(out, "authLocalEnabled", s.AuthLocalEnabled)
 	addIfSet(out, "authOidcConfig", s.AuthOidcConfig)
 	addIfSet(out, "authPasswordPolicy", s.AuthPasswordPolicy)
@@ -323,12 +364,17 @@ func buildSettingsMapFromModel(s settingsModel) map[string]string {
 	addIfSet(out, "depotToken", s.DepotToken)
 	addIfSet(out, "diskUsagePath", s.DiskUsagePath)
 	addIfSet(out, "dockerApiTimeout", s.DockerApiTimeout)
+	addIfSet(out, "dockerClientRefreshInterval", s.DockerClientRefreshInterval)
 	addIfSet(out, "dockerHost", s.DockerHost)
 	addIfSet(out, "dockerImagePullTimeout", s.DockerImagePullTimeout)
 	addIfSet(out, "dockerPruneMode", s.DockerPruneMode)
 	addIfSet(out, "enableGravatar", s.EnableGravatar)
 	addIfSet(out, "environmentHealthInterval", s.EnvironmentHealthInterval)
+	addIfSet(out, "followProjectSymlinks", s.FollowProjectSymlinks)
 	addIfSet(out, "gitOperationTimeout", s.GitOperationTimeout)
+	addIfSet(out, "gitSyncMaxBinarySizeMb", s.GitSyncMaxBinarySizeMb)
+	addIfSet(out, "gitSyncMaxFiles", s.GitSyncMaxFiles)
+	addIfSet(out, "gitSyncMaxTotalSizeMb", s.GitSyncMaxTotalSizeMb)
 	addIfSet(out, "httpClientTimeout", s.HttpClientTimeout)
 	addIfSet(out, "keyboardShortcutsEnabled", s.KeyboardShortcutsEnabled)
 	addIfSet(out, "maxImageUploadSize", s.MaxImageUploadSize)
@@ -350,6 +396,15 @@ func buildSettingsMapFromModel(s settingsModel) map[string]string {
 	addIfSet(out, "pollingEnabled", s.PollingEnabled)
 	addIfSet(out, "pollingInterval", s.PollingInterval)
 	addIfSet(out, "projectsDirectory", s.ProjectsDirectory)
+	addIfSet(out, "pruneBuildCacheMode", s.PruneBuildCacheMode)
+	addIfSet(out, "pruneBuildCacheUntil", s.PruneBuildCacheUntil)
+	addIfSet(out, "pruneContainerMode", s.PruneContainerMode)
+	addIfSet(out, "pruneContainerUntil", s.PruneContainerUntil)
+	addIfSet(out, "pruneImageMode", s.PruneImageMode)
+	addIfSet(out, "pruneImageUntil", s.PruneImageUntil)
+	addIfSet(out, "pruneNetworkMode", s.PruneNetworkMode)
+	addIfSet(out, "pruneNetworkUntil", s.PruneNetworkUntil)
+	addIfSet(out, "pruneVolumeMode", s.PruneVolumeMode)
 	addIfSet(out, "proxyRequestTimeout", s.ProxyRequestTimeout)
 	addIfSet(out, "registryTimeout", s.RegistryTimeout)
 	addIfSet(out, "scheduledPruneBuildCache", s.ScheduledPruneBuildCache)
@@ -360,13 +415,18 @@ func buildSettingsMapFromModel(s settingsModel) map[string]string {
 	addIfSet(out, "scheduledPruneNetworks", s.ScheduledPruneNetworks)
 	addIfSet(out, "scheduledPruneVolumes", s.ScheduledPruneVolumes)
 	addIfSet(out, "sidebarHoverExpansion", s.SidebarHoverExpansion)
+	addIfSet(out, "swarmStackSourcesDirectory", s.SwarmStackSourcesDirectory)
+	addIfSet(out, "templatesDirectory", s.TemplatesDirectory)
 	addIfSet(out, "trivyConcurrentScanContainers", s.TrivyConcurrentScanContainers)
 	addIfSet(out, "trivyCpuLimit", s.TrivyCpuLimit)
 	addIfSet(out, "trivyImage", s.TrivyImage)
 	addIfSet(out, "trivyMemoryLimitMb", s.TrivyMemoryLimitMb)
 	addIfSet(out, "trivyNetwork", s.TrivyNetwork)
+	addIfSet(out, "trivyPreserveCacheOnVolumePrune", s.TrivyPreserveCacheOnVolumePrune)
+	addIfSet(out, "trivyPrivileged", s.TrivyPrivileged)
 	addIfSet(out, "trivyResourceLimitsEnabled", s.TrivyResourceLimitsEnabled)
 	addIfSet(out, "trivyScanTimeout", s.TrivyScanTimeout)
+	addIfSet(out, "trivySecurityOpts", s.TrivySecurityOpts)
 	addIfSet(out, "vulnerabilityScanEnabled", s.VulnerabilityScanEnabled)
 	addIfSet(out, "vulnerabilityScanInterval", s.VulnerabilityScanInterval)
 	return out

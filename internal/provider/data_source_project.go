@@ -73,6 +73,22 @@ func (d *ProjectDataSource) Schema(ctx context.Context, req datasource.SchemaReq
 				Computed:    true,
 				Description: "Last update timestamp",
 			},
+			"archived": schema.BoolAttribute{
+				Computed:    true,
+				Description: "Whether the project is archived",
+			},
+			"archived_at": schema.StringAttribute{
+				Computed:    true,
+				Description: "Archive timestamp",
+			},
+			"is_discovered": schema.BoolAttribute{
+				Computed:    true,
+				Description: "Whether the project was discovered",
+			},
+			"redeploy_disabled": schema.BoolAttribute{
+				Computed:    true,
+				Description: "Whether redeploy/update actions are disabled for this project",
+			},
 		},
 	}
 }
@@ -90,17 +106,21 @@ func (d *ProjectDataSource) Configure(ctx context.Context, req datasource.Config
 }
 
 type projectDataSourceModel struct {
-	EnvironmentID types.String `tfsdk:"environment_id"`
-	ID            types.String `tfsdk:"id"`
-	Name          types.String `tfsdk:"name"`
-	Compose       types.String `tfsdk:"compose_content"`
-	Env           types.String `tfsdk:"env_content"`
-	Path          types.String `tfsdk:"path"`
-	Status        types.String `tfsdk:"status"`
-	ServiceCount  types.Int64  `tfsdk:"service_count"`
-	RunningCount  types.Int64  `tfsdk:"running_count"`
-	CreatedAt     types.String `tfsdk:"created_at"`
-	UpdatedAt     types.String `tfsdk:"updated_at"`
+	EnvironmentID    types.String `tfsdk:"environment_id"`
+	ID               types.String `tfsdk:"id"`
+	Name             types.String `tfsdk:"name"`
+	Compose          types.String `tfsdk:"compose_content"`
+	Env              types.String `tfsdk:"env_content"`
+	Path             types.String `tfsdk:"path"`
+	Status           types.String `tfsdk:"status"`
+	ServiceCount     types.Int64  `tfsdk:"service_count"`
+	RunningCount     types.Int64  `tfsdk:"running_count"`
+	CreatedAt        types.String `tfsdk:"created_at"`
+	UpdatedAt        types.String `tfsdk:"updated_at"`
+	Archived         types.Bool   `tfsdk:"archived"`
+	ArchivedAt       types.String `tfsdk:"archived_at"`
+	IsDiscovered     types.Bool   `tfsdk:"is_discovered"`
+	RedeployDisabled types.Bool   `tfsdk:"redeploy_disabled"`
 }
 
 func (d *ProjectDataSource) Read(ctx context.Context, req datasource.ReadRequest, resp *datasource.ReadResponse) {
@@ -121,15 +141,19 @@ func (d *ProjectDataSource) Read(ctx context.Context, req datasource.ReadRequest
 	}
 
 	state := projectDataSourceModel{
-		EnvironmentID: config.EnvironmentID,
-		ID:            types.StringValue(project.ID),
-		Name:          types.StringValue(project.Name),
-		Path:          types.StringValue(project.Path),
-		Status:        types.StringValue(project.Status),
-		ServiceCount:  types.Int64Value(int64(project.ServiceCount)),
-		RunningCount:  types.Int64Value(int64(project.RunningCount)),
-		CreatedAt:     types.StringValue(project.CreatedAt),
-		UpdatedAt:     types.StringValue(project.UpdatedAt),
+		EnvironmentID:    config.EnvironmentID,
+		ID:               types.StringValue(project.ID),
+		Name:             types.StringValue(project.Name),
+		Path:             types.StringValue(project.Path),
+		Status:           types.StringValue(project.Status),
+		ServiceCount:     types.Int64Value(int64(project.ServiceCount)),
+		RunningCount:     types.Int64Value(int64(project.RunningCount)),
+		CreatedAt:        types.StringValue(project.CreatedAt),
+		UpdatedAt:        types.StringValue(project.UpdatedAt),
+		Archived:         types.BoolValue(project.IsArchived),
+		ArchivedAt:       nullableString(project.ArchivedAt),
+		IsDiscovered:     types.BoolValue(project.IsDiscovered),
+		RedeployDisabled: types.BoolValue(project.RedeployDisabled),
 	}
 
 	if project.ComposeContent != nil {

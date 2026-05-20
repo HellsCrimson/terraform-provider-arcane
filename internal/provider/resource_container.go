@@ -64,8 +64,9 @@ func (r *ContainerResource) Schema(_ context.Context, _ resource.SchemaRequest, 
 			"network_disabled": resourceschema.BoolAttribute{Optional: true, Description: "Disable networking", PlanModifiers: []planmodifier.Bool{boolplanmodifier.RequiresReplace()}},
 
 			// Computed
-			"created": resourceschema.StringAttribute{Computed: true, PlanModifiers: []planmodifier.String{stringplanmodifier.UseStateForUnknown()}},
-			"status":  resourceschema.StringAttribute{Computed: true},
+			"created":           resourceschema.StringAttribute{Computed: true, PlanModifiers: []planmodifier.String{stringplanmodifier.UseStateForUnknown()}},
+			"status":            resourceschema.StringAttribute{Computed: true},
+			"redeploy_disabled": resourceschema.BoolAttribute{Computed: true},
 
 			// Delete behavior
 			"force_delete":   resourceschema.BoolAttribute{Optional: true, Description: "Force delete running container"},
@@ -113,8 +114,9 @@ type containerModel struct {
 	StdinOnce       types.Bool   `tfsdk:"stdin_once"`
 	NetworkDisabled types.Bool   `tfsdk:"network_disabled"`
 
-	Created types.String `tfsdk:"created"`
-	Status  types.String `tfsdk:"status"`
+	Created          types.String `tfsdk:"created"`
+	Status           types.String `tfsdk:"status"`
+	RedeployDisabled types.Bool   `tfsdk:"redeploy_disabled"`
 
 	ForceDelete   types.Bool `tfsdk:"force_delete"`
 	RemoveVolumes types.Bool `tfsdk:"remove_volumes"`
@@ -245,6 +247,7 @@ func (r *ContainerResource) Read(ctx context.Context, req resource.ReadRequest, 
 	state.Image = types.StringValue(out.Image)
 	state.Created = types.StringValue(out.Created)
 	state.Status = types.StringValue(out.Status)
+	state.RedeployDisabled = types.BoolValue(out.RedeployDisabled)
 	resp.Diagnostics.Append(resp.State.Set(ctx, &state)...)
 }
 

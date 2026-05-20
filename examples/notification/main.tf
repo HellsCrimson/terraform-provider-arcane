@@ -27,11 +27,18 @@ variable "environment_id" {
 
 resource "arcane_notification" "example" {
   environment_id = var.environment_id
-  provider_name  = "slack"
+  provider_name  = "discord"
   enabled        = true
   config = {
-    webhook = "https://hooks.slack.com/services/XXX/YYY/ZZZ"
-    channel = "#deploys"
+    avatarUrl = ""
+    events = {
+      container_update    = true
+      image_update        = false
+      prune_report        = true
+      vulnerability_found = false
+    }
+    token     = "some token"
+    username  = "User"
+    webhookId = "id"
   }
 }
-

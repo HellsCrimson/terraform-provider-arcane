@@ -33,12 +33,16 @@ resource "arcane_job_schedules" "env" {
 All interval attributes use cron format (6-field: second minute hour day-of-month month day-of-week):
 
 - `analytics_heartbeat_interval` (String) - Cron expression for analytics heartbeat (e.g., '0 */5 * * * *' for every 5 minutes).
+- `auto_heal_interval` (String) - Cron expression for auto-heal checks.
 - `auto_update_interval` (String) - Cron expression for auto-update checks (e.g., '0 0 2 * * *' for daily at 2 AM).
+- `docker_client_refresh_interval` (String) - Cron expression for Docker client refresh.
 - `environment_health_interval` (String) - Cron expression for environment health checks (e.g., '0 */1 * * * *' for every minute).
 - `event_cleanup_interval` (String) - Cron expression for event log cleanup (e.g., '0 0 3 * * *' for daily at 3 AM).
+- `expired_sessions_cleanup_interval` (String) - Cron expression for expired session cleanup.
 - `gitops_sync_interval` (String) - Cron expression for GitOps sync checks (e.g., '0 */10 * * * *' for every 10 minutes).
 - `polling_interval` (String) - Cron expression for general polling operations (e.g., '0 */5 * * * *' for every 5 minutes).
 - `scheduled_prune_interval` (String) - Cron expression for scheduled pruning of Docker resources (e.g., '0 0 1 * * 0' for weekly on Sunday at 1 AM).
+- `vulnerability_scan_interval` (String) - Cron expression for vulnerability scans.
 
 ## Attributes Reference
 
