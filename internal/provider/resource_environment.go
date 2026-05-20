@@ -282,11 +282,23 @@ func (r *EnvironmentResource) Update(ctx context.Context, req resource.UpdateReq
 		return
 	}
 
-	state.Name = types.StringValue(env.Name)
 	state.APIURL = types.StringValue(env.APIURL)
 	state.Status = types.StringValue(env.Status)
-	state.Enabled = types.BoolValue(env.Enabled)
-	state.IsEdge = types.BoolValue(env.IsEdge)
+	if !plan.Name.IsNull() && !plan.Name.IsUnknown() {
+		state.Name = types.StringValue(env.Name)
+	} else {
+		state.Name = plan.Name
+	}
+	if !plan.Enabled.IsNull() && !plan.Enabled.IsUnknown() {
+		state.Enabled = types.BoolValue(env.Enabled)
+	} else {
+		state.Enabled = plan.Enabled
+	}
+	if !plan.IsEdge.IsNull() && !plan.IsEdge.IsUnknown() {
+		state.IsEdge = types.BoolValue(env.IsEdge)
+	} else {
+		state.IsEdge = plan.IsEdge
+	}
 	applyEnvironmentEdgeFields(ctx, &state, env)
 	if !plan.AccessToken.IsNull() && !plan.AccessToken.IsUnknown() {
 		state.AccessToken = plan.AccessToken

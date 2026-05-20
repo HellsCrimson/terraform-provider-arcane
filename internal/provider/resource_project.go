@@ -212,7 +212,7 @@ func (r *ProjectResource) Read(ctx context.Context, req resource.ReadRequest, re
 	if out.ComposeContent != nil {
 		state.Compose = types.StringValue(*out.ComposeContent)
 	}
-	if out.EnvContent != nil {
+	if !state.Env.IsNull() && !state.Env.IsUnknown() && out.EnvContent != nil {
 		state.Env = types.StringValue(*out.EnvContent)
 	}
 	// Preserve configuration values that have defaults
@@ -352,7 +352,11 @@ func (r *ProjectResource) Update(ctx context.Context, req resource.UpdateRequest
 	state.Status = types.StringValue(out.Status)
 	state.ServiceCount = types.Int64Value(int64(out.ServiceCount))
 	state.RunningCount = types.Int64Value(int64(out.RunningCount))
-	state.Archived = types.BoolValue(out.IsArchived)
+	if !plan.Archived.IsNull() && !plan.Archived.IsUnknown() {
+		state.Archived = types.BoolValue(out.IsArchived)
+	} else {
+		state.Archived = plan.Archived
+	}
 	state.ArchivedAt = nullableString(out.ArchivedAt)
 	state.IsDiscovered = types.BoolValue(out.IsDiscovered)
 	state.RedeployDisabled = types.BoolValue(out.RedeployDisabled)

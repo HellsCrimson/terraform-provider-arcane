@@ -135,23 +135,21 @@ func (r *ApiKeyResource) Create(ctx context.Context, req resource.CreateRequest,
 	}
 
 	state := apiKeyModel{
-		ID:        types.StringValue(apiKey.ID),
-		Name:      types.StringValue(apiKey.Name),
-		Key:       types.StringValue(apiKey.Key), // Only available on creation
-		KeyPrefix: types.StringValue(apiKey.KeyPrefix),
-		UserID:    types.StringValue(apiKey.UserID),
-		CreatedAt: types.StringValue(apiKey.CreatedAt),
+		ID:          types.StringValue(apiKey.ID),
+		Name:        types.StringValue(apiKey.Name),
+		Description: plan.Description,
+		ExpiresAt:   plan.ExpiresAt,
+		Key:         types.StringValue(apiKey.Key), // Only available on creation
+		KeyPrefix:   types.StringValue(apiKey.KeyPrefix),
+		UserID:      types.StringValue(apiKey.UserID),
+		CreatedAt:   types.StringValue(apiKey.CreatedAt),
 	}
 
-	if apiKey.Description != nil {
+	if !plan.Description.IsNull() && !plan.Description.IsUnknown() && apiKey.Description != nil {
 		state.Description = types.StringValue(*apiKey.Description)
-	} else {
-		state.Description = types.StringNull()
 	}
-	if apiKey.ExpiresAt != nil {
+	if !plan.ExpiresAt.IsNull() && !plan.ExpiresAt.IsUnknown() && apiKey.ExpiresAt != nil {
 		state.ExpiresAt = types.StringValue(*apiKey.ExpiresAt)
-	} else {
-		state.ExpiresAt = types.StringNull()
 	}
 	if apiKey.UpdatedAt != nil {
 		state.UpdatedAt = types.StringValue(*apiKey.UpdatedAt)
@@ -186,15 +184,11 @@ func (r *ApiKeyResource) Read(ctx context.Context, req resource.ReadRequest, res
 	state.UserID = types.StringValue(apiKey.UserID)
 	state.CreatedAt = types.StringValue(apiKey.CreatedAt)
 
-	if apiKey.Description != nil {
+	if !state.Description.IsNull() && !state.Description.IsUnknown() && apiKey.Description != nil {
 		state.Description = types.StringValue(*apiKey.Description)
-	} else {
-		state.Description = types.StringNull()
 	}
-	if apiKey.ExpiresAt != nil {
+	if !state.ExpiresAt.IsNull() && !state.ExpiresAt.IsUnknown() && apiKey.ExpiresAt != nil {
 		state.ExpiresAt = types.StringValue(*apiKey.ExpiresAt)
-	} else {
-		state.ExpiresAt = types.StringNull()
 	}
 	if apiKey.UpdatedAt != nil {
 		state.UpdatedAt = types.StringValue(*apiKey.UpdatedAt)
@@ -249,15 +243,15 @@ func (r *ApiKeyResource) Update(ctx context.Context, req resource.UpdateRequest,
 	state.CreatedAt = types.StringValue(apiKey.CreatedAt)
 	// Preserve the key from previous state (not returned on update)
 
-	if apiKey.Description != nil {
+	if !plan.Description.IsNull() && !plan.Description.IsUnknown() && apiKey.Description != nil {
 		state.Description = types.StringValue(*apiKey.Description)
 	} else {
-		state.Description = types.StringNull()
+		state.Description = plan.Description
 	}
-	if apiKey.ExpiresAt != nil {
+	if !plan.ExpiresAt.IsNull() && !plan.ExpiresAt.IsUnknown() && apiKey.ExpiresAt != nil {
 		state.ExpiresAt = types.StringValue(*apiKey.ExpiresAt)
 	} else {
-		state.ExpiresAt = types.StringNull()
+		state.ExpiresAt = plan.ExpiresAt
 	}
 	if apiKey.UpdatedAt != nil {
 		state.UpdatedAt = types.StringValue(*apiKey.UpdatedAt)
