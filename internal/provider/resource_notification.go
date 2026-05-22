@@ -87,9 +87,6 @@ func (r *NotificationResource) Create(ctx context.Context, req resource.CreateRe
 		Enabled:       types.BoolValue(out.Enabled),
 		Config:        plan.Config,
 	}
-	if !plan.Config.IsNull() && !plan.Config.IsUnknown() {
-		state.Config = anyMapToDynamicConfig(ctx, out.Config)
-	}
 	resp.Diagnostics.Append(resp.State.Set(ctx, &state)...)
 }
 
@@ -111,9 +108,6 @@ func (r *NotificationResource) Read(ctx context.Context, req resource.ReadReques
 		return
 	}
 	state.Enabled = types.BoolValue(out.Enabled)
-	if !state.Config.IsNull() && !state.Config.IsUnknown() {
-		state.Config = anyMapToDynamicConfig(ctx, out.Config)
-	}
 	state.ID = types.StringValue(envID + ":" + provider)
 	resp.Diagnostics.Append(resp.State.Set(ctx, &state)...)
 }
@@ -145,11 +139,7 @@ func (r *NotificationResource) Update(ctx context.Context, req resource.UpdateRe
 		return
 	}
 	state.Enabled = types.BoolValue(out.Enabled)
-	if !plan.Config.IsNull() && !plan.Config.IsUnknown() {
-		state.Config = anyMapToDynamicConfig(ctx, out.Config)
-	} else {
-		state.Config = plan.Config
-	}
+	state.Config = plan.Config
 	resp.Diagnostics.Append(resp.State.Set(ctx, &state)...)
 }
 

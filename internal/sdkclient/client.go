@@ -1323,6 +1323,11 @@ type templateRegistryEnvelope struct {
 	Data    TemplateRegistry `json:"data"`
 }
 
+type templateRegistryListEnvelope struct {
+	Success bool               `json:"success"`
+	Data    []TemplateRegistry `json:"data"`
+}
+
 // CreateTemplateRegistry POST /templates/registries
 func (c *Client) CreateTemplateRegistry(ctx context.Context, body CreateTemplateRegistryRequest) (*TemplateRegistry, error) {
 	req, err := c.newRequest(ctx, http.MethodPost, "templates/registries", body)
@@ -1336,17 +1341,23 @@ func (c *Client) CreateTemplateRegistry(ctx context.Context, body CreateTemplate
 	return &env.Data, nil
 }
 
-// GetTemplateRegistry GET /templates/registries/{id}
+// GetTemplateRegistry lists template registries and returns the matching ID.
+// Arcane v1.19.4 exposes list/create/update/delete, but no get-by-ID endpoint.
 func (c *Client) GetTemplateRegistry(ctx context.Context, id string) (*TemplateRegistry, error) {
-	req, err := c.newRequest(ctx, http.MethodGet, path.Join("templates/registries", id), nil)
+	req, err := c.newRequest(ctx, http.MethodGet, "templates/registries", nil)
 	if err != nil {
 		return nil, err
 	}
-	var env templateRegistryEnvelope
+	var env templateRegistryListEnvelope
 	if err := c.do(req, &env); err != nil {
 		return nil, err
 	}
-	return &env.Data, nil
+	for i := range env.Data {
+		if env.Data[i].ID == id {
+			return &env.Data[i], nil
+		}
+	}
+	return nil, fmt.Errorf("arcane API error: 404 Not Found: template registry %q not found", id)
 }
 
 // UpdateTemplateRegistry PUT /templates/registries/{id}
@@ -1355,11 +1366,10 @@ func (c *Client) UpdateTemplateRegistry(ctx context.Context, id string, body Upd
 	if err != nil {
 		return nil, err
 	}
-	var env templateRegistryEnvelope
-	if err := c.do(req, &env); err != nil {
+	if err := c.do(req, nil); err != nil {
 		return nil, err
 	}
-	return &env.Data, nil
+	return c.GetTemplateRegistry(ctx, id)
 }
 
 // DeleteTemplateRegistry DELETE /templates/registries/{id}
