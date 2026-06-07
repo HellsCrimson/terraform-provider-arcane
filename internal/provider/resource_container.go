@@ -222,6 +222,7 @@ func (r *ContainerResource) Create(ctx context.Context, req resource.CreateReque
 	state.ID = types.StringValue(out.ID)
 	state.Created = types.StringValue(out.Created)
 	state.Status = types.StringValue(out.Status)
+	state.RedeployDisabled = types.BoolValue(false)
 
 	resp.Diagnostics.Append(resp.State.Set(ctx, &state)...)
 }

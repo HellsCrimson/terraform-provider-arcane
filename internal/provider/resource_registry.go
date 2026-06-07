@@ -43,7 +43,7 @@ func (r *RegistryResource) Schema(_ context.Context, _ resource.SchemaRequest, r
 
 			// Computed timestamps
 			"created_at": resourceschema.StringAttribute{Computed: true, PlanModifiers: []planmodifier.String{stringplanmodifier.UseStateForUnknown()}},
-			"updated_at": resourceschema.StringAttribute{Computed: true, PlanModifiers: []planmodifier.String{stringplanmodifier.UseStateForUnknown()}},
+			"updated_at": resourceschema.StringAttribute{Computed: true},
 		},
 	}
 }

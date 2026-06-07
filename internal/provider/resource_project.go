@@ -2,6 +2,7 @@ package provider
 
 import (
 	"context"
+	"fmt"
 	"strings"
 
 	"terraform-provider-arcane/internal/sdkclient"
@@ -18,6 +19,7 @@ import (
 
 var _ resource.Resource = &ProjectResource{}
 var _ resource.ResourceWithImportState = &ProjectResource{}
+var _ resource.ResourceWithModifyPlan = &ProjectResource{}
 
 type ProjectResource struct{ client *sdkclient.Client }
 
@@ -35,17 +37,18 @@ func (r *ProjectResource) Schema(_ context.Context, _ resource.SchemaRequest, re
 				Description:   "Project ID",
 				PlanModifiers: []planmodifier.String{stringplanmodifier.UseStateForUnknown()},
 			},
-			"environment_id":     resourceschema.StringAttribute{Required: true, Description: "Environment ID"},
-			"name":               resourceschema.StringAttribute{Required: true, Description: "Project name"},
-			"compose_content":    resourceschema.StringAttribute{Required: true, Description: "docker-compose.yml content"},
-			"env_content":        resourceschema.StringAttribute{Optional: true, Description: ".env content"},
-			"running":            resourceschema.BoolAttribute{Optional: true, Description: "If true, ensure project is running (compose up); if false, compose down. If unset, no lifecycle management."},
-			"archived":           resourceschema.BoolAttribute{Optional: true, Computed: true, Description: "Whether the project is archived.", PlanModifiers: []planmodifier.Bool{boolplanmodifier.UseStateForUnknown()}},
-			"redeploy_on_update": resourceschema.BoolAttribute{Optional: true, Computed: true, Description: "Redeploy the project after updating compose/env content.", Default: booldefault.StaticBool(true)},
-			"pull_on_update":     resourceschema.BoolAttribute{Optional: true, Computed: true, Description: "Pull images before redeploy when compose/env changes.", Default: booldefault.StaticBool(false)},
+			"environment_id":      resourceschema.StringAttribute{Required: true, Description: "Environment ID"},
+			"name":                resourceschema.StringAttribute{Required: true, Description: "Project name"},
+			"compose_content":     resourceschema.StringAttribute{Required: true, Description: "docker-compose.yml content"},
+			"env_content":         resourceschema.StringAttribute{Optional: true, Description: ".env content"},
+			"running":             resourceschema.BoolAttribute{Optional: true, Description: "If true, ensure project is running (compose up); if false, compose down. If unset, no lifecycle management."},
+			"archived":            resourceschema.BoolAttribute{Optional: true, Computed: true, Description: "Whether the project is archived.", PlanModifiers: []planmodifier.Bool{boolplanmodifier.UseStateForUnknown()}},
+			"redeploy_on_update":  resourceschema.BoolAttribute{Optional: true, Computed: true, Description: "Redeploy the project after updating compose/env content.", Default: booldefault.StaticBool(true)},
+			"pull_on_update":      resourceschema.BoolAttribute{Optional: true, Computed: true, Description: "Pull images before redeploy when compose/env changes.", Default: booldefault.StaticBool(false)},
+			"fail_if_name_exists": resourceschema.BoolAttribute{Optional: true, Description: "If true, fail during the plan phase when a project with the same name already exists in the environment (including folders Arcane has discovered on disk), instead of letting Arcane auto-rename the new project with a numeric suffix. Defaults to false."},
 
 			// Computed fields
-			"path":              resourceschema.StringAttribute{Computed: true, PlanModifiers: []planmodifier.String{stringplanmodifier.UseStateForUnknown()}},
+			"path":              resourceschema.StringAttribute{Computed: true},
 			"status":            resourceschema.StringAttribute{Computed: true},
 			"service_count":     resourceschema.Int64Attribute{Computed: true},
 			"running_count":     resourceschema.Int64Attribute{Computed: true},
@@ -70,6 +73,50 @@ func (r *ProjectResource) Configure(_ context.Context, req resource.ConfigureReq
 	}
 }
 
+// ModifyPlan enforces the optional fail_if_name_exists check during the plan
+// phase. When enabled, creating a project whose name already exists in the
+// environment (a registered project or a folder Arcane has discovered on disk)
+// fails the plan instead of letting Arcane silently auto-rename the project with
+// a numeric suffix, which would make the resource non-deterministic.
+func (r *ProjectResource) ModifyPlan(ctx context.Context, req resource.ModifyPlanRequest, resp *resource.ModifyPlanResponse) {
+	if r.client == nil {
+		return
+	}
+	if !req.State.Raw.IsNull() || req.Plan.Raw.IsNull() {
+		return
+	}
+
+	var plan projectModel
+	resp.Diagnostics.Append(req.Plan.Get(ctx, &plan)...)
+	if resp.Diagnostics.HasError() {
+		return
+	}
+
+	if !plan.FailIfNameExists.ValueBool() {
+		return
+	}
+	if plan.Name.IsUnknown() || plan.Name.IsNull() || plan.EnvironmentID.IsUnknown() || plan.EnvironmentID.IsNull() {
+		return
+	}
+
+	name := plan.Name.ValueString()
+	envID := plan.EnvironmentID.ValueString()
+	existing, err := r.client.ListProjects(ctx, envID)
+	if err != nil {
+		resp.Diagnostics.AddError("failed to check for existing project name", err.Error())
+		return
+	}
+	for _, p := range existing {
+		if p.Name == name {
+			resp.Diagnostics.AddError(
+				"project name already exists",
+				fmt.Sprintf("A project named %q already exists in environment %q (id %q). Arcane would auto-rename the new project (e.g. %q-1), which is non-deterministic. Choose a unique name, import the existing project, or set fail_if_name_exists = false to allow the rename.", name, envID, p.ID, name),
+			)
+			return
+		}
+	}
+}
+
 type projectModel struct {
 	ID               types.String `tfsdk:"id"`
 	EnvironmentID    types.String `tfsdk:"environment_id"`
@@ -80,6 +127,7 @@ type projectModel struct {
 	Archived         types.Bool   `tfsdk:"archived"`
 	RedeployOnUpdate types.Bool   `tfsdk:"redeploy_on_update"`
 	PullOnUpdate     types.Bool   `tfsdk:"pull_on_update"`
+	FailIfNameExists types.Bool   `tfsdk:"fail_if_name_exists"`
 	Path             types.String `tfsdk:"path"`
 	Status           types.String `tfsdk:"status"`
 	ServiceCount     types.Int64  `tfsdk:"service_count"`
@@ -176,6 +224,7 @@ func (r *ProjectResource) Create(ctx context.Context, req resource.CreateRequest
 		Running:          plan.Running,
 		RedeployOnUpdate: plan.RedeployOnUpdate,
 		PullOnUpdate:     plan.PullOnUpdate,
+		FailIfNameExists: plan.FailIfNameExists,
 	}
 	resp.Diagnostics.Append(resp.State.Set(ctx, &state)...)
 }
@@ -365,6 +414,7 @@ func (r *ProjectResource) Update(ctx context.Context, req resource.UpdateRequest
 	state.Env = plan.Env
 	state.PullOnUpdate = plan.PullOnUpdate
 	state.RedeployOnUpdate = plan.RedeployOnUpdate
+	state.FailIfNameExists = plan.FailIfNameExists
 	// state.Running is already updated above if changed
 	resp.Diagnostics.Append(resp.State.Set(ctx, &state)...)
 }

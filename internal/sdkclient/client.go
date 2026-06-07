@@ -10,6 +10,7 @@ import (
 	"net/http"
 	"net/url"
 	"path"
+	"strconv"
 	"strings"
 	"time"
 )
@@ -346,6 +347,54 @@ func (c *Client) DestroyProject(ctx context.Context, envID, projectID string, op
 	return c.do(req, nil)
 }
 
+type projectListPagination struct {
+	TotalPages   int `json:"totalPages"`
+	TotalItems   int `json:"totalItems"`
+	CurrentPage  int `json:"currentPage"`
+	ItemsPerPage int `json:"itemsPerPage"`
+}
+
+type projectListEnvelope struct {
+	Success    bool                  `json:"success"`
+	Data       []ProjectDetails      `json:"data"`
+	Pagination projectListPagination `json:"pagination"`
+}
+
+// ListProjects returns every project in the environment. The result includes
+// archived projects (archived=all) and folders Arcane has discovered on disk
+// but that are not yet fully registered (these surface in this listing once
+// Arcane has scanned the projects directory). It paginates through all pages.
+func (c *Client) ListProjects(ctx context.Context, envID string) ([]ProjectDetails, error) {
+	const pageSize = 100
+	var all []ProjectDetails
+	start := 0
+	for {
+		u := *c.BaseURL
+		u.Path = path.Join(c.BaseURL.Path, "environments", envID, "projects")
+		q := u.Query()
+		q.Set("limit", strconv.Itoa(pageSize))
+		q.Set("start", strconv.Itoa(start))
+		q.Set("archived", "all")
+		u.RawQuery = q.Encode()
+		req, err := http.NewRequestWithContext(ctx, http.MethodGet, u.String(), nil)
+		if err != nil {
+			return nil, err
+		}
+		req.Header.Set("Accept", "application/json")
+		req.Header.Set("X-API-Key", c.APIKey)
+		var out projectListEnvelope
+		if err := c.do(req, &out); err != nil {
+			return nil, err
+		}
+		all = append(all, out.Data...)
+		start += pageSize
+		if len(out.Data) == 0 || start >= out.Pagination.TotalItems {
+			break
+		}
+	}
+	return all, nil
+}
+
 // -------- Notifications --------
 type NotificationUpdate struct {
 	Provider string         `json:"provider"`
@@ -389,6 +438,25 @@ func (c *Client) DeleteNotification(ctx context.Context, envID, provider string)
 	if err != nil {
 		return err
 	}
+	return c.do(req, nil)
+}
+
+// TestNotification triggers Arcane to send a test message through the configured
+// provider. The notifyType maps to the API "type" query parameter (e.g. "simple").
+func (c *Client) TestNotification(ctx context.Context, envID, provider, notifyType string) error {
+	u := *c.BaseURL
+	u.Path = path.Join(c.BaseURL.Path, "environments", envID, "notifications", "test", provider)
+	q := u.Query()
+	if notifyType != "" {
+		q.Set("type", notifyType)
+	}
+	u.RawQuery = q.Encode()
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, u.String(), nil)
+	if err != nil {
+		return err
+	}
+	req.Header.Set("Accept", "application/json")
+	req.Header.Set("X-API-Key", c.APIKey)
 	return c.do(req, nil)
 }
 
@@ -1323,6 +1391,11 @@ type templateRegistryEnvelope struct {
 	Data    TemplateRegistry `json:"data"`
 }
 
+type templateRegistryListEnvelope struct {
+	Success bool               `json:"success"`
+	Data    []TemplateRegistry `json:"data"`
+}
+
 // CreateTemplateRegistry POST /templates/registries
 func (c *Client) CreateTemplateRegistry(ctx context.Context, body CreateTemplateRegistryRequest) (*TemplateRegistry, error) {
 	req, err := c.newRequest(ctx, http.MethodPost, "templates/registries", body)
@@ -1336,17 +1409,23 @@ func (c *Client) CreateTemplateRegistry(ctx context.Context, body CreateTemplate
 	return &env.Data, nil
 }
 
-// GetTemplateRegistry GET /templates/registries/{id}
+// GetTemplateRegistry lists template registries and returns the matching ID.
+// Arcane v1.19.4 exposes list/create/update/delete, but no get-by-ID endpoint.
 func (c *Client) GetTemplateRegistry(ctx context.Context, id string) (*TemplateRegistry, error) {
-	req, err := c.newRequest(ctx, http.MethodGet, path.Join("templates/registries", id), nil)
+	req, err := c.newRequest(ctx, http.MethodGet, "templates/registries", nil)
 	if err != nil {
 		return nil, err
 	}
-	var env templateRegistryEnvelope
+	var env templateRegistryListEnvelope
 	if err := c.do(req, &env); err != nil {
 		return nil, err
 	}
-	return &env.Data, nil
+	for i := range env.Data {
+		if env.Data[i].ID == id {
+			return &env.Data[i], nil
+		}
+	}
+	return nil, fmt.Errorf("arcane API error: 404 Not Found: template registry %q not found", id)
 }
 
 // UpdateTemplateRegistry PUT /templates/registries/{id}
@@ -1355,11 +1434,10 @@ func (c *Client) UpdateTemplateRegistry(ctx context.Context, id string, body Upd
 	if err != nil {
 		return nil, err
 	}
-	var env templateRegistryEnvelope
-	if err := c.do(req, &env); err != nil {
+	if err := c.do(req, nil); err != nil {
 		return nil, err
 	}
-	return &env.Data, nil
+	return c.GetTemplateRegistry(ctx, id)
 }
 
 // DeleteTemplateRegistry DELETE /templates/registries/{id}

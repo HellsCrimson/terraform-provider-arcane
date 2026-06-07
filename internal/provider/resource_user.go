@@ -83,9 +83,6 @@ func (r *UserResource) Schema(_ context.Context, _ resource.SchemaRequest, resp 
 			"updated_at": resourceschema.StringAttribute{
 				Computed:    true,
 				Description: "Last update timestamp.",
-				PlanModifiers: []planmodifier.String{
-					stringplanmodifier.UseStateForUnknown(),
-				},
 			},
 		},
 	}

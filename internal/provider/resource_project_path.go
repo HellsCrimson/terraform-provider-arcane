@@ -54,7 +54,7 @@ func (r *ProjectPathResource) Schema(_ context.Context, _ resource.SchemaRequest
 			"pull_on_update": resourceschema.BoolAttribute{Optional: true, Computed: true, Description: "Pull images before redeploy when compose/env changes.", Default: booldefault.StaticBool(false)},
 
 			// Computed info
-			"path":          resourceschema.StringAttribute{Computed: true, PlanModifiers: []planmodifier.String{stringplanmodifier.UseStateForUnknown()}},
+			"path":          resourceschema.StringAttribute{Computed: true},
 			"status":        resourceschema.StringAttribute{Computed: true},
 			"service_count": resourceschema.Int64Attribute{Computed: true},
 			"running_count": resourceschema.Int64Attribute{Computed: true},
