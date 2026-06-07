@@ -562,6 +562,53 @@ func (c *Client) DeleteContainer(ctx context.Context, envID, containerID string,
 	return c.do(req, nil)
 }
 
+// ContainerSummary is a single item from the container listing endpoint. Docker
+// reports container names as a list, each prefixed with a leading slash
+// (e.g. "/my-container").
+type ContainerSummary struct {
+	ID    string   `json:"id"`
+	Names []string `json:"names"`
+	Image string   `json:"image"`
+}
+
+type containerListEnvelope struct {
+	Success    bool                  `json:"success"`
+	Data       []ContainerSummary    `json:"data"`
+	Pagination projectListPagination `json:"pagination"`
+}
+
+// ListContainers returns every container in the environment, paginating through
+// all pages.
+func (c *Client) ListContainers(ctx context.Context, envID string) ([]ContainerSummary, error) {
+	const pageSize = 100
+	var all []ContainerSummary
+	start := 0
+	for {
+		u := *c.BaseURL
+		u.Path = path.Join(c.BaseURL.Path, "environments", envID, "containers")
+		q := u.Query()
+		q.Set("limit", strconv.Itoa(pageSize))
+		q.Set("start", strconv.Itoa(start))
+		u.RawQuery = q.Encode()
+		req, err := http.NewRequestWithContext(ctx, http.MethodGet, u.String(), nil)
+		if err != nil {
+			return nil, err
+		}
+		req.Header.Set("Accept", "application/json")
+		req.Header.Set("X-API-Key", c.APIKey)
+		var out containerListEnvelope
+		if err := c.do(req, &out); err != nil {
+			return nil, err
+		}
+		all = append(all, out.Data...)
+		start += pageSize
+		if len(out.Data) == 0 || start >= out.Pagination.TotalItems {
+			break
+		}
+	}
+	return all, nil
+}
+
 // -------- Container Registries --------
 type CreateContainerRegistryRequest struct {
 	URL                string  `json:"url"`
@@ -1615,6 +1662,44 @@ func (c *Client) DeleteGitOpsSync(ctx context.Context, envID, syncID string) err
 		return err
 	}
 	return c.do(req, nil)
+}
+
+type gitOpsSyncListEnvelope struct {
+	Success    bool                  `json:"success"`
+	Data       []GitOpsSync          `json:"data"`
+	Pagination projectListPagination `json:"pagination"`
+}
+
+// ListGitOpsSyncs returns every GitOps sync in the environment, paginating
+// through all pages.
+func (c *Client) ListGitOpsSyncs(ctx context.Context, envID string) ([]GitOpsSync, error) {
+	const pageSize = 100
+	var all []GitOpsSync
+	start := 0
+	for {
+		u := *c.BaseURL
+		u.Path = path.Join(c.BaseURL.Path, "environments", envID, "gitops-syncs")
+		q := u.Query()
+		q.Set("limit", strconv.Itoa(pageSize))
+		q.Set("start", strconv.Itoa(start))
+		u.RawQuery = q.Encode()
+		req, err := http.NewRequestWithContext(ctx, http.MethodGet, u.String(), nil)
+		if err != nil {
+			return nil, err
+		}
+		req.Header.Set("Accept", "application/json")
+		req.Header.Set("X-API-Key", c.APIKey)
+		var out gitOpsSyncListEnvelope
+		if err := c.do(req, &out); err != nil {
+			return nil, err
+		}
+		all = append(all, out.Data...)
+		start += pageSize
+		if len(out.Data) == 0 || start >= out.Pagination.TotalItems {
+			break
+		}
+	}
+	return all, nil
 }
 
 // -------- Vulnerability Ignore --------

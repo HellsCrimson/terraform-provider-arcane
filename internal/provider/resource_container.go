@@ -2,6 +2,7 @@ package provider
 
 import (
 	"context"
+	"fmt"
 	"strings"
 
 	"terraform-provider-arcane/internal/sdkclient"
@@ -21,6 +22,7 @@ import (
 
 var _ resource.Resource = &ContainerResource{}
 var _ resource.ResourceWithImportState = &ContainerResource{}
+var _ resource.ResourceWithModifyPlan = &ContainerResource{}
 
 type ContainerResource struct{ client *sdkclient.Client }
 
@@ -68,6 +70,8 @@ func (r *ContainerResource) Schema(_ context.Context, _ resource.SchemaRequest, 
 			"status":            resourceschema.StringAttribute{Computed: true},
 			"redeploy_disabled": resourceschema.BoolAttribute{Computed: true},
 
+			"fail_if_name_exists": resourceschema.BoolAttribute{Optional: true, Description: "If true, fail during the plan phase when a container with the same name already exists in the environment, instead of letting Arcane reject the create at apply time. Defaults to false."},
+
 			// Delete behavior
 			"force_delete":   resourceschema.BoolAttribute{Optional: true, Description: "Force delete running container"},
 			"remove_volumes": resourceschema.BoolAttribute{Optional: true, Description: "Remove volumes on delete"},
@@ -79,6 +83,52 @@ func (r *ContainerResource) Configure(_ context.Context, req resource.ConfigureR
 	if req.ProviderData != nil {
 		if c, ok := req.ProviderData.(*sdkclient.Client); ok {
 			r.client = c
+		}
+	}
+}
+
+// ModifyPlan enforces the optional fail_if_name_exists check during the plan
+// phase. When enabled, creating a container whose name already exists in the
+// environment fails the plan instead of letting Arcane reject the create at
+// apply time.
+func (r *ContainerResource) ModifyPlan(ctx context.Context, req resource.ModifyPlanRequest, resp *resource.ModifyPlanResponse) {
+	if r.client == nil {
+		return
+	}
+	// Only run on create (no prior state, non-null plan).
+	if !req.State.Raw.IsNull() || req.Plan.Raw.IsNull() {
+		return
+	}
+
+	var plan containerModel
+	resp.Diagnostics.Append(req.Plan.Get(ctx, &plan)...)
+	if resp.Diagnostics.HasError() {
+		return
+	}
+
+	if !plan.FailIfNameExists.ValueBool() {
+		return
+	}
+	if plan.Name.IsUnknown() || plan.Name.IsNull() || plan.EnvironmentID.IsUnknown() || plan.EnvironmentID.IsNull() {
+		return
+	}
+
+	name := plan.Name.ValueString()
+	envID := plan.EnvironmentID.ValueString()
+	existing, err := r.client.ListContainers(ctx, envID)
+	if err != nil {
+		resp.Diagnostics.AddError("failed to check for existing container name", err.Error())
+		return
+	}
+	for _, ct := range existing {
+		for _, n := range ct.Names {
+			if strings.TrimPrefix(n, "/") == name {
+				resp.Diagnostics.AddError(
+					"container name already exists",
+					fmt.Sprintf("A container named %q already exists in environment %q (id %q). Creating another with the same name would fail at apply time. Choose a unique name, import the existing container, or set fail_if_name_exists = false.", name, envID, ct.ID),
+				)
+				return
+			}
 		}
 	}
 }
@@ -118,8 +168,9 @@ type containerModel struct {
 	Status           types.String `tfsdk:"status"`
 	RedeployDisabled types.Bool   `tfsdk:"redeploy_disabled"`
 
-	ForceDelete   types.Bool `tfsdk:"force_delete"`
-	RemoveVolumes types.Bool `tfsdk:"remove_volumes"`
+	FailIfNameExists types.Bool `tfsdk:"fail_if_name_exists"`
+	ForceDelete      types.Bool `tfsdk:"force_delete"`
+	RemoveVolumes    types.Bool `tfsdk:"remove_volumes"`
 }
 
 func (r *ContainerResource) Create(ctx context.Context, req resource.CreateRequest, resp *resource.CreateResponse) {
@@ -253,12 +304,17 @@ func (r *ContainerResource) Read(ctx context.Context, req resource.ReadRequest, 
 }
 
 func (r *ContainerResource) Update(ctx context.Context, req resource.UpdateRequest, resp *resource.UpdateResponse) {
-	// All changes force new via plan modifiers. Nothing to do.
+	// All container attributes force new via plan modifiers. Only the
+	// plan-time-only fail_if_name_exists flag can change in place, so carry its
+	// planned value into state.
+	var plan containerModel
 	var state containerModel
+	resp.Diagnostics.Append(req.Plan.Get(ctx, &plan)...)
 	resp.Diagnostics.Append(req.State.Get(ctx, &state)...)
 	if resp.Diagnostics.HasError() {
 		return
 	}
+	state.FailIfNameExists = plan.FailIfNameExists
 	resp.Diagnostics.Append(resp.State.Set(ctx, &state)...)
 }
 

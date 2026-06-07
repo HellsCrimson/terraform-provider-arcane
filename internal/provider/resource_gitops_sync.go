@@ -17,6 +17,7 @@ import (
 
 var _ resource.Resource = &GitOpsSyncResource{}
 var _ resource.ResourceWithImportState = &GitOpsSyncResource{}
+var _ resource.ResourceWithModifyPlan = &GitOpsSyncResource{}
 
 type GitOpsSyncResource struct {
 	client *sdkclient.Client
@@ -108,6 +109,10 @@ func (r *GitOpsSyncResource) Schema(_ context.Context, _ resource.SchemaRequest,
 				Optional:    true,
 				Description: "Whether to start the project after creation (default: true). This is not sent to the API but controls lifecycle behavior.",
 			},
+			"fail_if_name_exists": resourceschema.BoolAttribute{
+				Optional:    true,
+				Description: "If true, fail during the plan phase when a GitOps sync with the same name already exists in the environment, instead of creating a duplicate. Defaults to false.",
+			},
 
 			// Computed fields
 			"project_id": resourceschema.StringAttribute{
@@ -156,6 +161,49 @@ func (r *GitOpsSyncResource) Configure(_ context.Context, req resource.Configure
 	}
 }
 
+// ModifyPlan enforces the optional fail_if_name_exists check during the plan
+// phase. When enabled, creating a GitOps sync whose name already exists in the
+// environment fails the plan instead of silently creating a duplicate.
+func (r *GitOpsSyncResource) ModifyPlan(ctx context.Context, req resource.ModifyPlanRequest, resp *resource.ModifyPlanResponse) {
+	if r.client == nil {
+		return
+	}
+	// Only run on create (no prior state, non-null plan).
+	if !req.State.Raw.IsNull() || req.Plan.Raw.IsNull() {
+		return
+	}
+
+	var plan gitOpsSyncModel
+	resp.Diagnostics.Append(req.Plan.Get(ctx, &plan)...)
+	if resp.Diagnostics.HasError() {
+		return
+	}
+
+	if !plan.FailIfNameExists.ValueBool() {
+		return
+	}
+	if plan.Name.IsUnknown() || plan.Name.IsNull() || plan.EnvironmentID.IsUnknown() || plan.EnvironmentID.IsNull() {
+		return
+	}
+
+	name := plan.Name.ValueString()
+	envID := plan.EnvironmentID.ValueString()
+	existing, err := r.client.ListGitOpsSyncs(ctx, envID)
+	if err != nil {
+		resp.Diagnostics.AddError("failed to check for existing gitops sync name", err.Error())
+		return
+	}
+	for _, s := range existing {
+		if s.Name == name {
+			resp.Diagnostics.AddError(
+				"gitops sync name already exists",
+				fmt.Sprintf("A GitOps sync named %q already exists in environment %q (id %q). Choose a unique name, import the existing sync, or set fail_if_name_exists = false.", name, envID, s.ID),
+			)
+			return
+		}
+	}
+}
+
 type gitOpsSyncModel struct {
 	ID                   types.String `tfsdk:"id"`
 	EnvironmentID        types.String `tfsdk:"environment_id"`
@@ -174,6 +222,7 @@ type gitOpsSyncModel struct {
 	Enabled              types.Bool   `tfsdk:"enabled"`
 	EnvironmentVariables types.Map    `tfsdk:"environment_variables"`
 	StartProject         types.Bool   `tfsdk:"start_project"`
+	FailIfNameExists     types.Bool   `tfsdk:"fail_if_name_exists"`
 	ProjectID            types.String `tfsdk:"project_id"`
 	LastSyncAt           types.String `tfsdk:"last_sync_at"`
 	LastSyncCommit       types.String `tfsdk:"last_sync_commit"`
@@ -326,7 +375,8 @@ func (r *GitOpsSyncResource) Create(ctx context.Context, req resource.CreateRequ
 		// Optional fields below are set conditionally so we preserve
 		// the user's plan (null) when they didn't provide a value.
 		EnvironmentVariables: plan.EnvironmentVariables,
-		StartProject:         plan.StartProject, // Preserve the user's preference
+		StartProject:         plan.StartProject,     // Preserve the user's preference
+		FailIfNameExists:     plan.FailIfNameExists, // Plan-time-only guard, preserve as configured
 		CreatedAt:            types.StringValue(sync.CreatedAt),
 		UpdatedAt:            types.StringValue(sync.UpdatedAt),
 	}
@@ -610,7 +660,8 @@ func (r *GitOpsSyncResource) Update(ctx context.Context, req resource.UpdateRequ
 	state.Enabled = types.BoolValue(sync.Enabled)
 	// Leave updated_at unchanged to avoid plan inconsistency on server-side timestamp changes
 	state.EnvironmentVariables = plan.EnvironmentVariables
-	state.StartProject = plan.StartProject // Preserve the user's preference
+	state.StartProject = plan.StartProject         // Preserve the user's preference
+	state.FailIfNameExists = plan.FailIfNameExists // Plan-time-only guard, preserve as configured
 
 	if sync.ProjectID != nil {
 		state.ProjectID = types.StringValue(*sync.ProjectID)

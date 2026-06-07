@@ -296,6 +296,155 @@ YAML
 	return cfg
 }
 
+// TestAccArcaneContainer_failIfNameExists verifies the opt-in fail_if_name_exists
+// guard on arcane_container. With fail_if_name_exists = true the provider fails
+// the plan when a container of the same name already exists in the environment,
+// instead of letting Arcane reject the create at apply time.
+//
+// The first container is created on its own (no collision). A second container
+// then reuses the same name; because the first now exists, planning the second
+// fails before any create is attempted.
+func TestAccArcaneContainer_failIfNameExists(t *testing.T) {
+	name := testAccName("dup-container")
+
+	resource.Test(t, resource.TestCase{
+		ProtoV6ProviderFactories: testAccProtoV6ProviderFactories,
+		PreCheck:                 func() { testAccPreCheck(t) },
+		Steps: []resource.TestStep{
+			{
+				Config: testAccContainerFailIfNameExistsConfig(name, false),
+				Check: resource.ComposeAggregateTestCheckFunc(
+					resource.TestCheckResourceAttrSet("arcane_container.first", "id"),
+					resource.TestCheckResourceAttr("arcane_container.first", "name", name),
+					resource.TestCheckResourceAttr("arcane_container.first", "fail_if_name_exists", "true"),
+				),
+			},
+			{
+				Config:      testAccContainerFailIfNameExistsConfig(name, true),
+				ExpectError: regexp.MustCompile(`container name already exists`),
+			},
+		},
+	})
+}
+
+func testAccContainerFailIfNameExistsConfig(name string, withSecond bool) string {
+	cfg := fmt.Sprintf(`
+provider "arcane" {
+  endpoint     = %q
+  api_key      = %q
+  http_timeout = "180s"
+}
+
+resource "arcane_container" "first" {
+  environment_id      = %q
+  name                = %q
+  image               = "alpine:latest"
+  command             = ["sh", "-c", "sleep 60"]
+  force_delete        = true
+  remove_volumes      = false
+  fail_if_name_exists = true
+}
+`, testAccEndpoint(), testAccAPIKey(), testAccEnvironmentID(), name)
+
+	if withSecond {
+		cfg += fmt.Sprintf(`
+resource "arcane_container" "second" {
+  environment_id      = %q
+  name                = %q
+  image               = "alpine:latest"
+  command             = ["sh", "-c", "sleep 60"]
+  force_delete        = true
+  remove_volumes      = false
+  fail_if_name_exists = true
+}
+`, testAccEnvironmentID(), name)
+	}
+
+	return cfg
+}
+
+// TestAccArcaneGitOpsSync_failIfNameExists verifies the opt-in fail_if_name_exists
+// guard on arcane_gitops_sync. With fail_if_name_exists = true the provider fails
+// the plan when a GitOps sync of the same name already exists in the environment,
+// instead of creating a duplicate.
+//
+// The first sync is created on its own (no collision). A second sync then reuses
+// the same name; because the first now exists, planning the second fails before
+// any create is attempted.
+func TestAccArcaneGitOpsSync_failIfNameExists(t *testing.T) {
+	name := testAccName("dup-gitops")
+
+	resource.Test(t, resource.TestCase{
+		ProtoV6ProviderFactories: testAccProtoV6ProviderFactories,
+		PreCheck:                 func() { testAccPreCheck(t) },
+		Steps: []resource.TestStep{
+			{
+				Config: testAccGitOpsSyncFailIfNameExistsConfig(name, false),
+				Check: resource.ComposeAggregateTestCheckFunc(
+					resource.TestCheckResourceAttrSet("arcane_gitops_sync.first", "id"),
+					resource.TestCheckResourceAttr("arcane_gitops_sync.first", "name", name),
+					resource.TestCheckResourceAttr("arcane_gitops_sync.first", "fail_if_name_exists", "true"),
+				),
+			},
+			{
+				Config:      testAccGitOpsSyncFailIfNameExistsConfig(name, true),
+				ExpectError: regexp.MustCompile(`gitops sync name already exists`),
+			},
+		},
+	})
+}
+
+func testAccGitOpsSyncFailIfNameExistsConfig(name string, withSecond bool) string {
+	cfg := fmt.Sprintf(`
+provider "arcane" {
+  endpoint     = %q
+  api_key      = %q
+  http_timeout = "180s"
+}
+
+resource "arcane_git_repository" "test" {
+  name      = %q
+  url       = "https://github.com/docker/awesome-compose.git"
+  auth_type = "none"
+  enabled   = true
+}
+
+resource "arcane_gitops_sync" "first" {
+  environment_id      = %q
+  name                = %q
+  repository_id       = arcane_git_repository.test.id
+  branch              = "master"
+  compose_path        = "nginx-flask-mysql/compose.yaml"
+  project_name        = "%s-1"
+  auto_sync           = false
+  sync_directory      = false
+  target_type         = "project"
+  start_project       = false
+  fail_if_name_exists = true
+}
+`, testAccEndpoint(), testAccAPIKey(), testAccName("gitops-repo"), testAccEnvironmentID(), name, name)
+
+	if withSecond {
+		cfg += fmt.Sprintf(`
+resource "arcane_gitops_sync" "second" {
+  environment_id      = %q
+  name                = %q
+  repository_id       = arcane_git_repository.test.id
+  branch              = "master"
+  compose_path        = "nginx-flask-mysql/compose.yaml"
+  project_name        = "%s-2"
+  auto_sync           = false
+  sync_directory      = false
+  target_type         = "project"
+  start_project       = false
+  fail_if_name_exists = true
+}
+`, testAccEnvironmentID(), name, name)
+	}
+
+	return cfg
+}
+
 // webhookCapture is a host-side HTTP listener that records the POST requests
 // Arcane sends when the generic notification provider is exercised.
 type webhookCapture struct {
