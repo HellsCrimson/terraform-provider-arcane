@@ -10,6 +10,7 @@ import (
 	"net/http/httptest"
 	"os"
 	"path/filepath"
+	"regexp"
 	"strings"
 	"sync"
 	"testing"
@@ -117,6 +118,88 @@ func TestAccArcaneProvider_allResources(t *testing.T) {
 			},
 		},
 	})
+}
+
+// TestAccArcaneProject_failIfNameExists verifies the opt-in fail_if_name_exists
+// guard on arcane_project. Arcane auto-renames a project (appending a numeric
+// suffix) when one of the same name already exists, which is non-deterministic
+// for Terraform. With fail_if_name_exists = true the provider instead fails the
+// plan when a project of the same name is already present in the environment.
+//
+// The first project is created on its own (no collision, so the plan succeeds).
+// A second project then reuses the same name; because the first project now
+// exists, planning the second fails before any auto-rename can occur.
+func TestAccArcaneProject_failIfNameExists(t *testing.T) {
+	name := testAccName("dup-project")
+
+	resource.Test(t, resource.TestCase{
+		ProtoV6ProviderFactories: testAccProtoV6ProviderFactories,
+		PreCheck:                 func() { testAccPreCheck(t) },
+		Steps: []resource.TestStep{
+			{
+				Config: testAccProjectFailIfNameExistsConfig(name, false),
+				Check: resource.ComposeAggregateTestCheckFunc(
+					resource.TestCheckResourceAttrSet("arcane_project.first", "id"),
+					resource.TestCheckResourceAttr("arcane_project.first", "name", name),
+					resource.TestCheckResourceAttr("arcane_project.first", "fail_if_name_exists", "true"),
+				),
+			},
+			{
+				Config:      testAccProjectFailIfNameExistsConfig(name, true),
+				ExpectError: regexp.MustCompile(`project name already exists`),
+			},
+		},
+	})
+}
+
+func testAccProjectFailIfNameExistsConfig(name string, withSecond bool) string {
+	cfg := fmt.Sprintf(`
+provider "arcane" {
+  endpoint     = %q
+  api_key      = %q
+  http_timeout = "180s"
+}
+
+resource "arcane_project" "first" {
+  environment_id      = %q
+  name                = %q
+  compose_content     = <<YAML
+services:
+  app:
+    image: alpine:latest
+    command: ["sh", "-c", "echo dup && sleep 1"]
+YAML
+  running             = false
+  redeploy_on_update  = false
+  pull_on_update      = false
+  fail_if_name_exists = true
+  remove_files        = true
+  remove_volumes      = true
+}
+`, testAccEndpoint(), testAccAPIKey(), testAccEnvironmentID(), name)
+
+	if withSecond {
+		cfg += fmt.Sprintf(`
+resource "arcane_project" "second" {
+  environment_id      = %q
+  name                = %q
+  compose_content     = <<YAML
+services:
+  app:
+    image: alpine:latest
+    command: ["sh", "-c", "echo dup2 && sleep 1"]
+YAML
+  running             = false
+  redeploy_on_update  = false
+  pull_on_update      = false
+  fail_if_name_exists = true
+  remove_files        = true
+  remove_volumes      = true
+}
+`, testAccEnvironmentID(), name)
+	}
+
+	return cfg
 }
 
 // webhookCapture is a host-side HTTP listener that records the POST requests

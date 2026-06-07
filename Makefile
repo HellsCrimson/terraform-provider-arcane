@@ -4,7 +4,7 @@ COMPOSE_FILE ?= tests/docker-compose.yml
 ARCANE_ENDPOINT ?= http://127.0.0.1:3552/api
 ARCANE_ACC_ENVIRONMENT_ID ?= 0
 ARCANE_API_KEY ?= arc_a54fe1040057252a19b34d72008395141a04de7731a28d6f7359baa4923b2f6a
-ACC_TEST ?= TestAccArcaneProvider_allResources
+ACC_TEST ?= TestAcc
 
 .PHONY: test test-up test-down test-clean wait-arcane test-acc test-suite
 

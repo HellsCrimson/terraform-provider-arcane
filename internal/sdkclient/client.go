@@ -10,6 +10,7 @@ import (
 	"net/http"
 	"net/url"
 	"path"
+	"strconv"
 	"strings"
 	"time"
 )
@@ -344,6 +345,54 @@ func (c *Client) DestroyProject(ctx context.Context, envID, projectID string, op
 		return err
 	}
 	return c.do(req, nil)
+}
+
+type projectListPagination struct {
+	TotalPages   int `json:"totalPages"`
+	TotalItems   int `json:"totalItems"`
+	CurrentPage  int `json:"currentPage"`
+	ItemsPerPage int `json:"itemsPerPage"`
+}
+
+type projectListEnvelope struct {
+	Success    bool                  `json:"success"`
+	Data       []ProjectDetails      `json:"data"`
+	Pagination projectListPagination `json:"pagination"`
+}
+
+// ListProjects returns every project in the environment. The result includes
+// archived projects (archived=all) and folders Arcane has discovered on disk
+// but that are not yet fully registered (these surface in this listing once
+// Arcane has scanned the projects directory). It paginates through all pages.
+func (c *Client) ListProjects(ctx context.Context, envID string) ([]ProjectDetails, error) {
+	const pageSize = 100
+	var all []ProjectDetails
+	start := 0
+	for {
+		u := *c.BaseURL
+		u.Path = path.Join(c.BaseURL.Path, "environments", envID, "projects")
+		q := u.Query()
+		q.Set("limit", strconv.Itoa(pageSize))
+		q.Set("start", strconv.Itoa(start))
+		q.Set("archived", "all")
+		u.RawQuery = q.Encode()
+		req, err := http.NewRequestWithContext(ctx, http.MethodGet, u.String(), nil)
+		if err != nil {
+			return nil, err
+		}
+		req.Header.Set("Accept", "application/json")
+		req.Header.Set("X-API-Key", c.APIKey)
+		var out projectListEnvelope
+		if err := c.do(req, &out); err != nil {
+			return nil, err
+		}
+		all = append(all, out.Data...)
+		start += pageSize
+		if len(out.Data) == 0 || start >= out.Pagination.TotalItems {
+			break
+		}
+	}
+	return all, nil
 }
 
 // -------- Notifications --------
