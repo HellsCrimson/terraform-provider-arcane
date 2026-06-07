@@ -392,6 +392,25 @@ func (c *Client) DeleteNotification(ctx context.Context, envID, provider string)
 	return c.do(req, nil)
 }
 
+// TestNotification triggers Arcane to send a test message through the configured
+// provider. The notifyType maps to the API "type" query parameter (e.g. "simple").
+func (c *Client) TestNotification(ctx context.Context, envID, provider, notifyType string) error {
+	u := *c.BaseURL
+	u.Path = path.Join(c.BaseURL.Path, "environments", envID, "notifications", "test", provider)
+	q := u.Query()
+	if notifyType != "" {
+		q.Set("type", notifyType)
+	}
+	u.RawQuery = q.Encode()
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, u.String(), nil)
+	if err != nil {
+		return err
+	}
+	req.Header.Set("Accept", "application/json")
+	req.Header.Set("X-API-Key", c.APIKey)
+	return c.do(req, nil)
+}
+
 // -------- Containers --------
 type ContainerCreateRequest struct {
 	Name            string            `json:"name"`

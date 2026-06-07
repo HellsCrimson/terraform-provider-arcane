@@ -3,10 +3,15 @@ package provider
 import (
 	"context"
 	"fmt"
+	"io"
 	"math/rand"
+	"net"
+	"net/http"
+	"net/http/httptest"
 	"os"
 	"path/filepath"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 
@@ -15,6 +20,7 @@ import (
 	"github.com/hashicorp/terraform-plugin-framework/providerserver"
 	"github.com/hashicorp/terraform-plugin-go/tfprotov6"
 	"github.com/hashicorp/terraform-plugin-testing/helper/resource"
+	"github.com/hashicorp/terraform-plugin-testing/terraform"
 )
 
 const (
@@ -27,6 +33,13 @@ var testAccProtoV6ProviderFactories = map[string]func() (tfprotov6.ProviderServe
 }
 
 func TestAccArcaneProvider_allResources(t *testing.T) {
+	// Start a webhook listener on the host that captures the POST Arcane sends when
+	// the generic notification provider is tested. It is bound to all interfaces so
+	// the Arcane container can reach it via host.docker.internal.
+	webhook := startWebhookCapture(t)
+	webhookURL1 := webhook.url + "?s=1"
+	webhookURL2 := webhook.url + "?s=2"
+
 	resource.Test(t, resource.TestCase{
 		ProtoV6ProviderFactories: testAccProtoV6ProviderFactories,
 		PreCheck: func() {
@@ -37,7 +50,7 @@ func TestAccArcaneProvider_allResources(t *testing.T) {
 				PreConfig: func() {
 					writeProjectPathFixtures(t, "1")
 				},
-				Config: testAccAllResourcesConfig("1"),
+				Config: testAccAllResourcesConfig("1", webhookURL1),
 				Check: resource.ComposeAggregateTestCheckFunc(
 					resource.TestCheckResourceAttrSet("arcane_environment.test", "id"),
 					resource.TestCheckResourceAttr("arcane_environment.test", "name", testAccName("env-1")),
@@ -57,13 +70,26 @@ func TestAccArcaneProvider_allResources(t *testing.T) {
 					resource.TestCheckResourceAttrSet("arcane_vulnerability_ignore.test", "id"),
 					resource.TestCheckResourceAttr("arcane_job_schedules.test", "polling_interval", "0 */5 * * * *"),
 					resource.TestCheckResourceAttr("arcane_settings.test", "application_theme", "light"),
+					// Notification: generic webhook provider, enabled, pointing at the listener.
+					resource.TestCheckResourceAttrSet("arcane_notification.test", "id"),
+					resource.TestCheckResourceAttr("arcane_notification.test", "provider_name", "generic"),
+					resource.TestCheckResourceAttr("arcane_notification.test", "enabled", "true"),
+					resource.TestCheckResourceAttr("arcane_notification.test", "config.webhookUrl", webhookURL1),
+					// Trigger a test notification and assert the listener received the POST.
+					testAccCheckNotificationDelivers(webhook, testAccEnvironmentID()),
+					// GitOps sync.
+					resource.TestCheckResourceAttrSet("arcane_gitops_sync.test", "id"),
+					resource.TestCheckResourceAttr("arcane_gitops_sync.test", "name", testAccName("gitops-1")),
+					resource.TestCheckResourceAttr("arcane_gitops_sync.test", "branch", "master"),
+					resource.TestCheckResourceAttr("arcane_gitops_sync.test", "target_type", "project"),
+					resource.TestCheckResourceAttr("arcane_gitops_sync.test", "environment_variables.TFACC_SUFFIX", "1"),
 				),
 			},
 			{
 				PreConfig: func() {
 					writeProjectPathFixtures(t, "2")
 				},
-				Config: testAccAllResourcesConfig("2"),
+				Config: testAccAllResourcesConfig("2", webhookURL2),
 				Check: resource.ComposeAggregateTestCheckFunc(
 					resource.TestCheckResourceAttr("arcane_environment.test", "name", testAccName("env-2")),
 					resource.TestCheckResourceAttr("arcane_user.test", "display_name", "Terraform Acceptance User 2"),
@@ -80,10 +106,101 @@ func TestAccArcaneProvider_allResources(t *testing.T) {
 					resource.TestCheckResourceAttr("arcane_job_schedules.test", "polling_interval", "0 */10 * * * *"),
 					resource.TestCheckResourceAttr("arcane_settings.test", "application_theme", "dark"),
 					resource.TestCheckResourceAttr("arcane_vulnerability_ignore.test", "reason", "Terraform acceptance 2"),
+					// Notification update: disabled and webhook URL changed.
+					resource.TestCheckResourceAttr("arcane_notification.test", "provider_name", "generic"),
+					resource.TestCheckResourceAttr("arcane_notification.test", "enabled", "false"),
+					resource.TestCheckResourceAttr("arcane_notification.test", "config.webhookUrl", webhookURL2),
+					// GitOps sync update.
+					resource.TestCheckResourceAttr("arcane_gitops_sync.test", "name", testAccName("gitops-2")),
+					resource.TestCheckResourceAttr("arcane_gitops_sync.test", "environment_variables.TFACC_SUFFIX", "2"),
 				),
 			},
 		},
 	})
+}
+
+// webhookCapture is a host-side HTTP listener that records the POST requests
+// Arcane sends when the generic notification provider is exercised.
+type webhookCapture struct {
+	mu       sync.Mutex
+	requests [][]byte
+	server   *httptest.Server
+	url      string
+}
+
+func (w *webhookCapture) reset() {
+	w.mu.Lock()
+	defer w.mu.Unlock()
+	w.requests = nil
+}
+
+func (w *webhookCapture) count() int {
+	w.mu.Lock()
+	defer w.mu.Unlock()
+	return len(w.requests)
+}
+
+// startWebhookCapture binds an HTTP server to all interfaces (so the Arcane
+// container can reach it) and returns a handle whose url uses a host that is
+// resolvable from inside the container.
+func startWebhookCapture(t *testing.T) *webhookCapture {
+	t.Helper()
+
+	wc := &webhookCapture{}
+	handler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		body, _ := io.ReadAll(r.Body)
+		wc.mu.Lock()
+		wc.requests = append(wc.requests, body)
+		wc.mu.Unlock()
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusOK)
+		_, _ = w.Write([]byte(`{"ok":true}`))
+	})
+
+	listener, err := net.Listen("tcp", "0.0.0.0:0")
+	if err != nil {
+		t.Fatalf("starting webhook listener: %s", err)
+	}
+	srv := httptest.NewUnstartedServer(handler)
+	_ = srv.Listener.Close()
+	srv.Listener = listener
+	srv.Start()
+	t.Cleanup(srv.Close)
+
+	port := listener.Addr().(*net.TCPAddr).Port
+	wc.server = srv
+	wc.url = fmt.Sprintf("http://%s:%d/hook", testAccWebhookHost(), port)
+	return wc
+}
+
+// testAccWebhookHost returns the host the Arcane container uses to reach the
+// webhook listener running on the test host. Defaults to host.docker.internal,
+// which the test docker-compose maps to the host gateway.
+func testAccWebhookHost() string {
+	if v := os.Getenv("ARCANE_ACC_WEBHOOK_HOST"); v != "" {
+		return v
+	}
+	return "host.docker.internal"
+}
+
+// testAccCheckNotificationDelivers triggers a test notification through the
+// generic provider and asserts the webhook listener received the resulting POST.
+func testAccCheckNotificationDelivers(wc *webhookCapture, envID string) resource.TestCheckFunc {
+	return func(_ *terraform.State) error {
+		wc.reset()
+		client := sdkclient.NewClient(testAccEndpoint(), testAccAPIKey())
+		if err := client.TestNotification(context.Background(), envID, "generic", "simple"); err != nil {
+			return fmt.Errorf("triggering test notification: %w", err)
+		}
+		deadline := time.Now().Add(10 * time.Second)
+		for time.Now().Before(deadline) {
+			if wc.count() > 0 {
+				return nil
+			}
+			time.Sleep(200 * time.Millisecond)
+		}
+		return fmt.Errorf("webhook listener received no POST from Arcane; ensure the Arcane container can reach %q (override with ARCANE_ACC_WEBHOOK_HOST)", testAccWebhookHost())
+	}
 }
 
 func testAccPreCheck(t *testing.T) {
@@ -209,7 +326,7 @@ func writeProjectPathFixtures(t *testing.T, suffix string) {
 	}
 }
 
-func testAccAllResourcesConfig(suffix string) string {
+func testAccAllResourcesConfig(suffix, webhookURL string) string {
 	envName := testAccName("env-" + suffix)
 	return fmt.Sprintf(`
 provider "arcane" {
@@ -291,20 +408,11 @@ resource "arcane_job_schedules" "test" {
 }
 
 resource "arcane_notification" "test" {
-  environment_id = arcane_environment.test.id
-  provider_name  = "discord"
+  environment_id = %q
+  provider_name  = "generic"
   enabled        = %s
   config = {
-    avatarUrl = ""
-    events = {
-      container_update    = true
-      image_update        = false
-      prune_report        = true
-      vulnerability_found = false
-    }
-    token     = "token-%s"
-    username  = "tfacc"
-    webhookId = "webhook-%s"
+    webhookUrl = %q
   }
 }
 
@@ -430,9 +538,9 @@ resource "arcane_gitops_sync" "test" {
 		map[string]string{"1": "0 */5 * * * *", "2": "0 */10 * * * *"}[suffix],
 		testAccEnvironmentID(),
 		map[string]string{"1": "0 */5 * * * *", "2": "0 */10 * * * *"}[suffix],
+		testAccEnvironmentID(),
 		map[string]string{"1": "true", "2": "false"}[suffix],
-		suffix,
-		suffix,
+		webhookURL,
 		testAccEnvironmentID(),
 		testAccName("project-"+suffix),
 		suffix,

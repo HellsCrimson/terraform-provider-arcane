@@ -5,6 +5,10 @@ services:
     restart: unless-stopped
     ports:
       - 3552:3552
+    # Allows the Arcane container to reach a webhook listener running on the host
+    # (used by the arcane_notification acceptance test) regardless of the bridge subnet.
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
     volumes:
       - /var/run/docker.sock:/var/run/docker.sock
       - arcane-data:/app/data
