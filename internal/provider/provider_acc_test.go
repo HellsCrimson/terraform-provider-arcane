@@ -53,37 +53,44 @@ func TestAccArcaneProvider_allResources(t *testing.T) {
 				},
 				Config: testAccAllResourcesConfig("1", webhookURL1),
 				Check: resource.ComposeAggregateTestCheckFunc(
-					resource.TestCheckResourceAttrSet("arcane_environment.test", "id"),
-					resource.TestCheckResourceAttr("arcane_environment.test", "name", testAccName("env-1")),
-					resource.TestCheckResourceAttrSet("arcane_user.test", "id"),
-					resource.TestCheckResourceAttr("arcane_user.test", "display_name", "Terraform Acceptance User 1"),
-					resource.TestCheckResourceAttrSet("arcane_api_key.test", "id"),
-					resource.TestCheckResourceAttrSet("arcane_container_registry.test", "id"),
-					resource.TestCheckResourceAttrSet("arcane_git_repository.test", "id"),
-					resource.TestCheckResourceAttrSet("arcane_template.test", "id"),
-					resource.TestCheckResourceAttrSet("arcane_template_registry.test", "id"),
-					resource.TestCheckResourceAttrSet("arcane_project.test", "id"),
-					resource.TestCheckResourceAttrSet("arcane_project_path.test", "id"),
-					resource.TestCheckResourceAttrSet("arcane_container.test", "id"),
-					resource.TestCheckResourceAttrSet("arcane_network.test", "id"),
-					resource.TestCheckResourceAttrSet("arcane_volume.test", "id"),
-					resource.TestCheckResourceAttrSet("arcane_volume_backup.test", "id"),
-					resource.TestCheckResourceAttrSet("arcane_vulnerability_ignore.test", "id"),
-					resource.TestCheckResourceAttr("arcane_job_schedules.test", "polling_interval", "0 */5 * * * *"),
-					resource.TestCheckResourceAttr("arcane_settings.test", "application_theme", "light"),
-					// Notification: generic webhook provider, enabled, pointing at the listener.
-					resource.TestCheckResourceAttrSet("arcane_notification.test", "id"),
-					resource.TestCheckResourceAttr("arcane_notification.test", "provider_name", "generic"),
-					resource.TestCheckResourceAttr("arcane_notification.test", "enabled", "true"),
-					resource.TestCheckResourceAttr("arcane_notification.test", "config.webhookUrl", webhookURL1),
-					// Trigger a test notification and assert the listener received the POST.
-					testAccCheckNotificationDelivers(webhook, testAccEnvironmentID()),
-					// GitOps sync.
-					resource.TestCheckResourceAttrSet("arcane_gitops_sync.test", "id"),
-					resource.TestCheckResourceAttr("arcane_gitops_sync.test", "name", testAccName("gitops-1")),
-					resource.TestCheckResourceAttr("arcane_gitops_sync.test", "branch", "master"),
-					resource.TestCheckResourceAttr("arcane_gitops_sync.test", "target_type", "project"),
-					resource.TestCheckResourceAttr("arcane_gitops_sync.test", "environment_variables.TFACC_SUFFIX", "1"),
+					logCheck(t, "arcane_environment",
+						resource.TestCheckResourceAttrSet("arcane_environment.test", "id"),
+						resource.TestCheckResourceAttr("arcane_environment.test", "name", testAccName("env-1")),
+					),
+					logCheck(t, "arcane_user",
+						resource.TestCheckResourceAttrSet("arcane_user.test", "id"),
+						resource.TestCheckResourceAttr("arcane_user.test", "display_name", "Terraform Acceptance User 1"),
+					),
+					logCheck(t, "arcane_api_key", resource.TestCheckResourceAttrSet("arcane_api_key.test", "id")),
+					logCheck(t, "arcane_container_registry", resource.TestCheckResourceAttrSet("arcane_container_registry.test", "id")),
+					logCheck(t, "arcane_git_repository", resource.TestCheckResourceAttrSet("arcane_git_repository.test", "id")),
+					logCheck(t, "arcane_template", resource.TestCheckResourceAttrSet("arcane_template.test", "id")),
+					logCheck(t, "arcane_template_registry", resource.TestCheckResourceAttrSet("arcane_template_registry.test", "id")),
+					logCheck(t, "arcane_project", resource.TestCheckResourceAttrSet("arcane_project.test", "id")),
+					logCheck(t, "arcane_project_path", resource.TestCheckResourceAttrSet("arcane_project_path.test", "id")),
+					logCheck(t, "arcane_container", resource.TestCheckResourceAttrSet("arcane_container.test", "id")),
+					logCheck(t, "arcane_network", resource.TestCheckResourceAttrSet("arcane_network.test", "id")),
+					logCheck(t, "arcane_volume", resource.TestCheckResourceAttrSet("arcane_volume.test", "id")),
+					logCheck(t, "arcane_volume_backup", resource.TestCheckResourceAttrSet("arcane_volume_backup.test", "id")),
+					logCheck(t, "arcane_vulnerability_ignore", resource.TestCheckResourceAttrSet("arcane_vulnerability_ignore.test", "id")),
+					logCheck(t, "arcane_job_schedules", resource.TestCheckResourceAttr("arcane_job_schedules.test", "polling_interval", "0 */5 * * * *")),
+					logCheck(t, "arcane_settings", resource.TestCheckResourceAttr("arcane_settings.test", "application_theme", "light")),
+					logCheck(t, "arcane_notification",
+						// Notification: generic webhook provider, enabled, pointing at the listener.
+						resource.TestCheckResourceAttrSet("arcane_notification.test", "id"),
+						resource.TestCheckResourceAttr("arcane_notification.test", "provider_name", "generic"),
+						resource.TestCheckResourceAttr("arcane_notification.test", "enabled", "true"),
+						resource.TestCheckResourceAttr("arcane_notification.test", "config.webhookUrl", webhookURL1),
+						// Trigger a test notification and assert the listener received the POST.
+						testAccCheckNotificationDelivers(webhook, testAccEnvironmentID()),
+					),
+					logCheck(t, "arcane_gitops_sync",
+						resource.TestCheckResourceAttrSet("arcane_gitops_sync.test", "id"),
+						resource.TestCheckResourceAttr("arcane_gitops_sync.test", "name", testAccName("gitops-1")),
+						resource.TestCheckResourceAttr("arcane_gitops_sync.test", "branch", "master"),
+						resource.TestCheckResourceAttr("arcane_gitops_sync.test", "target_type", "project"),
+						resource.TestCheckResourceAttr("arcane_gitops_sync.test", "environment_variables.TFACC_SUFFIX", "1"),
+					),
 				),
 			},
 			{
@@ -92,32 +99,119 @@ func TestAccArcaneProvider_allResources(t *testing.T) {
 				},
 				Config: testAccAllResourcesConfig("2", webhookURL2),
 				Check: resource.ComposeAggregateTestCheckFunc(
-					resource.TestCheckResourceAttr("arcane_environment.test", "name", testAccName("env-2")),
-					resource.TestCheckResourceAttr("arcane_user.test", "display_name", "Terraform Acceptance User 2"),
-					resource.TestCheckResourceAttr("arcane_api_key.test", "name", testAccName("api-key-2")),
-					resource.TestCheckResourceAttr("arcane_container_registry.test", "description", "Terraform acceptance registry 2"),
-					resource.TestCheckResourceAttr("arcane_git_repository.test", "description", "Terraform acceptance repository 2"),
-					resource.TestCheckResourceAttr("arcane_template.test", "description", "Terraform acceptance template 2"),
-					resource.TestCheckResourceAttr("arcane_template_registry.test", "description", "Terraform acceptance template registry 2"),
-					resource.TestCheckResourceAttr("arcane_project.test", "name", testAccName("project-2")),
-					resource.TestCheckResourceAttr("arcane_project_path.test", "name", testAccName("project-path-2")),
-					resource.TestCheckResourceAttr("arcane_container.test", "name", testAccName("container-2")),
-					resource.TestCheckResourceAttr("arcane_network.test", "name", testAccName("network-2")),
-					resource.TestCheckResourceAttr("arcane_volume.test", "name", testAccName("volume-2")),
-					resource.TestCheckResourceAttr("arcane_job_schedules.test", "polling_interval", "0 */10 * * * *"),
-					resource.TestCheckResourceAttr("arcane_settings.test", "application_theme", "dark"),
-					resource.TestCheckResourceAttr("arcane_vulnerability_ignore.test", "reason", "Terraform acceptance 2"),
-					// Notification update: disabled and webhook URL changed.
-					resource.TestCheckResourceAttr("arcane_notification.test", "provider_name", "generic"),
-					resource.TestCheckResourceAttr("arcane_notification.test", "enabled", "false"),
-					resource.TestCheckResourceAttr("arcane_notification.test", "config.webhookUrl", webhookURL2),
-					// GitOps sync update.
-					resource.TestCheckResourceAttr("arcane_gitops_sync.test", "name", testAccName("gitops-2")),
-					resource.TestCheckResourceAttr("arcane_gitops_sync.test", "environment_variables.TFACC_SUFFIX", "2"),
+					logCheck(t, "arcane_environment", resource.TestCheckResourceAttr("arcane_environment.test", "name", testAccName("env-2"))),
+					logCheck(t, "arcane_user", resource.TestCheckResourceAttr("arcane_user.test", "display_name", "Terraform Acceptance User 2")),
+					logCheck(t, "arcane_api_key", resource.TestCheckResourceAttr("arcane_api_key.test", "name", testAccName("api-key-2"))),
+					logCheck(t, "arcane_container_registry", resource.TestCheckResourceAttr("arcane_container_registry.test", "description", "Terraform acceptance registry 2")),
+					logCheck(t, "arcane_git_repository", resource.TestCheckResourceAttr("arcane_git_repository.test", "description", "Terraform acceptance repository 2")),
+					logCheck(t, "arcane_template", resource.TestCheckResourceAttr("arcane_template.test", "description", "Terraform acceptance template 2")),
+					logCheck(t, "arcane_template_registry", resource.TestCheckResourceAttr("arcane_template_registry.test", "description", "Terraform acceptance template registry 2")),
+					logCheck(t, "arcane_project", resource.TestCheckResourceAttr("arcane_project.test", "name", testAccName("project-2"))),
+					logCheck(t, "arcane_project_path", resource.TestCheckResourceAttr("arcane_project_path.test", "name", testAccName("project-path-2"))),
+					logCheck(t, "arcane_container", resource.TestCheckResourceAttr("arcane_container.test", "name", testAccName("container-2"))),
+					logCheck(t, "arcane_network", resource.TestCheckResourceAttr("arcane_network.test", "name", testAccName("network-2"))),
+					logCheck(t, "arcane_volume", resource.TestCheckResourceAttr("arcane_volume.test", "name", testAccName("volume-2"))),
+					logCheck(t, "arcane_job_schedules", resource.TestCheckResourceAttr("arcane_job_schedules.test", "polling_interval", "0 */10 * * * *")),
+					logCheck(t, "arcane_settings", resource.TestCheckResourceAttr("arcane_settings.test", "application_theme", "dark")),
+					logCheck(t, "arcane_vulnerability_ignore", resource.TestCheckResourceAttr("arcane_vulnerability_ignore.test", "reason", "Terraform acceptance 2")),
+					logCheck(t, "arcane_notification",
+						// Notification update: disabled and webhook URL changed.
+						resource.TestCheckResourceAttr("arcane_notification.test", "provider_name", "generic"),
+						resource.TestCheckResourceAttr("arcane_notification.test", "enabled", "false"),
+						resource.TestCheckResourceAttr("arcane_notification.test", "config.webhookUrl", webhookURL2),
+					),
+					logCheck(t, "arcane_gitops_sync",
+						// GitOps sync update.
+						resource.TestCheckResourceAttr("arcane_gitops_sync.test", "name", testAccName("gitops-2")),
+						resource.TestCheckResourceAttr("arcane_gitops_sync.test", "environment_variables.TFACC_SUFFIX", "2"),
+					),
+				),
+			},
+			{
+				// Data sources: read back the resources created above (suffix "2")
+				// and assert each one mirrors its resource counterpart. The framework
+				// destroys everything after this final step.
+				PreConfig: func() {
+					writeProjectPathFixtures(t, "2")
+				},
+				Config: testAccAllResourcesConfig("2", webhookURL2) + testAccDataSourcesConfig(),
+				Check: resource.ComposeAggregateTestCheckFunc(
+					logCheck(t, "data.arcane_api_key",
+						resource.TestCheckResourceAttrPair("data.arcane_api_key.test", "name", "arcane_api_key.test", "name"),
+					),
+					logCheck(t, "data.arcane_container",
+						resource.TestCheckResourceAttrPair("data.arcane_container.test", "name", "arcane_container.test", "name"),
+						resource.TestCheckResourceAttrPair("data.arcane_container.test", "image", "arcane_container.test", "image"),
+					),
+					logCheck(t, "data.arcane_container_registry",
+						resource.TestCheckResourceAttrPair("data.arcane_container_registry.test", "url", "arcane_container_registry.test", "url"),
+						resource.TestCheckResourceAttrPair("data.arcane_container_registry.test", "description", "arcane_container_registry.test", "description"),
+					),
+					logCheck(t, "data.arcane_environment",
+						resource.TestCheckResourceAttrPair("data.arcane_environment.test", "name", "arcane_environment.test", "name"),
+					),
+					logCheck(t, "data.arcane_gitops_sync",
+						resource.TestCheckResourceAttrPair("data.arcane_gitops_sync.test", "name", "arcane_gitops_sync.test", "name"),
+						resource.TestCheckResourceAttrPair("data.arcane_gitops_sync.test", "branch", "arcane_gitops_sync.test", "branch"),
+					),
+					logCheck(t, "data.arcane_git_repository",
+						resource.TestCheckResourceAttrPair("data.arcane_git_repository.test", "name", "arcane_git_repository.test", "name"),
+						resource.TestCheckResourceAttrPair("data.arcane_git_repository.test", "url", "arcane_git_repository.test", "url"),
+					),
+					logCheck(t, "data.arcane_job_schedules",
+						resource.TestCheckResourceAttrPair("data.arcane_job_schedules.test", "polling_interval", "arcane_job_schedules.test", "polling_interval"),
+					),
+					logCheck(t, "data.arcane_network",
+						resource.TestCheckResourceAttrPair("data.arcane_network.test", "name", "arcane_network.test", "name"),
+						resource.TestCheckResourceAttrPair("data.arcane_network.test", "driver", "arcane_network.test", "driver"),
+					),
+					logCheck(t, "data.arcane_notification",
+						resource.TestCheckResourceAttrPair("data.arcane_notification.test", "provider_name", "arcane_notification.test", "provider_name"),
+						resource.TestCheckResourceAttrPair("data.arcane_notification.test", "enabled", "arcane_notification.test", "enabled"),
+					),
+					logCheck(t, "data.arcane_project",
+						resource.TestCheckResourceAttrPair("data.arcane_project.test", "name", "arcane_project.test", "name"),
+					),
+					logCheck(t, "data.arcane_project_path",
+						resource.TestCheckResourceAttrPair("data.arcane_project_path.test", "name", "arcane_project_path.test", "name"),
+					),
+					logCheck(t, "data.arcane_settings",
+						resource.TestCheckResourceAttr("data.arcane_settings.test", "settings.applicationTheme", "dark"),
+					),
+					logCheck(t, "data.arcane_template",
+						resource.TestCheckResourceAttrPair("data.arcane_template.test", "name", "arcane_template.test", "name"),
+					),
+					logCheck(t, "data.arcane_template_registry",
+						resource.TestCheckResourceAttrPair("data.arcane_template_registry.test", "name", "arcane_template_registry.test", "name"),
+					),
+					logCheck(t, "data.arcane_user",
+						resource.TestCheckResourceAttrPair("data.arcane_user.test", "username", "arcane_user.test", "username"),
+						resource.TestCheckResourceAttrPair("data.arcane_user.test", "display_name", "arcane_user.test", "display_name"),
+					),
+					logCheck(t, "data.arcane_volume",
+						resource.TestCheckResourceAttrPair("data.arcane_volume.test", "name", "arcane_volume.test", "name"),
+					),
 				),
 			},
 		},
 	})
+}
+
+// logCheck groups one or more checks under a label and, when they all pass,
+// emits a single pass line to the test log (visible with `go test -v`). This
+// makes the otherwise-monolithic acceptance test report a distinct line per
+// resource / data source instead of one opaque pass/fail.
+func logCheck(t *testing.T, label string, checks ...resource.TestCheckFunc) resource.TestCheckFunc {
+	t.Helper()
+	return func(s *terraform.State) error {
+		for _, c := range checks {
+			if err := c(s); err != nil {
+				return fmt.Errorf("%s: %w", label, err)
+			}
+		}
+		t.Logf("PASS %s", label)
+		return nil
+	}
 }
 
 // TestAccArcaneProject_failIfNameExists verifies the opt-in fail_if_name_exists
@@ -652,4 +746,84 @@ resource "arcane_gitops_sync" "test" {
 		testAccName("gitops-project-"+suffix),
 		suffix,
 	)
+}
+
+// testAccDataSourcesConfig returns data source blocks that read back the
+// resources declared by testAccAllResourcesConfig. Each data source references
+// its resource's computed attributes (id / environment_id), which defers the
+// read to apply and guarantees the resource exists first. Appended to the
+// resource config, never used on its own.
+func testAccDataSourcesConfig() string {
+	return `
+data "arcane_api_key" "test" {
+  id = arcane_api_key.test.id
+}
+
+data "arcane_container" "test" {
+  environment_id = arcane_container.test.environment_id
+  id             = arcane_container.test.id
+}
+
+data "arcane_container_registry" "test" {
+  id = arcane_container_registry.test.id
+}
+
+data "arcane_environment" "test" {
+  id = arcane_environment.test.id
+}
+
+data "arcane_gitops_sync" "test" {
+  environment_id = arcane_gitops_sync.test.environment_id
+  id             = arcane_gitops_sync.test.id
+}
+
+data "arcane_git_repository" "test" {
+  id = arcane_git_repository.test.id
+}
+
+data "arcane_job_schedules" "test" {
+  environment_id = arcane_job_schedules.test.environment_id
+}
+
+data "arcane_network" "test" {
+  environment_id = arcane_network.test.environment_id
+  id             = arcane_network.test.id
+}
+
+data "arcane_notification" "test" {
+  environment_id = arcane_notification.test.environment_id
+  provider_name  = arcane_notification.test.provider_name
+}
+
+data "arcane_project" "test" {
+  environment_id = arcane_project.test.environment_id
+  id             = arcane_project.test.id
+}
+
+data "arcane_project_path" "test" {
+  environment_id = arcane_project_path.test.environment_id
+  id             = arcane_project_path.test.id
+}
+
+data "arcane_settings" "test" {
+  environment_id = arcane_settings.test.environment_id
+}
+
+data "arcane_template" "test" {
+  id = arcane_template.test.id
+}
+
+data "arcane_template_registry" "test" {
+  id = arcane_template_registry.test.id
+}
+
+data "arcane_user" "test" {
+  id = arcane_user.test.id
+}
+
+data "arcane_volume" "test" {
+  environment_id = arcane_volume.test.environment_id
+  id             = arcane_volume.test.id
+}
+`
 }
