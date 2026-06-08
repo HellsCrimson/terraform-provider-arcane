@@ -6,6 +6,8 @@ import (
 
 	"terraform-provider-arcane/internal/sdkclient"
 
+	"github.com/hashicorp/terraform-plugin-framework/attr"
+	"github.com/hashicorp/terraform-plugin-framework/diag"
 	"github.com/hashicorp/terraform-plugin-framework/path"
 	"github.com/hashicorp/terraform-plugin-framework/resource"
 	resourceschema "github.com/hashicorp/terraform-plugin-framework/resource/schema"
@@ -51,6 +53,32 @@ func (r *ApiKeyResource) Schema(_ context.Context, _ resource.SchemaRequest, res
 			"expires_at": resourceschema.StringAttribute{
 				Optional:    true,
 				Description: "Optional expiration date for the API key (RFC3339 format, e.g., '2025-12-31T23:59:59Z')",
+			},
+			"permissions": resourceschema.SetNestedAttribute{
+				Required: true,
+				Description: "Permission grants for the key (at least one). Each grant is a permission string " +
+					"with an optional environment scope (omit environment_id for a global grant). Cannot " +
+					"exceed the creating user's own permissions.",
+				NestedObject: resourceschema.NestedAttributeObject{
+					Attributes: map[string]resourceschema.Attribute{
+						"permission": resourceschema.StringAttribute{
+							Required:    true,
+							Description: "Permission string, e.g. 'containers:list'.",
+						},
+						"environment_id": resourceschema.StringAttribute{
+							Optional:    true,
+							Description: "Environment ID to scope the grant to; omit for a global grant.",
+						},
+					},
+				},
+			},
+			"is_bootstrap": resourceschema.BoolAttribute{
+				Computed:    true,
+				Description: "Whether the API key is an auto-generated environment bootstrap key.",
+			},
+			"is_static": resourceschema.BoolAttribute{
+				Computed:    true,
+				Description: "Whether the API key is environment-managed and protected from deletion.",
 			},
 			"key": resourceschema.StringAttribute{
 				Computed:    true,
@@ -100,12 +128,67 @@ type apiKeyModel struct {
 	Name        types.String `tfsdk:"name"`
 	Description types.String `tfsdk:"description"`
 	ExpiresAt   types.String `tfsdk:"expires_at"`
+	Permissions types.Set    `tfsdk:"permissions"`
+	IsBootstrap types.Bool   `tfsdk:"is_bootstrap"`
+	IsStatic    types.Bool   `tfsdk:"is_static"`
 	Key         types.String `tfsdk:"key"`
 	KeyPrefix   types.String `tfsdk:"key_prefix"`
 	UserID      types.String `tfsdk:"user_id"`
 	LastUsedAt  types.String `tfsdk:"last_used_at"`
 	CreatedAt   types.String `tfsdk:"created_at"`
 	UpdatedAt   types.String `tfsdk:"updated_at"`
+}
+
+type apiKeyPermissionModel struct {
+	Permission    types.String `tfsdk:"permission"`
+	EnvironmentID types.String `tfsdk:"environment_id"`
+}
+
+var apiKeyPermissionObjectType = types.ObjectType{AttrTypes: map[string]attr.Type{
+	"permission":     types.StringType,
+	"environment_id": types.StringType,
+}}
+
+// apiKeyPermissionsToGrants converts the configured permissions set into the
+// API request payload.
+func apiKeyPermissionsToGrants(ctx context.Context, set types.Set) ([]sdkclient.ApiKeyPermissionGrant, diag.Diagnostics) {
+	var diags diag.Diagnostics
+	if set.IsNull() || set.IsUnknown() {
+		return nil, diags
+	}
+	var models []apiKeyPermissionModel
+	diags.Append(set.ElementsAs(ctx, &models, false)...)
+	if diags.HasError() {
+		return nil, diags
+	}
+	out := make([]sdkclient.ApiKeyPermissionGrant, 0, len(models))
+	for _, m := range models {
+		g := sdkclient.ApiKeyPermissionGrant{Permission: m.Permission.ValueString()}
+		if !m.EnvironmentID.IsNull() && !m.EnvironmentID.IsUnknown() && m.EnvironmentID.ValueString() != "" {
+			v := m.EnvironmentID.ValueString()
+			g.EnvironmentID = &v
+		}
+		out = append(out, g)
+	}
+	return out, diags
+}
+
+// apiKeyPermissionsToSet converts API permission grants into a Terraform set.
+func apiKeyPermissionsToSet(ctx context.Context, grants []sdkclient.ApiKeyPermissionGrant) (types.Set, diag.Diagnostics) {
+	models := make([]apiKeyPermissionModel, 0, len(grants))
+	for _, g := range grants {
+		m := apiKeyPermissionModel{Permission: types.StringValue(g.Permission)}
+		if g.EnvironmentID != nil && *g.EnvironmentID != "" {
+			m.EnvironmentID = types.StringValue(*g.EnvironmentID)
+		} else {
+			m.EnvironmentID = types.StringNull()
+		}
+		models = append(models, m)
+	}
+	if len(models) == 0 {
+		return types.SetNull(apiKeyPermissionObjectType), nil
+	}
+	return types.SetValueFrom(ctx, apiKeyPermissionObjectType, models)
 }
 
 func (r *ApiKeyResource) Create(ctx context.Context, req resource.CreateRequest, resp *resource.CreateResponse) {
@@ -127,6 +210,12 @@ func (r *ApiKeyResource) Create(ctx context.Context, req resource.CreateRequest,
 		v := plan.ExpiresAt.ValueString()
 		body.ExpiresAt = &v
 	}
+	grants, diags := apiKeyPermissionsToGrants(ctx, plan.Permissions)
+	resp.Diagnostics.Append(diags...)
+	if resp.Diagnostics.HasError() {
+		return
+	}
+	body.Permissions = grants
 
 	apiKey, err := r.client.CreateApiKey(ctx, body)
 	if err != nil {
@@ -139,6 +228,9 @@ func (r *ApiKeyResource) Create(ctx context.Context, req resource.CreateRequest,
 		Name:        types.StringValue(apiKey.Name),
 		Description: plan.Description,
 		ExpiresAt:   plan.ExpiresAt,
+		Permissions: plan.Permissions,
+		IsBootstrap: types.BoolValue(apiKey.IsBootstrap),
+		IsStatic:    types.BoolValue(apiKey.IsStatic),
 		Key:         types.StringValue(apiKey.Key), // Only available on creation
 		KeyPrefix:   types.StringValue(apiKey.KeyPrefix),
 		UserID:      types.StringValue(apiKey.UserID),
@@ -183,6 +275,17 @@ func (r *ApiKeyResource) Read(ctx context.Context, req resource.ReadRequest, res
 	state.KeyPrefix = types.StringValue(apiKey.KeyPrefix)
 	state.UserID = types.StringValue(apiKey.UserID)
 	state.CreatedAt = types.StringValue(apiKey.CreatedAt)
+	state.IsBootstrap = types.BoolValue(apiKey.IsBootstrap)
+	state.IsStatic = types.BoolValue(apiKey.IsStatic)
+
+	if !state.Permissions.IsNull() && !state.Permissions.IsUnknown() {
+		permSet, diags := apiKeyPermissionsToSet(ctx, apiKey.Permissions)
+		resp.Diagnostics.Append(diags...)
+		if resp.Diagnostics.HasError() {
+			return
+		}
+		state.Permissions = permSet
+	}
 
 	if !state.Description.IsNull() && !state.Description.IsUnknown() && apiKey.Description != nil {
 		state.Description = types.StringValue(*apiKey.Description)
@@ -229,6 +332,12 @@ func (r *ApiKeyResource) Update(ctx context.Context, req resource.UpdateRequest,
 		v := plan.ExpiresAt.ValueString()
 		body.ExpiresAt = &v
 	}
+	grants, diags := apiKeyPermissionsToGrants(ctx, plan.Permissions)
+	resp.Diagnostics.Append(diags...)
+	if resp.Diagnostics.HasError() {
+		return
+	}
+	body.Permissions = grants
 
 	apiKey, err := r.client.UpdateApiKey(ctx, state.ID.ValueString(), body)
 	if err != nil {
@@ -241,6 +350,8 @@ func (r *ApiKeyResource) Update(ctx context.Context, req resource.UpdateRequest,
 	state.KeyPrefix = types.StringValue(apiKey.KeyPrefix)
 	state.UserID = types.StringValue(apiKey.UserID)
 	state.CreatedAt = types.StringValue(apiKey.CreatedAt)
+	state.IsBootstrap = types.BoolValue(apiKey.IsBootstrap)
+	state.IsStatic = types.BoolValue(apiKey.IsStatic)
 	// Preserve the key from previous state (not returned on update)
 
 	if !plan.Description.IsNull() && !plan.Description.IsUnknown() && apiKey.Description != nil {

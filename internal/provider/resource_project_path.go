@@ -185,7 +185,7 @@ func (r *ProjectPathResource) Create(ctx context.Context, req resource.CreateReq
 	// Optionally manage lifecycle
 	if !plan.Running.IsNull() && !plan.Running.IsUnknown() {
 		if plan.Running.ValueBool() {
-			if err := r.client.UpProject(ctx, envID, out.ID); err != nil {
+			if err := r.client.UpProject(ctx, envID, out.ID, nil); err != nil {
 				resp.Diagnostics.AddError("project up failed", err.Error())
 				return
 			}
@@ -409,7 +409,7 @@ func (r *ProjectPathResource) Update(ctx context.Context, req resource.UpdateReq
 		current := state.Running.ValueBool()
 		if desired != current {
 			if desired {
-				if err := r.client.UpProject(ctx, envID, projID); err != nil {
+				if err := r.client.UpProject(ctx, envID, projID, nil); err != nil {
 					resp.Diagnostics.AddError("project up failed", err.Error())
 					return
 				}
