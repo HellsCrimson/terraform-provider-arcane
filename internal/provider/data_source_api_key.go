@@ -49,6 +49,30 @@ func (d *ApiKeyDataSource) Schema(ctx context.Context, req datasource.SchemaRequ
 				Computed:    true,
 				Description: "Key prefix for identification",
 			},
+			"permissions": schema.SetNestedAttribute{
+				Computed:    true,
+				Description: "Permission grants held by the key.",
+				NestedObject: schema.NestedAttributeObject{
+					Attributes: map[string]schema.Attribute{
+						"permission": schema.StringAttribute{
+							Computed:    true,
+							Description: "Permission string, e.g. 'containers:list'.",
+						},
+						"environment_id": schema.StringAttribute{
+							Computed:    true,
+							Description: "Environment ID the grant is scoped to; empty for a global grant.",
+						},
+					},
+				},
+			},
+			"is_bootstrap": schema.BoolAttribute{
+				Computed:    true,
+				Description: "Whether the API key is an auto-generated environment bootstrap key.",
+			},
+			"is_static": schema.BoolAttribute{
+				Computed:    true,
+				Description: "Whether the API key is environment-managed and protected from deletion.",
+			},
 			"user_id": schema.StringAttribute{
 				Computed:    true,
 				Description: "Owner user ID",
@@ -87,6 +111,9 @@ type apiKeyDataSourceModel struct {
 	Description types.String `tfsdk:"description"`
 	ExpiresAt   types.String `tfsdk:"expires_at"`
 	KeyPrefix   types.String `tfsdk:"key_prefix"`
+	Permissions types.Set    `tfsdk:"permissions"`
+	IsBootstrap types.Bool   `tfsdk:"is_bootstrap"`
+	IsStatic    types.Bool   `tfsdk:"is_static"`
 	UserID      types.String `tfsdk:"user_id"`
 	LastUsedAt  types.String `tfsdk:"last_used_at"`
 	CreatedAt   types.String `tfsdk:"created_at"`
@@ -111,12 +138,21 @@ func (d *ApiKeyDataSource) Read(ctx context.Context, req datasource.ReadRequest,
 	}
 
 	state := apiKeyDataSourceModel{
-		ID:        types.StringValue(apiKey.ID),
-		Name:      types.StringValue(apiKey.Name),
-		KeyPrefix: types.StringValue(apiKey.KeyPrefix),
-		UserID:    types.StringValue(apiKey.UserID),
-		CreatedAt: types.StringValue(apiKey.CreatedAt),
+		ID:          types.StringValue(apiKey.ID),
+		Name:        types.StringValue(apiKey.Name),
+		KeyPrefix:   types.StringValue(apiKey.KeyPrefix),
+		UserID:      types.StringValue(apiKey.UserID),
+		CreatedAt:   types.StringValue(apiKey.CreatedAt),
+		IsBootstrap: types.BoolValue(apiKey.IsBootstrap),
+		IsStatic:    types.BoolValue(apiKey.IsStatic),
 	}
+
+	permSet, diags := apiKeyPermissionsToSet(ctx, apiKey.Permissions)
+	resp.Diagnostics.Append(diags...)
+	if resp.Diagnostics.HasError() {
+		return
+	}
+	state.Permissions = permSet
 
 	if apiKey.Description != nil && *apiKey.Description != "" {
 		state.Description = types.StringValue(*apiKey.Description)
