@@ -294,6 +294,117 @@ type ProjectDestroyOptions struct {
 	RemoveVolumes bool `json:"removeVolumes"`
 }
 
+// -------- Swarm Stacks --------
+type SwarmStackDeployRequest struct {
+	Name             string  `json:"name"`
+	ComposeContent   string  `json:"composeContent"`
+	EnvContent       *string `json:"envContent,omitempty"`
+	Prune            *bool   `json:"prune,omitempty"`
+	ResolveImage     *string `json:"resolveImage,omitempty"`
+	WithRegistryAuth *bool   `json:"withRegistryAuth,omitempty"`
+	WorkingDir       *string `json:"workingDir,omitempty"`
+}
+
+type SwarmStackDeployResponse struct {
+	Name string `json:"name"`
+}
+
+type SwarmStackInspect struct {
+	Name      string `json:"name"`
+	Namespace string `json:"namespace"`
+	Services  int64  `json:"services"`
+	CreatedAt string `json:"createdAt"`
+	UpdatedAt string `json:"updatedAt"`
+}
+
+type SwarmSyncFile struct {
+	RelativePath string `json:"relativePath"`
+	Content      string `json:"content"`
+}
+
+type SwarmStackSource struct {
+	Name           string          `json:"name"`
+	ComposeContent string          `json:"composeContent"`
+	EnvContent     string          `json:"envContent,omitempty"`
+	Files          []SwarmSyncFile `json:"files,omitempty"`
+}
+
+type SwarmStackSourceUpdateRequest struct {
+	ComposeContent string  `json:"composeContent"`
+	EnvContent     *string `json:"envContent,omitempty"`
+}
+
+type swarmStackDeployEnvelope struct {
+	Success bool                     `json:"success"`
+	Data    SwarmStackDeployResponse `json:"data"`
+}
+
+type swarmStackInspectEnvelope struct {
+	Success bool              `json:"success"`
+	Data    SwarmStackInspect `json:"data"`
+}
+
+type swarmStackSourceEnvelope struct {
+	Success bool             `json:"success"`
+	Data    SwarmStackSource `json:"data"`
+}
+
+func (c *Client) DeploySwarmStack(ctx context.Context, envID string, body SwarmStackDeployRequest) (*SwarmStackDeployResponse, error) {
+	req, err := c.newRequest(ctx, http.MethodPost, path.Join("environments", envID, "swarm", "stacks"), body)
+	if err != nil {
+		return nil, err
+	}
+	var env swarmStackDeployEnvelope
+	if err := c.do(req, &env); err != nil {
+		return nil, err
+	}
+	return &env.Data, nil
+}
+
+func (c *Client) GetSwarmStack(ctx context.Context, envID, stackName string) (*SwarmStackInspect, error) {
+	req, err := c.newRequest(ctx, http.MethodGet, path.Join("environments", envID, "swarm", "stacks", stackName), nil)
+	if err != nil {
+		return nil, err
+	}
+	var env swarmStackInspectEnvelope
+	if err := c.do(req, &env); err != nil {
+		return nil, err
+	}
+	return &env.Data, nil
+}
+
+func (c *Client) GetSwarmStackSource(ctx context.Context, envID, stackName string) (*SwarmStackSource, error) {
+	req, err := c.newRequest(ctx, http.MethodGet, path.Join("environments", envID, "swarm", "stacks", stackName, "source"), nil)
+	if err != nil {
+		return nil, err
+	}
+	var env swarmStackSourceEnvelope
+	if err := c.do(req, &env); err != nil {
+		return nil, err
+	}
+	return &env.Data, nil
+}
+
+func (c *Client) UpdateSwarmStackSource(ctx context.Context, envID, stackName string, body SwarmStackSourceUpdateRequest) (*SwarmStackSource, error) {
+	req, err := c.newRequest(ctx, http.MethodPut, path.Join("environments", envID, "swarm", "stacks", stackName, "source"), body)
+	if err != nil {
+		return nil, err
+	}
+	var env swarmStackSourceEnvelope
+	if err := c.do(req, &env); err != nil {
+		return nil, err
+	}
+	return &env.Data, nil
+}
+
+func (c *Client) DeleteSwarmStack(ctx context.Context, envID, stackName string) error {
+	req, err := c.newRequest(ctx, http.MethodDelete, path.Join("environments", envID, "swarm", "stacks", stackName), nil)
+	if err != nil {
+		return err
+	}
+	return c.do(req, nil)
+}
+
 func (c *Client) CreateProject(ctx context.Context, envID string, body ProjectCreateRequest) (*ProjectCreateResponse, error) {
 	req, err := c.newRequest(ctx, http.MethodPost, path.Join("environments", envID, "projects"), body)
 	if err != nil {
