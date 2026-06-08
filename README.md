@@ -102,6 +102,11 @@ Resources
   - Computed: id (stack name), namespace, services, created_at, updated_at.
   - Note: Core deploy options (prune, resolve_image, with_registry_auth, working_dir) require replacement after initial create.
 
+- arcane_swarm_secret
+  - Manage a Docker Swarm secret in an environment.
+  - Attributes: environment_id, name, data (required, sensitive), labels.
+  - Computed: id, version_index, created_at, updated_at.
+
 - arcane_project_path
   - Manage a compose project from local files.
   - Attributes: environment_id, name, compose_path (required), env_path (optional).
@@ -188,6 +193,7 @@ Imports
 - arcane_settings: `environment_id`
 - arcane_project: `environment_id:project_id`
 - arcane_swarm_stack: `environment_id:stack_name`
+- arcane_swarm_secret: `environment_id:secret_id`
 - arcane_project_path: `environment_id:project_id`
 - arcane_notification: `environment_id:provider_name`
 - arcane_container: `environment_id:container_id`
@@ -208,6 +214,7 @@ Examples
 
 - Full example: `examples/basic/main.tf`
 - Swarm stack example: `examples/swarm_stack/main.tf`
+- Swarm secret example: `examples/swarm_secret/main.tf`
 
 Building from source
 
@@ -229,6 +236,7 @@ API Coverage & Notes
   - Settings: `GET/PUT /environments/{id}/settings`
   - Projects: `POST /environments/{id}/projects`, `GET/PUT /environments/{id}/projects/{projectId}`, `DELETE /environments/{id}/projects/{projectId}/destroy`, `POST /environments/{id}/projects/{projectId}/up|down`
   - Swarm stacks: `POST /environments/{id}/swarm/stacks`, `GET/DELETE /environments/{id}/swarm/stacks/{name}`, `GET/PUT /environments/{id}/swarm/stacks/{name}/source`
+  - Swarm secrets: `POST /environments/{id}/swarm/secrets`, `GET/PUT/DELETE /environments/{id}/swarm/secrets/{secretId}`
   - Notifications: `POST /environments/{id}/notifications/settings`, `GET/DELETE /environments/{id}/notifications/settings/{provider}`
   - Containers: `POST /environments/{id}/containers`, `GET/DELETE /environments/{id}/containers/{containerId}` (supports `force` and `volumes` on delete)
 
