@@ -106,33 +106,50 @@ func (c *Client) doBytes(req *http.Request) ([]byte, error) {
 // User models
 // components/schemas/UserCreateUser
 type CreateUserRequest struct {
-	DisplayName *string  `json:"displayName,omitempty"`
-	Email       *string  `json:"email,omitempty"`
-	Locale      *string  `json:"locale,omitempty"`
-	Password    string   `json:"password"`
-	Roles       []string `json:"roles,omitempty"`
-	Username    string   `json:"username"`
+	DisplayName *string `json:"displayName,omitempty"`
+	Email       *string `json:"email,omitempty"`
+	Locale      *string `json:"locale,omitempty"`
+	Password    string  `json:"password"`
+	Username    string  `json:"username"`
 }
 
 // components/schemas/UserUpdateUser
 type UpdateUserRequest struct {
-	DisplayName *string  `json:"displayName,omitempty"`
-	Email       *string  `json:"email,omitempty"`
-	Locale      *string  `json:"locale,omitempty"`
-	Password    *string  `json:"password,omitempty"`
-	Roles       []string `json:"roles,omitempty"`
+	DisplayName *string `json:"displayName,omitempty"`
+	Email       *string `json:"email,omitempty"`
+	Locale      *string `json:"locale,omitempty"`
+	Password    *string `json:"password,omitempty"`
+}
+
+// components/schemas/UserRoleAssignmentSummary
+// Read-only summary of a role assignment as returned on the user object.
+type UserRoleAssignment struct {
+	RoleID        string `json:"roleId"`
+	Source        string `json:"source"` // "manual" or "oidc"
+	EnvironmentID string `json:"environmentId,omitempty"`
+}
+
+// components/schemas/RoleUserAssignmentInput
+type RoleAssignmentInput struct {
+	RoleID        string  `json:"roleId"`
+	EnvironmentID *string `json:"environmentId,omitempty"`
+}
+
+// components/schemas/RoleSetUserAssignments
+type setUserAssignmentsRequest struct {
+	Assignments []RoleAssignmentInput `json:"assignments"`
 }
 
 // components/schemas/UserUser
 type User struct {
-	ID        string   `json:"id"`
-	Username  string   `json:"username"`
-	Display   *string  `json:"displayName,omitempty"`
-	Email     *string  `json:"email,omitempty"`
-	Locale    *string  `json:"locale,omitempty"`
-	Roles     []string `json:"roles,omitempty"`
-	CreatedAt *string  `json:"createdAt,omitempty"`
-	UpdatedAt *string  `json:"updatedAt,omitempty"`
+	ID              string               `json:"id"`
+	Username        string               `json:"username"`
+	Display         *string              `json:"displayName,omitempty"`
+	Email           *string              `json:"email,omitempty"`
+	Locale          *string              `json:"locale,omitempty"`
+	RoleAssignments []UserRoleAssignment `json:"roleAssignments,omitempty"`
+	CreatedAt       *string              `json:"createdAt,omitempty"`
+	UpdatedAt       *string              `json:"updatedAt,omitempty"`
 }
 
 // components/schemas/BaseApiResponseUser
@@ -183,6 +200,375 @@ func (c *Client) UpdateUser(ctx context.Context, id string, body UpdateUserReque
 // DeleteUser DELETE /users/{id}
 func (c *Client) DeleteUser(ctx context.Context, id string) error {
 	req, err := c.newRequest(ctx, http.MethodDelete, path.Join("users", id), nil)
+	if err != nil {
+		return err
+	}
+	return c.do(req, nil)
+}
+
+// SetUserRoleAssignments PUT /users/{id}/role-assignments
+// Replaces every source="manual" assignment for the user; source="oidc"
+// assignments are left untouched by the server.
+func (c *Client) SetUserRoleAssignments(ctx context.Context, userID string, assignments []RoleAssignmentInput) error {
+	if assignments == nil {
+		assignments = []RoleAssignmentInput{}
+	}
+	body := setUserAssignmentsRequest{Assignments: assignments}
+	req, err := c.newRequest(ctx, http.MethodPut, path.Join("users", userID, "role-assignments"), body)
+	if err != nil {
+		return err
+	}
+	return c.do(req, nil)
+}
+
+// -------- Roles (RBAC) --------
+// components/schemas/RoleCreateRole
+type RoleCreateRequest struct {
+	Name        string   `json:"name"`
+	Description *string  `json:"description,omitempty"`
+	Permissions []string `json:"permissions"`
+}
+
+// components/schemas/RoleUpdateRole
+type RoleUpdateRequest struct {
+	Name        string   `json:"name"`
+	Description *string  `json:"description,omitempty"`
+	Permissions []string `json:"permissions"`
+}
+
+// components/schemas/RoleRole
+type Role struct {
+	ID                string   `json:"id"`
+	Name              string   `json:"name"`
+	Description       string   `json:"description,omitempty"`
+	Permissions       []string `json:"permissions"`
+	BuiltIn           bool     `json:"builtIn"`
+	AssignedUserCount int64    `json:"assignedUserCount"`
+	CreatedAt         string   `json:"createdAt"`
+	UpdatedAt         string   `json:"updatedAt,omitempty"`
+}
+
+type roleEnvelope struct {
+	Success bool `json:"success"`
+	Data    Role `json:"data"`
+}
+
+type roleListEnvelope struct {
+	Success    bool       `json:"success"`
+	Data       []Role     `json:"data"`
+	Pagination Pagination `json:"pagination"`
+}
+
+// CreateRole POST /roles
+func (c *Client) CreateRole(ctx context.Context, body RoleCreateRequest) (*Role, error) {
+	req, err := c.newRequest(ctx, http.MethodPost, "roles", body)
+	if err != nil {
+		return nil, err
+	}
+	var out roleEnvelope
+	if err := c.do(req, &out); err != nil {
+		return nil, err
+	}
+	return &out.Data, nil
+}
+
+// GetRole GET /roles/{id}
+func (c *Client) GetRole(ctx context.Context, id string) (*Role, error) {
+	req, err := c.newRequest(ctx, http.MethodGet, path.Join("roles", id), nil)
+	if err != nil {
+		return nil, err
+	}
+	var out roleEnvelope
+	if err := c.do(req, &out); err != nil {
+		return nil, err
+	}
+	return &out.Data, nil
+}
+
+// UpdateRole PUT /roles/{id}
+func (c *Client) UpdateRole(ctx context.Context, id string, body RoleUpdateRequest) (*Role, error) {
+	req, err := c.newRequest(ctx, http.MethodPut, path.Join("roles", id), body)
+	if err != nil {
+		return nil, err
+	}
+	var out roleEnvelope
+	if err := c.do(req, &out); err != nil {
+		return nil, err
+	}
+	return &out.Data, nil
+}
+
+// DeleteRole DELETE /roles/{id}
+func (c *Client) DeleteRole(ctx context.Context, id string) error {
+	req, err := c.newRequest(ctx, http.MethodDelete, path.Join("roles", id), nil)
+	if err != nil {
+		return err
+	}
+	return c.do(req, nil)
+}
+
+// ListRoles GET /roles (paginated; returns built-in + custom roles)
+func (c *Client) ListRoles(ctx context.Context) ([]Role, error) {
+	const pageSize = 100
+	var all []Role
+	start := 0
+	for {
+		u := *c.BaseURL
+		u.Path = path.Join(c.BaseURL.Path, "roles")
+		q := u.Query()
+		q.Set("limit", strconv.Itoa(pageSize))
+		q.Set("start", strconv.Itoa(start))
+		u.RawQuery = q.Encode()
+		req, err := http.NewRequestWithContext(ctx, http.MethodGet, u.String(), nil)
+		if err != nil {
+			return nil, err
+		}
+		req.Header.Set("Accept", "application/json")
+		req.Header.Set("X-API-Key", c.APIKey)
+		var out roleListEnvelope
+		if err := c.do(req, &out); err != nil {
+			return nil, err
+		}
+		all = append(all, out.Data...)
+		start += pageSize
+		if len(out.Data) == 0 || int64(start) >= out.Pagination.TotalItems {
+			break
+		}
+	}
+	return all, nil
+}
+
+// -------- Permission manifest --------
+type RolePermissionAction struct {
+	Key        string `json:"key"`
+	Permission string `json:"permission"`
+	Label      string `json:"label"`
+}
+
+type RolePermissionResource struct {
+	Key     string                 `json:"key"`
+	Label   string                 `json:"label"`
+	Scope   string                 `json:"scope"`
+	Actions []RolePermissionAction `json:"actions"`
+}
+
+type RolePermissionPreset struct {
+	Key         string   `json:"key"`
+	Label       string   `json:"label"`
+	Permissions []string `json:"permissions"`
+}
+
+type PermissionsManifest struct {
+	Resources []RolePermissionResource `json:"resources"`
+	Presets   []RolePermissionPreset   `json:"presets,omitempty"`
+}
+
+type permissionsManifestEnvelope struct {
+	Success bool                `json:"success"`
+	Data    PermissionsManifest `json:"data"`
+}
+
+// GetPermissionsManifest GET /roles/available-permissions
+func (c *Client) GetPermissionsManifest(ctx context.Context) (*PermissionsManifest, error) {
+	req, err := c.newRequest(ctx, http.MethodGet, "roles/available-permissions", nil)
+	if err != nil {
+		return nil, err
+	}
+	var out permissionsManifestEnvelope
+	if err := c.do(req, &out); err != nil {
+		return nil, err
+	}
+	return &out.Data, nil
+}
+
+// -------- OIDC role mappings --------
+// components/schemas/RoleCreateOidcRoleMapping
+type OidcRoleMappingCreateRequest struct {
+	ClaimValue    string  `json:"claimValue"`
+	RoleID        string  `json:"roleId"`
+	EnvironmentID *string `json:"environmentId,omitempty"`
+}
+
+// components/schemas/RoleUpdateOidcRoleMapping
+type OidcRoleMappingUpdateRequest struct {
+	ClaimValue    string  `json:"claimValue"`
+	RoleID        string  `json:"roleId"`
+	EnvironmentID *string `json:"environmentId,omitempty"`
+}
+
+// components/schemas/RoleOidcRoleMapping
+type OidcRoleMapping struct {
+	ID            string `json:"id"`
+	ClaimValue    string `json:"claimValue"`
+	RoleID        string `json:"roleId"`
+	EnvironmentID string `json:"environmentId,omitempty"`
+	Source        string `json:"source"` // "manual" or "env"
+	CreatedAt     string `json:"createdAt"`
+	UpdatedAt     string `json:"updatedAt,omitempty"`
+}
+
+type oidcRoleMappingEnvelope struct {
+	Success bool            `json:"success"`
+	Data    OidcRoleMapping `json:"data"`
+}
+
+type oidcRoleMappingListEnvelope struct {
+	Success bool              `json:"success"`
+	Data    []OidcRoleMapping `json:"data"`
+}
+
+// CreateOidcRoleMapping POST /oidc/role-mappings
+func (c *Client) CreateOidcRoleMapping(ctx context.Context, body OidcRoleMappingCreateRequest) (*OidcRoleMapping, error) {
+	req, err := c.newRequest(ctx, http.MethodPost, "oidc/role-mappings", body)
+	if err != nil {
+		return nil, err
+	}
+	var out oidcRoleMappingEnvelope
+	if err := c.do(req, &out); err != nil {
+		return nil, err
+	}
+	return &out.Data, nil
+}
+
+// ListOidcRoleMappings GET /oidc/role-mappings (there is no get-by-id endpoint)
+func (c *Client) ListOidcRoleMappings(ctx context.Context) ([]OidcRoleMapping, error) {
+	req, err := c.newRequest(ctx, http.MethodGet, "oidc/role-mappings", nil)
+	if err != nil {
+		return nil, err
+	}
+	var out oidcRoleMappingListEnvelope
+	if err := c.do(req, &out); err != nil {
+		return nil, err
+	}
+	return out.Data, nil
+}
+
+// UpdateOidcRoleMapping PUT /oidc/role-mappings/{id}
+func (c *Client) UpdateOidcRoleMapping(ctx context.Context, id string, body OidcRoleMappingUpdateRequest) (*OidcRoleMapping, error) {
+	req, err := c.newRequest(ctx, http.MethodPut, path.Join("oidc", "role-mappings", id), body)
+	if err != nil {
+		return nil, err
+	}
+	var out oidcRoleMappingEnvelope
+	if err := c.do(req, &out); err != nil {
+		return nil, err
+	}
+	return &out.Data, nil
+}
+
+// DeleteOidcRoleMapping DELETE /oidc/role-mappings/{id}
+func (c *Client) DeleteOidcRoleMapping(ctx context.Context, id string) error {
+	req, err := c.newRequest(ctx, http.MethodDelete, path.Join("oidc", "role-mappings", id), nil)
+	if err != nil {
+		return err
+	}
+	return c.do(req, nil)
+}
+
+// -------- Federated credentials --------
+// components/schemas/FederatedCreateFederatedCredential
+type FederatedCredentialCreateRequest struct {
+	Name            string   `json:"name"`
+	Enabled         bool     `json:"enabled"`
+	IssuerURL       string   `json:"issuerUrl"`
+	Audiences       []string `json:"audiences"`
+	SubjectMatch    string   `json:"subjectMatch"`
+	RoleID          string   `json:"roleId"`
+	Description     *string  `json:"description,omitempty"`
+	EnvironmentID   *string  `json:"environmentId,omitempty"`
+	ExpiresAt       *string  `json:"expiresAt,omitempty"`
+	MatchType       *string  `json:"matchType,omitempty"`
+	SubjectClaim    *string  `json:"subjectClaim,omitempty"`
+	TokenTTLSeconds *int64   `json:"tokenTtlSeconds,omitempty"`
+}
+
+// components/schemas/FederatedUpdateFederatedCredential
+type FederatedCredentialUpdateRequest struct {
+	Name            *string  `json:"name,omitempty"`
+	Enabled         *bool    `json:"enabled,omitempty"`
+	IssuerURL       *string  `json:"issuerUrl,omitempty"`
+	Audiences       []string `json:"audiences,omitempty"`
+	SubjectMatch    *string  `json:"subjectMatch,omitempty"`
+	RoleID          *string  `json:"roleId,omitempty"`
+	Description     *string  `json:"description,omitempty"`
+	EnvironmentID   *string  `json:"environmentId,omitempty"`
+	ExpiresAt       *string  `json:"expiresAt,omitempty"`
+	MatchType       *string  `json:"matchType,omitempty"`
+	SubjectClaim    *string  `json:"subjectClaim,omitempty"`
+	TokenTTLSeconds *int64   `json:"tokenTtlSeconds,omitempty"`
+}
+
+// components/schemas/FederatedFederatedCredential
+type FederatedCredential struct {
+	ID              string   `json:"id"`
+	Name            string   `json:"name"`
+	Enabled         bool     `json:"enabled"`
+	IssuerURL       string   `json:"issuerUrl"`
+	Audiences       []string `json:"audiences"`
+	SubjectClaim    string   `json:"subjectClaim"`
+	SubjectMatch    string   `json:"subjectMatch"`
+	MatchType       string   `json:"matchType"`
+	RoleID          string   `json:"roleId"`
+	RoleName        string   `json:"roleName,omitempty"`
+	Description     string   `json:"description,omitempty"`
+	EnvironmentID   string   `json:"environmentId,omitempty"`
+	EnvironmentName string   `json:"environmentName,omitempty"`
+	ExpiresAt       string   `json:"expiresAt,omitempty"`
+	IdentityUserID  string   `json:"identityUserId"`
+	ServiceUsername string   `json:"serviceUsername,omitempty"`
+	TokenTTLSeconds int64    `json:"tokenTtlSeconds"`
+	LastUsedAt      string   `json:"lastUsedAt,omitempty"`
+	CreatedAt       string   `json:"createdAt"`
+	UpdatedAt       string   `json:"updatedAt,omitempty"`
+}
+
+type federatedCredentialEnvelope struct {
+	Success bool                `json:"success"`
+	Data    FederatedCredential `json:"data"`
+}
+
+// CreateFederatedCredential POST /federated-credentials
+func (c *Client) CreateFederatedCredential(ctx context.Context, body FederatedCredentialCreateRequest) (*FederatedCredential, error) {
+	req, err := c.newRequest(ctx, http.MethodPost, "federated-credentials", body)
+	if err != nil {
+		return nil, err
+	}
+	var out federatedCredentialEnvelope
+	if err := c.do(req, &out); err != nil {
+		return nil, err
+	}
+	return &out.Data, nil
+}
+
+// GetFederatedCredential GET /federated-credentials/{id}
+func (c *Client) GetFederatedCredential(ctx context.Context, id string) (*FederatedCredential, error) {
+	req, err := c.newRequest(ctx, http.MethodGet, path.Join("federated-credentials", id), nil)
+	if err != nil {
+		return nil, err
+	}
+	var out federatedCredentialEnvelope
+	if err := c.do(req, &out); err != nil {
+		return nil, err
+	}
+	return &out.Data, nil
+}
+
+// UpdateFederatedCredential PUT /federated-credentials/{id}
+func (c *Client) UpdateFederatedCredential(ctx context.Context, id string, body FederatedCredentialUpdateRequest) (*FederatedCredential, error) {
+	req, err := c.newRequest(ctx, http.MethodPut, path.Join("federated-credentials", id), body)
+	if err != nil {
+		return nil, err
+	}
+	var out federatedCredentialEnvelope
+	if err := c.do(req, &out); err != nil {
+		return nil, err
+	}
+	return &out.Data, nil
+}
+
+// DeleteFederatedCredential DELETE /federated-credentials/{id}
+func (c *Client) DeleteFederatedCredential(ctx context.Context, id string) error {
+	req, err := c.newRequest(ctx, http.MethodDelete, path.Join("federated-credentials", id), nil)
 	if err != nil {
 		return err
 	}
@@ -480,6 +866,14 @@ func (c *Client) DeleteSwarmSecret(ctx context.Context, envID, secretID string) 
 		return err
 	}
 	return c.do(req, nil)
+}
+
+// ProjectDeployOptions is the optional request body for the project "up"
+// (deploy) endpoint. components/schemas/ProjectDeployOptions
+type ProjectDeployOptions struct {
+	ForceRecreate *bool   `json:"forceRecreate,omitempty"`
+	PullPolicy    *string `json:"pullPolicy,omitempty"`
+	RemoveOrphans *bool   `json:"removeOrphans,omitempty"`
 }
 
 func (c *Client) CreateProject(ctx context.Context, envID string, body ProjectCreateRequest) (*ProjectCreateResponse, error) {
@@ -925,20 +1319,18 @@ func (c *Client) GetContainerRegistryPullUsage(ctx context.Context) ([]Container
 
 // -------- Environments --------
 type EnvironmentCreateRequest struct {
-	APIURL         string  `json:"apiUrl"`
-	Name           *string `json:"name,omitempty"`
-	AccessToken    *string `json:"accessToken,omitempty"`
-	BootstrapToken *string `json:"bootstrapToken,omitempty"`
-	Enabled        *bool   `json:"enabled,omitempty"`
-	IsEdge         *bool   `json:"isEdge,omitempty"`
-	UseAPIKey      *bool   `json:"useApiKey,omitempty"`
+	APIURL      string  `json:"apiUrl"`
+	Name        *string `json:"name,omitempty"`
+	AccessToken *string `json:"accessToken,omitempty"`
+	Enabled     *bool   `json:"enabled,omitempty"`
+	IsEdge      *bool   `json:"isEdge,omitempty"`
+	UseAPIKey   *bool   `json:"useApiKey,omitempty"`
 }
 
 type EnvironmentUpdateRequest struct {
 	APIURL           *string `json:"apiUrl,omitempty"`
 	Name             *string `json:"name,omitempty"`
 	AccessToken      *string `json:"accessToken,omitempty"`
-	BootstrapToken   *string `json:"bootstrapToken,omitempty"`
 	Enabled          *bool   `json:"enabled,omitempty"`
 	RegenerateAPIKey *bool   `json:"regenerateApiKey,omitempty"`
 }
@@ -1066,8 +1458,12 @@ func (c *Client) DownloadEnvironmentMTLSFile(ctx context.Context, envID, fileNam
 }
 
 // Project lifecycle: up/down/restart/redeploy
-func (c *Client) UpProject(ctx context.Context, envID, projectID string) error {
-	req, err := c.newRequest(ctx, http.MethodPost, path.Join("environments", envID, "projects", projectID, "up"), nil)
+func (c *Client) UpProject(ctx context.Context, envID, projectID string, opts *ProjectDeployOptions) error {
+	var body any
+	if opts != nil {
+		body = opts
+	}
+	req, err := c.newRequest(ctx, http.MethodPost, path.Join("environments", envID, "projects", projectID, "up"), body)
 	if err != nil {
 		return err
 	}
@@ -1218,40 +1614,54 @@ func (c *Client) DeleteGitRepository(ctx context.Context, id string) error {
 }
 
 // -------- API Keys --------
+// components/schemas/ApikeyPermissionGrant
+type ApiKeyPermissionGrant struct {
+	Permission    string  `json:"permission"`
+	EnvironmentID *string `json:"environmentId,omitempty"`
+}
+
 type CreateApiKeyRequest struct {
-	Name        string  `json:"name"`
-	Description *string `json:"description,omitempty"`
-	ExpiresAt   *string `json:"expiresAt,omitempty"` // RFC3339 date-time
+	Name        string                  `json:"name"`
+	Description *string                 `json:"description,omitempty"`
+	ExpiresAt   *string                 `json:"expiresAt,omitempty"` // RFC3339 date-time
+	Permissions []ApiKeyPermissionGrant `json:"permissions"`         // required, min 1
 }
 
 type UpdateApiKeyRequest struct {
-	Name        *string `json:"name,omitempty"`
-	Description *string `json:"description,omitempty"`
-	ExpiresAt   *string `json:"expiresAt,omitempty"` // RFC3339 date-time
+	Name        *string                 `json:"name,omitempty"`
+	Description *string                 `json:"description,omitempty"`
+	ExpiresAt   *string                 `json:"expiresAt,omitempty"` // RFC3339 date-time
+	Permissions []ApiKeyPermissionGrant `json:"permissions,omitempty"`
 }
 
 type ApiKey struct {
-	ID          string  `json:"id"`
-	Name        string  `json:"name"`
-	Description *string `json:"description,omitempty"`
-	KeyPrefix   string  `json:"keyPrefix"`
-	UserID      string  `json:"userId"`
-	ExpiresAt   *string `json:"expiresAt,omitempty"`
-	LastUsedAt  *string `json:"lastUsedAt,omitempty"`
-	CreatedAt   string  `json:"createdAt"`
-	UpdatedAt   *string `json:"updatedAt,omitempty"`
+	ID          string                  `json:"id"`
+	Name        string                  `json:"name"`
+	Description *string                 `json:"description,omitempty"`
+	KeyPrefix   string                  `json:"keyPrefix"`
+	UserID      string                  `json:"userId"`
+	ExpiresAt   *string                 `json:"expiresAt,omitempty"`
+	LastUsedAt  *string                 `json:"lastUsedAt,omitempty"`
+	IsBootstrap bool                    `json:"isBootstrap"`
+	IsStatic    bool                    `json:"isStatic"`
+	Permissions []ApiKeyPermissionGrant `json:"permissions,omitempty"`
+	CreatedAt   string                  `json:"createdAt"`
+	UpdatedAt   *string                 `json:"updatedAt,omitempty"`
 }
 
 type ApiKeyCreated struct {
-	ID          string  `json:"id"`
-	Name        string  `json:"name"`
-	Description *string `json:"description,omitempty"`
-	Key         string  `json:"key"` // Only returned on creation
-	KeyPrefix   string  `json:"keyPrefix"`
-	UserID      string  `json:"userId"`
-	ExpiresAt   *string `json:"expiresAt,omitempty"`
-	CreatedAt   string  `json:"createdAt"`
-	UpdatedAt   *string `json:"updatedAt,omitempty"`
+	ID          string                  `json:"id"`
+	Name        string                  `json:"name"`
+	Description *string                 `json:"description,omitempty"`
+	Key         string                  `json:"key"` // Only returned on creation
+	KeyPrefix   string                  `json:"keyPrefix"`
+	UserID      string                  `json:"userId"`
+	ExpiresAt   *string                 `json:"expiresAt,omitempty"`
+	IsBootstrap bool                    `json:"isBootstrap"`
+	IsStatic    bool                    `json:"isStatic"`
+	Permissions []ApiKeyPermissionGrant `json:"permissions,omitempty"`
+	CreatedAt   string                  `json:"createdAt"`
+	UpdatedAt   *string                 `json:"updatedAt,omitempty"`
 }
 
 type apiKeyEnvelope struct {

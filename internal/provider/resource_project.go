@@ -45,6 +45,7 @@ func (r *ProjectResource) Schema(_ context.Context, _ resource.SchemaRequest, re
 			"archived":            resourceschema.BoolAttribute{Optional: true, Computed: true, Description: "Whether the project is archived.", PlanModifiers: []planmodifier.Bool{boolplanmodifier.UseStateForUnknown()}},
 			"redeploy_on_update":  resourceschema.BoolAttribute{Optional: true, Computed: true, Description: "Redeploy the project after updating compose/env content.", Default: booldefault.StaticBool(true)},
 			"pull_on_update":      resourceschema.BoolAttribute{Optional: true, Computed: true, Description: "Pull images before redeploy when compose/env changes.", Default: booldefault.StaticBool(false)},
+			"remove_orphans":      resourceschema.BoolAttribute{Optional: true, Description: "When deploying (compose up), remove containers for services not defined in the compose file."},
 			"fail_if_name_exists": resourceschema.BoolAttribute{Optional: true, Description: "If true, fail during the plan phase when a project with the same name already exists in the environment (including folders Arcane has discovered on disk), instead of letting Arcane auto-rename the new project with a numeric suffix. Defaults to false."},
 
 			// Computed fields
@@ -127,6 +128,7 @@ type projectModel struct {
 	Archived         types.Bool   `tfsdk:"archived"`
 	RedeployOnUpdate types.Bool   `tfsdk:"redeploy_on_update"`
 	PullOnUpdate     types.Bool   `tfsdk:"pull_on_update"`
+	RemoveOrphans    types.Bool   `tfsdk:"remove_orphans"`
 	FailIfNameExists types.Bool   `tfsdk:"fail_if_name_exists"`
 	Path             types.String `tfsdk:"path"`
 	Status           types.String `tfsdk:"status"`
@@ -168,7 +170,7 @@ func (r *ProjectResource) Create(ctx context.Context, req resource.CreateRequest
 	// Manage lifecycle if requested
 	if !plan.Running.IsNull() && !plan.Running.IsUnknown() {
 		if plan.Running.ValueBool() {
-			if err := r.client.UpProject(ctx, envID, out.ID); err != nil {
+			if err := r.client.UpProject(ctx, envID, out.ID, projectDeployOpts(plan)); err != nil {
 				resp.Diagnostics.AddError("project up failed", err.Error())
 				return
 			}
@@ -224,6 +226,7 @@ func (r *ProjectResource) Create(ctx context.Context, req resource.CreateRequest
 		Running:          plan.Running,
 		RedeployOnUpdate: plan.RedeployOnUpdate,
 		PullOnUpdate:     plan.PullOnUpdate,
+		RemoveOrphans:    plan.RemoveOrphans,
 		FailIfNameExists: plan.FailIfNameExists,
 	}
 	resp.Diagnostics.Append(resp.State.Set(ctx, &state)...)
@@ -379,7 +382,7 @@ func (r *ProjectResource) Update(ctx context.Context, req resource.UpdateRequest
 		current := state.Running.ValueBool()
 		if desired != current {
 			if desired {
-				if err := r.client.UpProject(ctx, envID, projID); err != nil {
+				if err := r.client.UpProject(ctx, envID, projID, projectDeployOpts(plan)); err != nil {
 					resp.Diagnostics.AddError("project up failed", err.Error())
 					return
 				}
@@ -414,6 +417,7 @@ func (r *ProjectResource) Update(ctx context.Context, req resource.UpdateRequest
 	state.Env = plan.Env
 	state.PullOnUpdate = plan.PullOnUpdate
 	state.RedeployOnUpdate = plan.RedeployOnUpdate
+	state.RemoveOrphans = plan.RemoveOrphans
 	state.FailIfNameExists = plan.FailIfNameExists
 	// state.Running is already updated above if changed
 	resp.Diagnostics.Append(resp.State.Set(ctx, &state)...)
@@ -434,6 +438,17 @@ func (r *ProjectResource) Delete(ctx context.Context, req resource.DeleteRequest
 		}
 		resp.Diagnostics.AddError("destroy project failed", err.Error())
 	}
+}
+
+// projectDeployOpts builds the optional deploy body for the "up" endpoint from
+// the model. Returns nil when no deploy option is configured so the request
+// body is omitted.
+func projectDeployOpts(m projectModel) *sdkclient.ProjectDeployOptions {
+	if m.RemoveOrphans.IsNull() || m.RemoveOrphans.IsUnknown() {
+		return nil
+	}
+	v := m.RemoveOrphans.ValueBool()
+	return &sdkclient.ProjectDeployOptions{RemoveOrphans: &v}
 }
 
 func (r *ProjectResource) ImportState(ctx context.Context, req resource.ImportStateRequest, resp *resource.ImportStateResponse) {
