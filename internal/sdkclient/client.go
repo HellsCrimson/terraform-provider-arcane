@@ -901,6 +901,50 @@ type ProjectDeployOptions struct {
 	RemoveOrphans *bool   `json:"removeOrphans,omitempty"`
 }
 
+func EncodeSwarmSecretData(raw string) string {
+	return base64.StdEncoding.EncodeToString([]byte(raw))
+}
+
+func (c *Client) CreateSwarmSecret(ctx context.Context, envID string, body SwarmSecretCreateRequest) (*SwarmSecretSummary, error) {
+	req, err := c.newRequest(ctx, http.MethodPost, path.Join("environments", envID, "swarm", "secrets"), body)
+	if err != nil {
+		return nil, err
+	}
+	var env swarmSecretEnvelope
+	if err := c.do(req, &env); err != nil {
+		return nil, err
+	}
+	return &env.Data, nil
+}
+
+func (c *Client) GetSwarmSecret(ctx context.Context, envID, secretID string) (*SwarmSecretSummary, error) {
+	req, err := c.newRequest(ctx, http.MethodGet, path.Join("environments", envID, "swarm", "secrets", secretID), nil)
+	if err != nil {
+		return nil, err
+	}
+	var env swarmSecretEnvelope
+	if err := c.do(req, &env); err != nil {
+		return nil, err
+	}
+	return &env.Data, nil
+}
+
+func (c *Client) UpdateSwarmSecret(ctx context.Context, envID, secretID string, body SwarmSecretUpdateRequest) error {
+	req, err := c.newRequest(ctx, http.MethodPut, path.Join("environments", envID, "swarm", "secrets", secretID), body)
+	if err != nil {
+		return err
+	}
+	return c.do(req, nil)
+}
+
+func (c *Client) DeleteSwarmSecret(ctx context.Context, envID, secretID string) error {
+	req, err := c.newRequest(ctx, http.MethodDelete, path.Join("environments", envID, "swarm", "secrets", secretID), nil)
+	if err != nil {
+		return err
+	}
+	return c.do(req, nil)
+}
+
 func (c *Client) CreateProject(ctx context.Context, envID string, body ProjectCreateRequest) (*ProjectCreateResponse, error) {
 	req, err := c.newRequest(ctx, http.MethodPost, path.Join("environments", envID, "projects"), body)
 	if err != nil {

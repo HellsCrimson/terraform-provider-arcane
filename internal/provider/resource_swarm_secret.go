@@ -47,7 +47,7 @@ func (r *SwarmSecretResource) Schema(_ context.Context, _ resource.SchemaRequest
 				Description: "Secret name",
 				PlanModifiers: []planmodifier.String{
 					stringplanmodifier.RequiresReplace(),
-				},
+			},
 			},
 			"data": resourceschema.StringAttribute{
 				Required:    true,
@@ -55,7 +55,7 @@ func (r *SwarmSecretResource) Schema(_ context.Context, _ resource.SchemaRequest
 				Description: "Secret value (plaintext). The provider encodes this to base64 for the API.",
 				PlanModifiers: []planmodifier.String{
 					stringplanmodifier.RequiresReplace(),
-				},
+			},
 			},
 			"labels": resourceschema.MapAttribute{
 				Optional:    true,
@@ -63,7 +63,7 @@ func (r *SwarmSecretResource) Schema(_ context.Context, _ resource.SchemaRequest
 				Description: "Secret labels",
 				PlanModifiers: []planmodifier.Map{
 					mapplanmodifier.RequiresReplace(),
-				},
+			},
 			},
 			"version_index": resourceschema.Int64Attribute{
 				Computed:    true,
