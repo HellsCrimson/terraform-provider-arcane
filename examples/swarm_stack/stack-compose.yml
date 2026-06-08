@@ -1,0 +1,11 @@
+version: "3.8"
+
+services:
+  web:
+    image: nginx:alpine
+    ports:
+      - "${NGINX_PORT:-8080}:80"
+    deploy:
+      replicas: 1
+      restart_policy:
+        condition: on-failure
