@@ -688,6 +688,14 @@ type ProjectDeployOptions struct {
 	RemoveOrphans *bool   `json:"removeOrphans,omitempty"`
 }
 
+// ProjectDeployOptions is the optional request body for the project "up"
+// (deploy) endpoint. components/schemas/ProjectDeployOptions
+type ProjectDeployOptions struct {
+	ForceRecreate *bool   `json:"forceRecreate,omitempty"`
+	PullPolicy    *string `json:"pullPolicy,omitempty"`
+	RemoveOrphans *bool   `json:"removeOrphans,omitempty"`
+}
+
 func (c *Client) CreateProject(ctx context.Context, envID string, body ProjectCreateRequest) (*ProjectCreateResponse, error) {
 	req, err := c.newRequest(ctx, http.MethodPost, path.Join("environments", envID, "projects"), body)
 	if err != nil {
