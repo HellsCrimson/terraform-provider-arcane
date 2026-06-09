@@ -37,7 +37,7 @@ func (r *ProjectResource) Schema(_ context.Context, _ resource.SchemaRequest, re
 				Description:   "Project ID",
 				PlanModifiers: []planmodifier.String{stringplanmodifier.UseStateForUnknown()},
 			},
-			"environment_id":      resourceschema.StringAttribute{Required: true, Description: "Environment ID"},
+			"environment_id":      resourceschema.StringAttribute{Required: true, Description: "Environment ID", PlanModifiers: []planmodifier.String{stringplanmodifier.RequiresReplace()}},
 			"name":                resourceschema.StringAttribute{Required: true, Description: "Project name"},
 			"compose_content":     resourceschema.StringAttribute{Required: true, Description: "docker-compose.yml content"},
 			"env_content":         resourceschema.StringAttribute{Optional: true, Description: ".env content"},
