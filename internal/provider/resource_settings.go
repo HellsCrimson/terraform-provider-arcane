@@ -275,6 +275,10 @@ func (r *SettingsResource) Read(ctx context.Context, req resource.ReadRequest, r
 
 	applied, err := r.client.GetSettings(ctx, envID)
 	if err != nil {
+		if r.client.IsResourceGone(err) {
+			resp.State.RemoveResource(ctx)
+			return
+		}
 		resp.Diagnostics.AddError("read settings failed", err.Error())
 		return
 	}

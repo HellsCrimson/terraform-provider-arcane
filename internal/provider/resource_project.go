@@ -243,7 +243,7 @@ func (r *ProjectResource) Read(ctx context.Context, req resource.ReadRequest, re
 
 	out, err := r.client.GetProject(ctx, envID, projID)
 	if err != nil {
-		if strings.Contains(strings.ToLower(err.Error()), "404") {
+		if r.client.IsResourceGone(err) {
 			resp.State.RemoveResource(ctx)
 			return
 		}
@@ -433,7 +433,7 @@ func (r *ProjectResource) Delete(ctx context.Context, req resource.DeleteRequest
 	projID := state.ID.ValueString()
 	opts := sdkclient.ProjectDestroyOptions{RemoveFiles: state.RemoveFiles.ValueBool(), RemoveVolumes: state.RemoveVolumes.ValueBool()}
 	if err := r.client.DestroyProject(ctx, envID, projID, opts); err != nil {
-		if strings.Contains(strings.ToLower(err.Error()), "404") {
+		if r.client.IsResourceGone(err) {
 			return
 		}
 		resp.Diagnostics.AddError("destroy project failed", err.Error())
