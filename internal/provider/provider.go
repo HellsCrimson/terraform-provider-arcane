@@ -60,6 +60,10 @@ func (p *ArcaneProvider) Schema(_ context.Context, _ provider.SchemaRequest, res
 				Description: "Disable TLS certificate verification for API requests. Use only with self-signed.",
 				Optional:    true,
 			},
+			"forget_missing_environments": schema.BoolAttribute{
+				Description: "When true, per-environment resources (project, container, volume, network, gitops_sync, notification) whose environment no longer exists are removed from state on read instead of failing with the manager's \"environment not found\" proxy error. Defaults to false (the read errors). Enable this when you recreate environments with new IDs.",
+				Optional:    true,
+			},
 		},
 	}
 }
@@ -67,10 +71,11 @@ func (p *ArcaneProvider) Schema(_ context.Context, _ provider.SchemaRequest, res
 // Configure prepares a configured client for data sources and resources.
 func (p *ArcaneProvider) Configure(ctx context.Context, req provider.ConfigureRequest, resp *provider.ConfigureResponse) {
 	var config struct {
-		Endpoint    types.String `tfsdk:"endpoint"`
-		APIKey      types.String `tfsdk:"api_key"`
-		HTTPTimeout types.String `tfsdk:"http_timeout"`
-		Insecure    types.Bool   `tfsdk:"insecure"`
+		Endpoint                  types.String `tfsdk:"endpoint"`
+		APIKey                    types.String `tfsdk:"api_key"`
+		HTTPTimeout               types.String `tfsdk:"http_timeout"`
+		Insecure                  types.Bool   `tfsdk:"insecure"`
+		ForgetMissingEnvironments types.Bool   `tfsdk:"forget_missing_environments"`
 	}
 
 	diags := req.Config.Get(ctx, &config)
@@ -109,11 +114,18 @@ func (p *ArcaneProvider) Configure(ctx context.Context, req provider.ConfigureRe
 		insecure = config.Insecure.ValueBool()
 	}
 
+	forgetMissingEnvironments := false
+	if !config.ForgetMissingEnvironments.IsNull() && !config.ForgetMissingEnvironments.IsUnknown() {
+		forgetMissingEnvironments = config.ForgetMissingEnvironments.ValueBool()
+	}
+
 	client := sdkclient.NewClientWithOptions(endpoint, apiKey, timeout, insecure)
+	client.ForgetMissingEnvironments = forgetMissingEnvironments
 	tflog.Info(ctx, "Configured Arcane provider", map[string]any{
-		"endpoint": endpoint,
-		"timeout":  timeout.String(),
-		"insecure": insecure,
+		"endpoint":                    endpoint,
+		"timeout":                     timeout.String(),
+		"insecure":                    insecure,
+		"forget_missing_environments": forgetMissingEnvironments,
 	})
 
 	resp.DataSourceData = client
@@ -167,6 +179,8 @@ func (p *ArcaneProvider) DataSources(_ context.Context) []func() datasource.Data
 		NewDefaultTemplatesDataSource,
 		NewTemplateVariablesDataSource,
 		NewPublicSettingsDataSource,
+		NewRoleDataSource,
+		NewRolePermissionsDataSource,
 	}
 }
 
@@ -191,5 +205,8 @@ func (p *ArcaneProvider) Resources(_ context.Context) []func() resource.Resource
 		NewNetworkResource,
 		NewJobSchedulesResource,
 		NewVulnerabilityIgnoreResource,
+		NewRoleResource,
+		NewOidcRoleMappingResource,
+		NewFederatedCredentialResource,
 	}
 }

@@ -21,6 +21,7 @@ import (
 	"github.com/hashicorp/terraform-plugin-framework/providerserver"
 	"github.com/hashicorp/terraform-plugin-go/tfprotov6"
 	"github.com/hashicorp/terraform-plugin-testing/helper/resource"
+	"github.com/hashicorp/terraform-plugin-testing/plancheck"
 	"github.com/hashicorp/terraform-plugin-testing/terraform"
 )
 
@@ -445,6 +446,119 @@ resource "arcane_gitops_sync" "second" {
 	return cfg
 }
 
+// TestAccArcaneEnvironmentID_forcesReplace verifies that changing environment_id
+// on a per-environment resource is planned as a replacement (destroy + create)
+// rather than an in-place update. environment_id is part of each resource's
+// identity and the API has no "move between environments" operation, so an
+// in-place update would leave the resource pointing at the old environment and
+// produce a "provider produced inconsistent result after apply" error.
+//
+// Each resource is created in the live test environment, then a PlanOnly step
+// flips environment_id to a different value and asserts the planned action is a
+// replace. The bogus environment id is never contacted: the refresh reads the
+// existing state (the real environment), and the plan is not applied.
+func TestAccArcaneEnvironmentID_forcesReplace(t *testing.T) {
+	cases := []struct {
+		name     string
+		addr     string
+		configFn func(envID string) string
+	}{
+		{"project", "arcane_project.test", testAccEnvReplaceProjectConfig},
+		{"container", "arcane_container.test", testAccEnvReplaceContainerConfig},
+		{"notification", "arcane_notification.test", testAccEnvReplaceNotificationConfig},
+		{"settings", "arcane_settings.test", testAccEnvReplaceSettingsConfig},
+	}
+
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			resource.Test(t, resource.TestCase{
+				ProtoV6ProviderFactories: testAccProtoV6ProviderFactories,
+				PreCheck:                 func() { testAccPreCheck(t) },
+				Steps: []resource.TestStep{
+					{
+						Config: tc.configFn(testAccEnvironmentID()),
+						Check:  resource.TestCheckResourceAttr(tc.addr, "environment_id", testAccEnvironmentID()),
+					},
+					{
+						Config:             tc.configFn("tfacc-nonexistent-environment"),
+						PlanOnly:           true,
+						ExpectNonEmptyPlan: true,
+						ConfigPlanChecks: resource.ConfigPlanChecks{
+							PostApplyPreRefresh: []plancheck.PlanCheck{
+								plancheck.ExpectResourceAction(tc.addr, plancheck.ResourceActionReplace),
+							},
+						},
+					},
+				},
+			})
+		})
+	}
+}
+
+func testAccEnvReplaceProviderBlock() string {
+	return fmt.Sprintf(`
+provider "arcane" {
+  endpoint     = %q
+  api_key      = %q
+  http_timeout = "180s"
+}
+`, testAccEndpoint(), testAccAPIKey())
+}
+
+func testAccEnvReplaceProjectConfig(envID string) string {
+	return testAccEnvReplaceProviderBlock() + fmt.Sprintf(`
+resource "arcane_project" "test" {
+  environment_id     = %q
+  name               = %q
+  compose_content    = <<YAML
+services:
+  app:
+    image: alpine:latest
+    command: ["sh", "-c", "sleep 1"]
+YAML
+  running            = false
+  redeploy_on_update = false
+  pull_on_update     = false
+  remove_files       = true
+  remove_volumes     = true
+}
+`, envID, testAccName("env-replace-project"))
+}
+
+func testAccEnvReplaceContainerConfig(envID string) string {
+	return testAccEnvReplaceProviderBlock() + fmt.Sprintf(`
+resource "arcane_container" "test" {
+  environment_id = %q
+  name           = %q
+  image          = "alpine:latest"
+  command        = ["sh", "-c", "sleep 60"]
+  force_delete   = true
+}
+`, envID, testAccName("env-replace-container"))
+}
+
+func testAccEnvReplaceNotificationConfig(envID string) string {
+	return testAccEnvReplaceProviderBlock() + fmt.Sprintf(`
+resource "arcane_notification" "test" {
+  environment_id = %q
+  provider_name  = "generic"
+  enabled        = false
+  config = {
+    webhookUrl = "http://example.com/hook"
+  }
+}
+`, envID)
+}
+
+func testAccEnvReplaceSettingsConfig(envID string) string {
+	return testAccEnvReplaceProviderBlock() + fmt.Sprintf(`
+resource "arcane_settings" "test" {
+  environment_id    = %q
+  application_theme = "dark"
+}
+`, envID)
+}
+
 // webhookCapture is a host-side HTTP listener that records the POST requests
 // Arcane sends when the generic notification provider is exercised.
 type webhookCapture struct {
@@ -674,12 +788,16 @@ resource "arcane_user" "test" {
   display_name = "Terraform Acceptance User %s"
   email        = "tfacc-%s-%s@example.test"
   locale       = "en-US"
-  roles        = ["user"]
 }
 
 resource "arcane_api_key" "test" {
   name        = %q
   description = "Terraform acceptance API key %s"
+  permissions = [
+    {
+      permission = "containers:list"
+    },
+  ]
 }
 
 resource "arcane_container_registry" "test" {
@@ -975,4 +1093,120 @@ data "arcane_volume" "test" {
   id             = arcane_volume.test.id
 }
 `
+}
+
+// TestAccArcaneProvider_rbac exercises the RBAC surface: custom roles, the role
+// and permission-manifest data sources, OIDC group→role mappings, and workload
+// identity federated credentials. Step 1 creates everything; step 2 updates each
+// resource (rename/permission change, claim change, disable + ttl change).
+func TestAccArcaneProvider_rbac(t *testing.T) {
+	roleName := testAccName("role")
+	fedName := testAccName("fedcred")
+
+	resource.Test(t, resource.TestCase{
+		ProtoV6ProviderFactories: testAccProtoV6ProviderFactories,
+		PreCheck:                 func() { testAccPreCheck(t) },
+		Steps: []resource.TestStep{
+			{
+				Config: testAccRBACConfig(roleName, fedName, "1"),
+				Check: resource.ComposeAggregateTestCheckFunc(
+					logCheck(t, "arcane_role",
+						resource.TestCheckResourceAttrSet("arcane_role.test", "id"),
+						resource.TestCheckResourceAttr("arcane_role.test", "name", roleName),
+						resource.TestCheckResourceAttr("arcane_role.test", "built_in", "false"),
+						resource.TestCheckResourceAttr("arcane_role.test", "permissions.#", "2"),
+						resource.TestCheckResourceAttr("arcane_role.test", "description", "RBAC acceptance role 1"),
+					),
+					logCheck(t, "data.arcane_role",
+						resource.TestCheckResourceAttrPair("data.arcane_role.by_name", "id", "arcane_role.test", "id"),
+						resource.TestCheckResourceAttr("data.arcane_role.by_name", "built_in", "false"),
+					),
+					logCheck(t, "data.arcane_role_permissions",
+						resource.TestCheckResourceAttrSet("data.arcane_role_permissions.all", "all_permissions.#"),
+						resource.TestCheckResourceAttrSet("data.arcane_role_permissions.all", "resources.#"),
+					),
+					logCheck(t, "arcane_oidc_role_mapping",
+						resource.TestCheckResourceAttrSet("arcane_oidc_role_mapping.test", "id"),
+						resource.TestCheckResourceAttr("arcane_oidc_role_mapping.test", "claim_value", "tfacc-group-1"),
+						resource.TestCheckResourceAttrPair("arcane_oidc_role_mapping.test", "role_id", "arcane_role.test", "id"),
+						resource.TestCheckResourceAttr("arcane_oidc_role_mapping.test", "source", "manual"),
+					),
+					logCheck(t, "arcane_federated_credential",
+						resource.TestCheckResourceAttrSet("arcane_federated_credential.test", "id"),
+						resource.TestCheckResourceAttr("arcane_federated_credential.test", "name", fedName),
+						resource.TestCheckResourceAttr("arcane_federated_credential.test", "enabled", "true"),
+						resource.TestCheckResourceAttr("arcane_federated_credential.test", "match_type", "glob"),
+						resource.TestCheckResourceAttrPair("arcane_federated_credential.test", "role_id", "arcane_role.test", "id"),
+						resource.TestCheckResourceAttrSet("arcane_federated_credential.test", "identity_user_id"),
+					),
+				),
+			},
+			{
+				Config: testAccRBACConfig(roleName, fedName, "2"),
+				Check: resource.ComposeAggregateTestCheckFunc(
+					logCheck(t, "arcane_role",
+						resource.TestCheckResourceAttr("arcane_role.test", "permissions.#", "3"),
+						resource.TestCheckResourceAttr("arcane_role.test", "description", "RBAC acceptance role 2"),
+					),
+					logCheck(t, "arcane_oidc_role_mapping",
+						resource.TestCheckResourceAttr("arcane_oidc_role_mapping.test", "claim_value", "tfacc-group-2"),
+					),
+					logCheck(t, "arcane_federated_credential",
+						resource.TestCheckResourceAttr("arcane_federated_credential.test", "enabled", "false"),
+						resource.TestCheckResourceAttr("arcane_federated_credential.test", "token_ttl_seconds", "600"),
+					),
+				),
+			},
+		},
+	})
+}
+
+func testAccRBACConfig(roleName, fedName, suffix string) string {
+	permissions := `["containers:list", "projects:read"]`
+	description := "RBAC acceptance role 1"
+	claim := "tfacc-group-1"
+	fedEnabled := "true"
+	fedTTL := ""
+	if suffix == "2" {
+		permissions = `["containers:list", "projects:read", "containers:start"]`
+		description = "RBAC acceptance role 2"
+		claim = "tfacc-group-2"
+		fedEnabled = "false"
+		fedTTL = "  token_ttl_seconds = 600\n"
+	}
+
+	return fmt.Sprintf(`
+provider "arcane" {
+  endpoint     = %q
+  api_key      = %q
+  http_timeout = "180s"
+}
+
+resource "arcane_role" "test" {
+  name        = %q
+  description = %q
+  permissions = %s
+}
+
+data "arcane_role" "by_name" {
+  name = arcane_role.test.name
+}
+
+data "arcane_role_permissions" "all" {}
+
+resource "arcane_oidc_role_mapping" "test" {
+  claim_value = %q
+  role_id     = arcane_role.test.id
+}
+
+resource "arcane_federated_credential" "test" {
+  name          = %q
+  enabled       = %s
+  issuer_url    = "https://issuer.example.test"
+  audiences     = ["arcane"]
+  subject_match = "repo:example/app:*"
+  match_type    = "glob"
+  role_id       = arcane_role.test.id
+%s}
+`, testAccEndpoint(), testAccAPIKey(), roleName, description, permissions, claim, fedName, fedEnabled, fedTTL)
 }

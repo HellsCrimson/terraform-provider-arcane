@@ -452,7 +452,7 @@ func (r *GitOpsSyncResource) Read(ctx context.Context, req resource.ReadRequest,
 
 	sync, err := r.client.GetGitOpsSync(ctx, state.EnvironmentID.ValueString(), state.ID.ValueString())
 	if err != nil {
-		if strings.Contains(strings.ToLower(err.Error()), "404") {
+		if r.client.IsResourceGone(err) {
 			resp.State.RemoveResource(ctx)
 			return
 		}
@@ -711,7 +711,7 @@ func (r *GitOpsSyncResource) Delete(ctx context.Context, req resource.DeleteRequ
 	if projectID == "" {
 		sync, err := r.client.GetGitOpsSync(ctx, envID, syncID)
 		if err != nil {
-			if !strings.Contains(strings.ToLower(err.Error()), "404") {
+			if !r.client.IsResourceGone(err) {
 				resp.Diagnostics.AddError("read gitops sync before delete failed", err.Error())
 			}
 		} else if sync.ProjectID != nil {
@@ -720,7 +720,7 @@ func (r *GitOpsSyncResource) Delete(ctx context.Context, req resource.DeleteRequ
 	}
 
 	if err := r.client.DeleteGitOpsSync(ctx, envID, syncID); err != nil {
-		if strings.Contains(strings.ToLower(err.Error()), "404") {
+		if r.client.IsResourceGone(err) {
 			// Continue so we can still try to cleanup the project if we have an ID.
 		} else {
 			resp.Diagnostics.AddError("delete gitops sync failed", err.Error())
@@ -733,7 +733,7 @@ func (r *GitOpsSyncResource) Delete(ctx context.Context, req resource.DeleteRequ
 			RemoveVolumes: false,
 		}
 		if err := r.client.DestroyProject(ctx, envID, projectID, opts); err != nil {
-			if strings.Contains(strings.ToLower(err.Error()), "404") {
+			if r.client.IsResourceGone(err) {
 				return
 			}
 			resp.Diagnostics.AddError("destroy gitops sync project failed", err.Error())

@@ -36,7 +36,7 @@ func (r *ContainerResource) Schema(_ context.Context, _ resource.SchemaRequest, 
 	resp.Schema = resourceschema.Schema{
 		Attributes: map[string]resourceschema.Attribute{
 			"id":             resourceschema.StringAttribute{Computed: true, PlanModifiers: []planmodifier.String{stringplanmodifier.UseStateForUnknown()}},
-			"environment_id": resourceschema.StringAttribute{Required: true, Description: "Environment ID"},
+			"environment_id": resourceschema.StringAttribute{Required: true, Description: "Environment ID", PlanModifiers: []planmodifier.String{stringplanmodifier.RequiresReplace()}},
 			"name":           resourceschema.StringAttribute{Required: true, Description: "Container name", PlanModifiers: []planmodifier.String{stringplanmodifier.RequiresReplace()}},
 			"image":          resourceschema.StringAttribute{Required: true, Description: "Image", PlanModifiers: []planmodifier.String{stringplanmodifier.RequiresReplace()}},
 			"auto_remove":    resourceschema.BoolAttribute{Optional: true, PlanModifiers: []planmodifier.Bool{boolplanmodifier.RequiresReplace()}},
@@ -288,7 +288,7 @@ func (r *ContainerResource) Read(ctx context.Context, req resource.ReadRequest, 
 	id := state.ID.ValueString()
 	out, err := r.client.GetContainer(ctx, envID, id)
 	if err != nil {
-		if strings.Contains(strings.ToLower(err.Error()), "404") {
+		if r.client.IsResourceGone(err) {
 			resp.State.RemoveResource(ctx)
 			return
 		}
@@ -329,7 +329,7 @@ func (r *ContainerResource) Delete(ctx context.Context, req resource.DeleteReque
 	force := state.ForceDelete.ValueBool()
 	volumes := state.RemoveVolumes.ValueBool()
 	if err := r.client.DeleteContainer(ctx, envID, id, force, volumes); err != nil {
-		if strings.Contains(strings.ToLower(err.Error()), "404") {
+		if r.client.IsResourceGone(err) {
 			return
 		}
 		resp.Diagnostics.AddError("delete container failed", err.Error())

@@ -1,12 +1,15 @@
 SHELL := /bin/bash
 
 COMPOSE_FILE ?= tests/docker-compose.yml
+EDGE_COMPOSE_FILE ?= tests/docker-compose.edge.yml
 ARCANE_ENDPOINT ?= http://127.0.0.1:3552/api
 ARCANE_ACC_ENVIRONMENT_ID ?= 0
 ARCANE_API_KEY ?= arc_a54fe1040057252a19b34d72008395141a04de7731a28d6f7359baa4923b2f6a
+ARCANE_ACC_EDGE_AGENT_TOKEN ?= arc_a54fe1040057252a19b34d72008395141a04de7731a28d6f7359baa4923b2f6b
+ARCANE_ACC_EDGE_AGENT_API_URL ?= http://arcane-test-edge-agent:3552
 ACC_TEST ?= TestAcc
 
-.PHONY: test test-up test-down test-clean wait-arcane test-acc test-suite
+.PHONY: test test-up test-down test-clean wait-arcane test-acc test-suite test-acc-forget test-forget-down test-forget-clean test-all
 
 test:
 	go test ./...
@@ -34,8 +37,39 @@ test-acc: test-up wait-arcane
 
 test-suite: test test-acc
 
+test-all:
+	go test ./...
+	docker compose -f $(COMPOSE_FILE) -f $(EDGE_COMPOSE_FILE) down -v
+	docker compose -f $(COMPOSE_FILE) -f $(EDGE_COMPOSE_FILE) up -d
+	$(MAKE) wait-arcane
+	TF_ACC=1 \
+	ARCANE_ENDPOINT="$(ARCANE_ENDPOINT)" \
+	ARCANE_API_KEY="$(ARCANE_API_KEY)" \
+	ARCANE_ACC_ENVIRONMENT_ID="$(ARCANE_ACC_ENVIRONMENT_ID)" \
+	ARCANE_ACC_EDGE_AGENT_TOKEN="$(ARCANE_ACC_EDGE_AGENT_TOKEN)" \
+	ARCANE_ACC_EDGE_AGENT_API_URL="$(ARCANE_ACC_EDGE_AGENT_API_URL)" \
+	go test ./internal/provider -run "$(ACC_TEST)" -count=1 -v
+
+test-acc-forget:
+	docker compose -f $(COMPOSE_FILE) -f $(EDGE_COMPOSE_FILE) down -v
+	docker compose -f $(COMPOSE_FILE) -f $(EDGE_COMPOSE_FILE) up -d
+	$(MAKE) wait-arcane
+	TF_ACC=1 \
+	ARCANE_ENDPOINT="$(ARCANE_ENDPOINT)" \
+	ARCANE_API_KEY="$(ARCANE_API_KEY)" \
+	ARCANE_ACC_ENVIRONMENT_ID="$(ARCANE_ACC_ENVIRONMENT_ID)" \
+	ARCANE_ACC_EDGE_AGENT_TOKEN="$(ARCANE_ACC_EDGE_AGENT_TOKEN)" \
+	ARCANE_ACC_EDGE_AGENT_API_URL="$(ARCANE_ACC_EDGE_AGENT_API_URL)" \
+	go test ./internal/provider -run TestAccArcaneForgetMissingEnvironment -count=1 -v
+
 test-down:
 	docker compose -f $(COMPOSE_FILE) down
 
 test-clean:
 	docker compose -f $(COMPOSE_FILE) down -v
+
+test-forget-down:
+	docker compose -f $(COMPOSE_FILE) -f $(EDGE_COMPOSE_FILE) down
+
+test-forget-clean:
+	docker compose -f $(COMPOSE_FILE) -f $(EDGE_COMPOSE_FILE) down -v

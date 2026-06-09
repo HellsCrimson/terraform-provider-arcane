@@ -6,6 +6,7 @@ import (
 
 	"terraform-provider-arcane/internal/sdkclient"
 
+	"github.com/hashicorp/terraform-plugin-framework/attr"
 	"github.com/hashicorp/terraform-plugin-framework/datasource"
 	"github.com/hashicorp/terraform-plugin-framework/datasource/schema"
 	"github.com/hashicorp/terraform-plugin-framework/types"
@@ -49,10 +50,25 @@ func (d *UserDataSource) Schema(ctx context.Context, req datasource.SchemaReques
 				Computed:    true,
 				Description: "Locale preference",
 			},
-			"roles": schema.SetAttribute{
+			"role_assignments": schema.SetNestedAttribute{
 				Computed:    true,
-				ElementType: types.StringType,
-				Description: "Assigned roles",
+				Description: "Role assignments held by the user.",
+				NestedObject: schema.NestedAttributeObject{
+					Attributes: map[string]schema.Attribute{
+						"role_id": schema.StringAttribute{
+							Computed:    true,
+							Description: "ID of the granted role.",
+						},
+						"environment_id": schema.StringAttribute{
+							Computed:    true,
+							Description: "Environment ID the assignment is scoped to; empty for a global assignment.",
+						},
+						"source": schema.StringAttribute{
+							Computed:    true,
+							Description: "How the assignment was created (manual or oidc).",
+						},
+					},
+				},
 			},
 			"created_at": schema.StringAttribute{
 				Computed:    true,
@@ -79,15 +95,27 @@ func (d *UserDataSource) Configure(ctx context.Context, req datasource.Configure
 }
 
 type userDataSourceModel struct {
-	ID          types.String `tfsdk:"id"`
-	Username    types.String `tfsdk:"username"`
-	DisplayName types.String `tfsdk:"display_name"`
-	Email       types.String `tfsdk:"email"`
-	Locale      types.String `tfsdk:"locale"`
-	Roles       types.Set    `tfsdk:"roles"`
-	CreatedAt   types.String `tfsdk:"created_at"`
-	UpdatedAt   types.String `tfsdk:"updated_at"`
+	ID              types.String `tfsdk:"id"`
+	Username        types.String `tfsdk:"username"`
+	DisplayName     types.String `tfsdk:"display_name"`
+	Email           types.String `tfsdk:"email"`
+	Locale          types.String `tfsdk:"locale"`
+	RoleAssignments types.Set    `tfsdk:"role_assignments"`
+	CreatedAt       types.String `tfsdk:"created_at"`
+	UpdatedAt       types.String `tfsdk:"updated_at"`
 }
+
+type userDataSourceRoleAssignmentModel struct {
+	RoleID        types.String `tfsdk:"role_id"`
+	EnvironmentID types.String `tfsdk:"environment_id"`
+	Source        types.String `tfsdk:"source"`
+}
+
+var userDataSourceRoleAssignmentType = types.ObjectType{AttrTypes: map[string]attr.Type{
+	"role_id":        types.StringType,
+	"environment_id": types.StringType,
+	"source":         types.StringType,
+}}
 
 func (d *UserDataSource) Read(ctx context.Context, req datasource.ReadRequest, resp *datasource.ReadResponse) {
 	var config userDataSourceModel
@@ -127,7 +155,25 @@ func (d *UserDataSource) Read(ctx context.Context, req datasource.ReadRequest, r
 	} else {
 		state.Locale = types.StringNull()
 	}
-	state.Roles = stringSliceToSet(ctx, user.Roles)
+	assignments := make([]userDataSourceRoleAssignmentModel, 0, len(user.RoleAssignments))
+	for _, a := range user.RoleAssignments {
+		m := userDataSourceRoleAssignmentModel{
+			RoleID: types.StringValue(a.RoleID),
+			Source: types.StringValue(a.Source),
+		}
+		if a.EnvironmentID != "" {
+			m.EnvironmentID = types.StringValue(a.EnvironmentID)
+		} else {
+			m.EnvironmentID = types.StringNull()
+		}
+		assignments = append(assignments, m)
+	}
+	roleSet, diags := types.SetValueFrom(ctx, userDataSourceRoleAssignmentType, assignments)
+	resp.Diagnostics.Append(diags...)
+	if resp.Diagnostics.HasError() {
+		return
+	}
+	state.RoleAssignments = roleSet
 
 	resp.Diagnostics.Append(resp.State.Set(ctx, &state)...)
 }
