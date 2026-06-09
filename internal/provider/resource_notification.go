@@ -100,7 +100,7 @@ func (r *NotificationResource) Read(ctx context.Context, req resource.ReadReques
 	provider := state.ProviderName.ValueString()
 	out, err := r.client.GetNotification(ctx, envID, provider)
 	if err != nil {
-		if strings.Contains(strings.ToLower(err.Error()), "404") {
+		if r.client.IsResourceGone(err) {
 			resp.State.RemoveResource(ctx)
 			return
 		}
@@ -150,7 +150,7 @@ func (r *NotificationResource) Delete(ctx context.Context, req resource.DeleteRe
 		return
 	}
 	if err := r.client.DeleteNotification(ctx, state.EnvironmentID.ValueString(), state.ProviderName.ValueString()); err != nil {
-		if strings.Contains(strings.ToLower(err.Error()), "404") {
+		if r.client.IsResourceGone(err) {
 			return
 		}
 		resp.Diagnostics.AddError("delete notification failed", err.Error())
