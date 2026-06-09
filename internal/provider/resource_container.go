@@ -36,7 +36,7 @@ func (r *ContainerResource) Schema(_ context.Context, _ resource.SchemaRequest, 
 	resp.Schema = resourceschema.Schema{
 		Attributes: map[string]resourceschema.Attribute{
 			"id":             resourceschema.StringAttribute{Computed: true, PlanModifiers: []planmodifier.String{stringplanmodifier.UseStateForUnknown()}},
-			"environment_id": resourceschema.StringAttribute{Required: true, Description: "Environment ID"},
+			"environment_id": resourceschema.StringAttribute{Required: true, Description: "Environment ID", PlanModifiers: []planmodifier.String{stringplanmodifier.RequiresReplace()}},
 			"name":           resourceschema.StringAttribute{Required: true, Description: "Container name", PlanModifiers: []planmodifier.String{stringplanmodifier.RequiresReplace()}},
 			"image":          resourceschema.StringAttribute{Required: true, Description: "Image", PlanModifiers: []planmodifier.String{stringplanmodifier.RequiresReplace()}},
 			"auto_remove":    resourceschema.BoolAttribute{Optional: true, PlanModifiers: []planmodifier.Bool{boolplanmodifier.RequiresReplace()}},
