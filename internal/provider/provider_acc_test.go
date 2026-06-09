@@ -21,6 +21,7 @@ import (
 	"github.com/hashicorp/terraform-plugin-framework/providerserver"
 	"github.com/hashicorp/terraform-plugin-go/tfprotov6"
 	"github.com/hashicorp/terraform-plugin-testing/helper/resource"
+	"github.com/hashicorp/terraform-plugin-testing/plancheck"
 	"github.com/hashicorp/terraform-plugin-testing/terraform"
 )
 
@@ -443,6 +444,119 @@ resource "arcane_gitops_sync" "second" {
 	}
 
 	return cfg
+}
+
+// TestAccArcaneEnvironmentID_forcesReplace verifies that changing environment_id
+// on a per-environment resource is planned as a replacement (destroy + create)
+// rather than an in-place update. environment_id is part of each resource's
+// identity and the API has no "move between environments" operation, so an
+// in-place update would leave the resource pointing at the old environment and
+// produce a "provider produced inconsistent result after apply" error.
+//
+// Each resource is created in the live test environment, then a PlanOnly step
+// flips environment_id to a different value and asserts the planned action is a
+// replace. The bogus environment id is never contacted: the refresh reads the
+// existing state (the real environment), and the plan is not applied.
+func TestAccArcaneEnvironmentID_forcesReplace(t *testing.T) {
+	cases := []struct {
+		name     string
+		addr     string
+		configFn func(envID string) string
+	}{
+		{"project", "arcane_project.test", testAccEnvReplaceProjectConfig},
+		{"container", "arcane_container.test", testAccEnvReplaceContainerConfig},
+		{"notification", "arcane_notification.test", testAccEnvReplaceNotificationConfig},
+		{"settings", "arcane_settings.test", testAccEnvReplaceSettingsConfig},
+	}
+
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			resource.Test(t, resource.TestCase{
+				ProtoV6ProviderFactories: testAccProtoV6ProviderFactories,
+				PreCheck:                 func() { testAccPreCheck(t) },
+				Steps: []resource.TestStep{
+					{
+						Config: tc.configFn(testAccEnvironmentID()),
+						Check:  resource.TestCheckResourceAttr(tc.addr, "environment_id", testAccEnvironmentID()),
+					},
+					{
+						Config:             tc.configFn("tfacc-nonexistent-environment"),
+						PlanOnly:           true,
+						ExpectNonEmptyPlan: true,
+						ConfigPlanChecks: resource.ConfigPlanChecks{
+							PostApplyPreRefresh: []plancheck.PlanCheck{
+								plancheck.ExpectResourceAction(tc.addr, plancheck.ResourceActionReplace),
+							},
+						},
+					},
+				},
+			})
+		})
+	}
+}
+
+func testAccEnvReplaceProviderBlock() string {
+	return fmt.Sprintf(`
+provider "arcane" {
+  endpoint     = %q
+  api_key      = %q
+  http_timeout = "180s"
+}
+`, testAccEndpoint(), testAccAPIKey())
+}
+
+func testAccEnvReplaceProjectConfig(envID string) string {
+	return testAccEnvReplaceProviderBlock() + fmt.Sprintf(`
+resource "arcane_project" "test" {
+  environment_id     = %q
+  name               = %q
+  compose_content    = <<YAML
+services:
+  app:
+    image: alpine:latest
+    command: ["sh", "-c", "sleep 1"]
+YAML
+  running            = false
+  redeploy_on_update = false
+  pull_on_update     = false
+  remove_files       = true
+  remove_volumes     = true
+}
+`, envID, testAccName("env-replace-project"))
+}
+
+func testAccEnvReplaceContainerConfig(envID string) string {
+	return testAccEnvReplaceProviderBlock() + fmt.Sprintf(`
+resource "arcane_container" "test" {
+  environment_id = %q
+  name           = %q
+  image          = "alpine:latest"
+  command        = ["sh", "-c", "sleep 60"]
+  force_delete   = true
+}
+`, envID, testAccName("env-replace-container"))
+}
+
+func testAccEnvReplaceNotificationConfig(envID string) string {
+	return testAccEnvReplaceProviderBlock() + fmt.Sprintf(`
+resource "arcane_notification" "test" {
+  environment_id = %q
+  provider_name  = "generic"
+  enabled        = false
+  config = {
+    webhookUrl = "http://example.com/hook"
+  }
+}
+`, envID)
+}
+
+func testAccEnvReplaceSettingsConfig(envID string) string {
+	return testAccEnvReplaceProviderBlock() + fmt.Sprintf(`
+resource "arcane_settings" "test" {
+  environment_id    = %q
+  application_theme = "dark"
+}
+`, envID)
 }
 
 // webhookCapture is a host-side HTTP listener that records the POST requests
