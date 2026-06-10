@@ -41,8 +41,8 @@ jobs:
           cache: true
 
       - name: Run acceptance tests
-        run: make test-all
+        run: make test-acc
 
       - name: Tear down test stack
         if: always()
-        run: make test-forget-clean
+        run: make test-clean
