@@ -48,6 +48,11 @@ func (r *EnvironmentResource) Schema(_ context.Context, _ resource.SchemaRequest
 				Sensitive:   true,
 				Description: "Access token for agent pairing (optional)",
 			},
+			"bootstrap_token": resourceschema.StringAttribute{
+				Optional:    true,
+				Sensitive:   true,
+				Description: "Bootstrap token for remote agent pairing (optional)",
+			},
 			"use_api_key": resourceschema.BoolAttribute{
 				Optional:    true,
 				Description: "When true, generates an API key for agent pairing.",
@@ -116,6 +121,7 @@ type environmentModel struct {
 	Name                    types.String `tfsdk:"name"`
 	APIURL                  types.String `tfsdk:"api_url"`
 	AccessToken             types.String `tfsdk:"access_token"`
+	BootstrapToken          types.String `tfsdk:"bootstrap_token"`
 	UseAPIKey               types.Bool   `tfsdk:"use_api_key"`
 	IsEdge                  types.Bool   `tfsdk:"is_edge"`
 	Enabled                 types.Bool   `tfsdk:"enabled"`
@@ -147,6 +153,10 @@ func (r *EnvironmentResource) Create(ctx context.Context, req resource.CreateReq
 		v := plan.AccessToken.ValueString()
 		body.AccessToken = &v
 	}
+	if !plan.BootstrapToken.IsNull() && !plan.BootstrapToken.IsUnknown() {
+		v := plan.BootstrapToken.ValueString()
+		body.BootstrapToken = &v
+	}
 	if !plan.Enabled.IsNull() && !plan.Enabled.IsUnknown() {
 		v := plan.Enabled.ValueBool()
 		body.Enabled = &v
@@ -170,6 +180,7 @@ func (r *EnvironmentResource) Create(ctx context.Context, req resource.CreateReq
 		ID:               types.StringValue(env.ID),
 		APIURL:           types.StringValue(env.APIURL),
 		AccessToken:      plan.AccessToken,
+		BootstrapToken:   plan.BootstrapToken,
 		UseAPIKey:        plan.UseAPIKey,
 		RegenerateAPIKey: plan.RegenerateAPIKey,
 		Status:           types.StringValue(env.Status),
@@ -226,7 +237,7 @@ func (r *EnvironmentResource) Read(ctx context.Context, req resource.ReadRequest
 		state.IsEdge = types.BoolValue(env.IsEdge)
 	}
 	applyEnvironmentEdgeFields(ctx, &state, env)
-	// access_token/use_api_key remain as configured
+	// access_token/bootstrap_token/use_api_key remain as configured
 	resp.Diagnostics.Append(resp.State.Set(ctx, &state)...)
 }
 
@@ -251,6 +262,10 @@ func (r *EnvironmentResource) Update(ctx context.Context, req resource.UpdateReq
 	if !plan.AccessToken.IsNull() && !plan.AccessToken.IsUnknown() {
 		v := plan.AccessToken.ValueString()
 		body.AccessToken = &v
+	}
+	if !plan.BootstrapToken.IsNull() && !plan.BootstrapToken.IsUnknown() {
+		v := plan.BootstrapToken.ValueString()
+		body.BootstrapToken = &v
 	}
 	if !plan.Enabled.IsNull() && !plan.Enabled.IsUnknown() {
 		v := plan.Enabled.ValueBool()
@@ -287,6 +302,9 @@ func (r *EnvironmentResource) Update(ctx context.Context, req resource.UpdateReq
 	applyEnvironmentEdgeFields(ctx, &state, env)
 	if !plan.AccessToken.IsNull() && !plan.AccessToken.IsUnknown() {
 		state.AccessToken = plan.AccessToken
+	}
+	if !plan.BootstrapToken.IsNull() && !plan.BootstrapToken.IsUnknown() {
+		state.BootstrapToken = plan.BootstrapToken
 	}
 	if !plan.UseAPIKey.IsNull() && !plan.UseAPIKey.IsUnknown() {
 		state.UseAPIKey = plan.UseAPIKey

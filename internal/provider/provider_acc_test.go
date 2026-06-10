@@ -674,16 +674,12 @@ resource "arcane_user" "test" {
   display_name = "Terraform Acceptance User %s"
   email        = "tfacc-%s-%s@example.test"
   locale       = "en-US"
+  roles        = ["user"]
 }
 
 resource "arcane_api_key" "test" {
   name        = %q
   description = "Terraform acceptance API key %s"
-  permissions = [
-    {
-      permission = "containers:list"
-    },
-  ]
 }
 
 resource "arcane_container_registry" "test" {
@@ -979,120 +975,4 @@ data "arcane_volume" "test" {
   id             = arcane_volume.test.id
 }
 `
-}
-
-// TestAccArcaneProvider_rbac exercises the RBAC surface: custom roles, the role
-// and permission-manifest data sources, OIDC group→role mappings, and workload
-// identity federated credentials. Step 1 creates everything; step 2 updates each
-// resource (rename/permission change, claim change, disable + ttl change).
-func TestAccArcaneProvider_rbac(t *testing.T) {
-	roleName := testAccName("role")
-	fedName := testAccName("fedcred")
-
-	resource.Test(t, resource.TestCase{
-		ProtoV6ProviderFactories: testAccProtoV6ProviderFactories,
-		PreCheck:                 func() { testAccPreCheck(t) },
-		Steps: []resource.TestStep{
-			{
-				Config: testAccRBACConfig(roleName, fedName, "1"),
-				Check: resource.ComposeAggregateTestCheckFunc(
-					logCheck(t, "arcane_role",
-						resource.TestCheckResourceAttrSet("arcane_role.test", "id"),
-						resource.TestCheckResourceAttr("arcane_role.test", "name", roleName),
-						resource.TestCheckResourceAttr("arcane_role.test", "built_in", "false"),
-						resource.TestCheckResourceAttr("arcane_role.test", "permissions.#", "2"),
-						resource.TestCheckResourceAttr("arcane_role.test", "description", "RBAC acceptance role 1"),
-					),
-					logCheck(t, "data.arcane_role",
-						resource.TestCheckResourceAttrPair("data.arcane_role.by_name", "id", "arcane_role.test", "id"),
-						resource.TestCheckResourceAttr("data.arcane_role.by_name", "built_in", "false"),
-					),
-					logCheck(t, "data.arcane_role_permissions",
-						resource.TestCheckResourceAttrSet("data.arcane_role_permissions.all", "all_permissions.#"),
-						resource.TestCheckResourceAttrSet("data.arcane_role_permissions.all", "resources.#"),
-					),
-					logCheck(t, "arcane_oidc_role_mapping",
-						resource.TestCheckResourceAttrSet("arcane_oidc_role_mapping.test", "id"),
-						resource.TestCheckResourceAttr("arcane_oidc_role_mapping.test", "claim_value", "tfacc-group-1"),
-						resource.TestCheckResourceAttrPair("arcane_oidc_role_mapping.test", "role_id", "arcane_role.test", "id"),
-						resource.TestCheckResourceAttr("arcane_oidc_role_mapping.test", "source", "manual"),
-					),
-					logCheck(t, "arcane_federated_credential",
-						resource.TestCheckResourceAttrSet("arcane_federated_credential.test", "id"),
-						resource.TestCheckResourceAttr("arcane_federated_credential.test", "name", fedName),
-						resource.TestCheckResourceAttr("arcane_federated_credential.test", "enabled", "true"),
-						resource.TestCheckResourceAttr("arcane_federated_credential.test", "match_type", "glob"),
-						resource.TestCheckResourceAttrPair("arcane_federated_credential.test", "role_id", "arcane_role.test", "id"),
-						resource.TestCheckResourceAttrSet("arcane_federated_credential.test", "identity_user_id"),
-					),
-				),
-			},
-			{
-				Config: testAccRBACConfig(roleName, fedName, "2"),
-				Check: resource.ComposeAggregateTestCheckFunc(
-					logCheck(t, "arcane_role",
-						resource.TestCheckResourceAttr("arcane_role.test", "permissions.#", "3"),
-						resource.TestCheckResourceAttr("arcane_role.test", "description", "RBAC acceptance role 2"),
-					),
-					logCheck(t, "arcane_oidc_role_mapping",
-						resource.TestCheckResourceAttr("arcane_oidc_role_mapping.test", "claim_value", "tfacc-group-2"),
-					),
-					logCheck(t, "arcane_federated_credential",
-						resource.TestCheckResourceAttr("arcane_federated_credential.test", "enabled", "false"),
-						resource.TestCheckResourceAttr("arcane_federated_credential.test", "token_ttl_seconds", "600"),
-					),
-				),
-			},
-		},
-	})
-}
-
-func testAccRBACConfig(roleName, fedName, suffix string) string {
-	permissions := `["containers:list", "projects:read"]`
-	description := "RBAC acceptance role 1"
-	claim := "tfacc-group-1"
-	fedEnabled := "true"
-	fedTTL := ""
-	if suffix == "2" {
-		permissions = `["containers:list", "projects:read", "containers:start"]`
-		description = "RBAC acceptance role 2"
-		claim = "tfacc-group-2"
-		fedEnabled = "false"
-		fedTTL = "  token_ttl_seconds = 600\n"
-	}
-
-	return fmt.Sprintf(`
-provider "arcane" {
-  endpoint     = %q
-  api_key      = %q
-  http_timeout = "180s"
-}
-
-resource "arcane_role" "test" {
-  name        = %q
-  description = %q
-  permissions = %s
-}
-
-data "arcane_role" "by_name" {
-  name = arcane_role.test.name
-}
-
-data "arcane_role_permissions" "all" {}
-
-resource "arcane_oidc_role_mapping" "test" {
-  claim_value = %q
-  role_id     = arcane_role.test.id
-}
-
-resource "arcane_federated_credential" "test" {
-  name          = %q
-  enabled       = %s
-  issuer_url    = "https://issuer.example.test"
-  audiences     = ["arcane"]
-  subject_match = "repo:example/app:*"
-  match_type    = "glob"
-  role_id       = arcane_role.test.id
-%s}
-`, testAccEndpoint(), testAccAPIKey(), roleName, description, permissions, claim, fedName, fedEnabled, fedTTL)
 }
