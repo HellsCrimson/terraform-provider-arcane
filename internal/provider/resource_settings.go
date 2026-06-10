@@ -38,9 +38,6 @@ func (r *SettingsResource) Schema(_ context.Context, _ resource.SchemaRequest, r
 			"environment_id": resourceschema.StringAttribute{
 				Required:    true,
 				Description: "Environment ID.",
-				PlanModifiers: []planmodifier.String{
-					stringplanmodifier.RequiresReplace(),
-				},
 			},
 			// SettingsUpdate attributes (all strings per OpenAPI schema)
 			"accent_color":                         resourceschema.StringAttribute{Optional: true, Description: "accentColor"},
