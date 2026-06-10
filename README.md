@@ -106,7 +106,6 @@ Resources
   - Manage a Docker Swarm secret in an environment.
   - Attributes: environment_id, name, data (required, sensitive), labels.
   - Computed: id, version_index, created_at, updated_at.
-  - Note: Swarm secrets are immutable; changing `name`, `data`, or `labels` forces replacement.
 
 - arcane_project_path
   - Manage a compose project from local files.

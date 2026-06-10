@@ -9,7 +9,6 @@ import (
 	"github.com/hashicorp/terraform-plugin-framework/path"
 	"github.com/hashicorp/terraform-plugin-framework/resource"
 	resourceschema "github.com/hashicorp/terraform-plugin-framework/resource/schema"
-	"github.com/hashicorp/terraform-plugin-framework/resource/schema/mapplanmodifier"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema/planmodifier"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema/stringplanmodifier"
 	"github.com/hashicorp/terraform-plugin-framework/types"
@@ -45,25 +44,16 @@ func (r *SwarmSecretResource) Schema(_ context.Context, _ resource.SchemaRequest
 			"name": resourceschema.StringAttribute{
 				Required:    true,
 				Description: "Secret name",
-				PlanModifiers: []planmodifier.String{
-					stringplanmodifier.RequiresReplace(),
-				},
 			},
 			"data": resourceschema.StringAttribute{
 				Required:    true,
 				Sensitive:   true,
 				Description: "Secret value (plaintext). The provider encodes this to base64 for the API.",
-				PlanModifiers: []planmodifier.String{
-					stringplanmodifier.RequiresReplace(),
-				},
 			},
 			"labels": resourceschema.MapAttribute{
 				Optional:    true,
 				ElementType: types.StringType,
 				Description: "Secret labels",
-				PlanModifiers: []planmodifier.Map{
-					mapplanmodifier.RequiresReplace(),
-				},
 			},
 			"version_index": resourceschema.Int64Attribute{
 				Computed:    true,
@@ -164,7 +154,41 @@ func (r *SwarmSecretResource) Read(ctx context.Context, req resource.ReadRequest
 }
 
 func (r *SwarmSecretResource) Update(ctx context.Context, req resource.UpdateRequest, resp *resource.UpdateResponse) {
-	resp.Diagnostics.AddError("update not supported", "Swarm secrets are immutable and must be replaced when data, name, or labels change.")
+	var plan swarmSecretModel
+	var state swarmSecretModel
+	resp.Diagnostics.Append(req.Plan.Get(ctx, &plan)...)
+	resp.Diagnostics.Append(req.State.Get(ctx, &state)...)
+	if resp.Diagnostics.HasError() {
+		return
+	}
+
+	spec := sdkclient.DockerSwarmSecretSpec{
+		Name: plan.Name.ValueString(),
+		Data: sdkclient.EncodeSwarmSecretData(plan.Data.ValueString()),
+	}
+	if !plan.Labels.IsNull() && !plan.Labels.IsUnknown() {
+		spec.Labels = mapFromStringMap(ctx, plan.Labels)
+	}
+
+	version := state.VersionIndex.ValueInt64()
+	if err := r.client.UpdateSwarmSecret(ctx, state.EnvironmentID.ValueString(), state.ID.ValueString(), sdkclient.SwarmSecretUpdateRequest{Spec: spec, Version: &version}); err != nil {
+		resp.Diagnostics.AddError("update swarm secret failed", err.Error())
+		return
+	}
+
+	secret, err := r.client.GetSwarmSecret(ctx, state.EnvironmentID.ValueString(), state.ID.ValueString())
+	if err != nil {
+		resp.Diagnostics.AddError("read swarm secret after update failed", err.Error())
+		return
+	}
+
+	state.Name = types.StringValue(secret.Spec.Name)
+	state.Data = plan.Data
+	state.Labels = stringMapToMap(ctx, secret.Spec.Labels)
+	state.VersionIndex = types.Int64Value(secret.Version.Index)
+	state.UpdatedAt = types.StringValue(secret.UpdatedAt)
+
+	resp.Diagnostics.Append(resp.State.Set(ctx, &state)...)
 }
 
 func (r *SwarmSecretResource) Delete(ctx context.Context, req resource.DeleteRequest, resp *resource.DeleteResponse) {
