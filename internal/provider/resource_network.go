@@ -233,7 +233,7 @@ func (r *NetworkResource) Read(ctx context.Context, req resource.ReadRequest, re
 
 	network, err := r.client.GetNetwork(ctx, state.EnvironmentID.ValueString(), state.ID.ValueString())
 	if err != nil {
-		if r.client.IsResourceGone(err) {
+		if strings.Contains(strings.ToLower(err.Error()), "404") {
 			resp.State.RemoveResource(ctx)
 			return
 		}
@@ -273,7 +273,7 @@ func (r *NetworkResource) Delete(ctx context.Context, req resource.DeleteRequest
 	}
 
 	if err := r.client.DeleteNetwork(ctx, state.EnvironmentID.ValueString(), state.ID.ValueString()); err != nil {
-		if r.client.IsResourceGone(err) {
+		if strings.Contains(strings.ToLower(err.Error()), "404") {
 			return
 		}
 		resp.Diagnostics.AddError("delete network failed", err.Error())

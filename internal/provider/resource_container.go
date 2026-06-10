@@ -288,7 +288,7 @@ func (r *ContainerResource) Read(ctx context.Context, req resource.ReadRequest, 
 	id := state.ID.ValueString()
 	out, err := r.client.GetContainer(ctx, envID, id)
 	if err != nil {
-		if r.client.IsResourceGone(err) {
+		if strings.Contains(strings.ToLower(err.Error()), "404") {
 			resp.State.RemoveResource(ctx)
 			return
 		}
@@ -329,7 +329,7 @@ func (r *ContainerResource) Delete(ctx context.Context, req resource.DeleteReque
 	force := state.ForceDelete.ValueBool()
 	volumes := state.RemoveVolumes.ValueBool()
 	if err := r.client.DeleteContainer(ctx, envID, id, force, volumes); err != nil {
-		if r.client.IsResourceGone(err) {
+		if strings.Contains(strings.ToLower(err.Error()), "404") {
 			return
 		}
 		resp.Diagnostics.AddError("delete container failed", err.Error())

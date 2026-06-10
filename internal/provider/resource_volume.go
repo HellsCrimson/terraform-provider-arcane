@@ -186,7 +186,7 @@ func (r *VolumeResource) Read(ctx context.Context, req resource.ReadRequest, res
 
 	volume, err := r.client.GetVolume(ctx, state.EnvironmentID.ValueString(), state.Name.ValueString())
 	if err != nil {
-		if r.client.IsResourceGone(err) {
+		if strings.Contains(strings.ToLower(err.Error()), "404") {
 			resp.State.RemoveResource(ctx)
 			return
 		}
@@ -227,7 +227,7 @@ func (r *VolumeResource) Delete(ctx context.Context, req resource.DeleteRequest,
 	}
 
 	if err := r.client.DeleteVolume(ctx, state.EnvironmentID.ValueString(), state.Name.ValueString()); err != nil {
-		if r.client.IsResourceGone(err) {
+		if strings.Contains(strings.ToLower(err.Error()), "404") {
 			return
 		}
 		resp.Diagnostics.AddError("delete volume failed", err.Error())

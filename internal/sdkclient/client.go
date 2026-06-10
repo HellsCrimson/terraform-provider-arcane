@@ -21,31 +21,6 @@ type Client struct {
 	BaseURL *url.URL
 	APIKey  string
 	http    *http.Client
-
-	// ForgetMissingEnvironments, when true, makes IsResourceGone also treat the
-	// manager's "environment not found" proxy error (a 500) as a gone resource,
-	// so per-environment resources whose environment no longer exists are dropped
-	// from state instead of hard-erroring. Defaults to false.
-	ForgetMissingEnvironments bool
-}
-
-// IsResourceGone reports whether an API error means the target resource should be
-// treated as gone (removed from state). A direct 404 always qualifies. When
-// ForgetMissingEnvironments is enabled, the manager's "environment not found"
-// proxy error also qualifies — this is scoped to that exact phrase so transient
-// proxy/connectivity 500s do not wrongly drop resources from state.
-func (c *Client) IsResourceGone(err error) bool {
-	if err == nil {
-		return false
-	}
-	msg := strings.ToLower(err.Error())
-	if strings.Contains(msg, "404") {
-		return true
-	}
-	if c.ForgetMissingEnvironments {
-		return strings.Contains(msg, "environment not found")
-	}
-	return false
 }
 
 func NewClient(endpoint, apiKey string) *Client {
