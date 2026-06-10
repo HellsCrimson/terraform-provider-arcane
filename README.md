@@ -108,6 +108,23 @@ Resources
   - Computed: id, version_index, created_at, updated_at.
   - Note: Swarm secrets are immutable; changing `name`, `data`, or `labels` forces replacement.
 
+- arcane_role
+  - Manage a custom RBAC role. Built-in roles (Admin/Editor/Deployer/Viewer) are read-only.
+  - Attributes: name (required), permissions (required, at least one), description.
+  - Computed: id, built_in, assigned_user_count, created_at, updated_at.
+  - Tip: use the `arcane_role_permissions` data source to discover valid permission strings.
+
+- arcane_oidc_role_mapping
+  - Map an OIDC group/claim value to a role; matching rows become role assignments on login.
+  - Attributes: claim_value (required), role_id (required), environment_id (optional scope).
+  - Computed: id, source, created_at, updated_at.
+  - Note: Manages only manual mappings; mappings from the `OIDC_ROLE_MAPPINGS` env var are read-only.
+
+- arcane_federated_credential
+  - Manage a workload identity federation trust rule (exchange external OIDC tokens for an Arcane service token bound to a role).
+  - Attributes: name, enabled, issuer_url, audiences, subject_match, role_id (all required), description, environment_id, expires_at, match_type, subject_claim, token_ttl_seconds.
+  - Computed: id, role_name, environment_name, identity_user_id, service_username, last_used_at, created_at, updated_at.
+
 - arcane_project_path
   - Manage a compose project from local files.
   - Attributes: environment_id, name, compose_path (required), env_path (optional).
@@ -210,12 +227,18 @@ Imports
 - arcane_job_schedules: `environment_id`
 - arcane_vulnerability_ignore: `environment_id/ignore_id`
 - arcane_volume_backup: `environment_id/volume_name/backup_id`
+- arcane_role: `id`
+- arcane_oidc_role_mapping: `id`
+- arcane_federated_credential: `id`
 
 Examples
 
-- Full example: `examples/basic/main.tf`
+- Per-resource examples live under `examples/` (one directory per resource/data source).
 - Swarm stack example: `examples/swarm_stack/main.tf`
 - Swarm secret example: `examples/swarm_secret/main.tf`
+- Role / RBAC example: `examples/role/main.tf`
+- OIDC role mapping example: `examples/oidc_role_mapping/main.tf`
+- Federated credential example: `examples/federated_credential/main.tf`
 
 Building from source
 
@@ -238,6 +261,9 @@ API Coverage & Notes
   - Projects: `POST /environments/{id}/projects`, `GET/PUT /environments/{id}/projects/{projectId}`, `DELETE /environments/{id}/projects/{projectId}/destroy`, `POST /environments/{id}/projects/{projectId}/up|down`
   - Swarm stacks: `POST /environments/{id}/swarm/stacks`, `GET/DELETE /environments/{id}/swarm/stacks/{name}`, `GET/PUT /environments/{id}/swarm/stacks/{name}/source`
   - Swarm secrets: `POST /environments/{id}/swarm/secrets`, `GET/PUT/DELETE /environments/{id}/swarm/secrets/{secretId}`
+  - Roles: `POST /roles`, `GET/PUT/DELETE /roles/{id}`, `GET /roles` (paginated), `GET /roles/available-permissions`
+  - OIDC role mappings: `POST /oidc/role-mappings`, `GET /oidc/role-mappings`, `PUT/DELETE /oidc/role-mappings/{id}`
+  - Federated credentials: `POST /federated-credentials`, `GET/PUT/DELETE /federated-credentials/{id}`
   - Notifications: `POST /environments/{id}/notifications/settings`, `GET/DELETE /environments/{id}/notifications/settings/{provider}`
   - Containers: `POST /environments/{id}/containers`, `GET/DELETE /environments/{id}/containers/{containerId}` (supports `force` and `volumes` on delete)
 
