@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"crypto/tls"
+	"encoding/base64"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -812,6 +813,193 @@ func (c *Client) ListProjects(ctx context.Context, envID string) ([]ProjectDetai
 		}
 	}
 	return all, nil
+}
+
+// -------- Swarm Stacks --------
+type SwarmStackDeployRequest struct {
+	Name             string  `json:"name"`
+	ComposeContent   string  `json:"composeContent"`
+	EnvContent       *string `json:"envContent,omitempty"`
+	Prune            *bool   `json:"prune,omitempty"`
+	ResolveImage     *string `json:"resolveImage,omitempty"`
+	WithRegistryAuth *bool   `json:"withRegistryAuth,omitempty"`
+	WorkingDir       *string `json:"workingDir,omitempty"`
+}
+
+type SwarmStackDeployResponse struct {
+	Name string `json:"name"`
+}
+
+type SwarmStackInspect struct {
+	Name      string `json:"name"`
+	Namespace string `json:"namespace"`
+	Services  int64  `json:"services"`
+	CreatedAt string `json:"createdAt"`
+	UpdatedAt string `json:"updatedAt"`
+}
+
+type SwarmSyncFile struct {
+	RelativePath string `json:"relativePath"`
+	Content      string `json:"content"`
+}
+
+type SwarmStackSource struct {
+	Name           string          `json:"name"`
+	ComposeContent string          `json:"composeContent"`
+	EnvContent     string          `json:"envContent,omitempty"`
+	Files          []SwarmSyncFile `json:"files,omitempty"`
+}
+
+type SwarmStackSourceUpdateRequest struct {
+	ComposeContent string  `json:"composeContent"`
+	EnvContent     *string `json:"envContent,omitempty"`
+}
+
+type DockerSwarmVersion struct {
+	Index int64 `json:"Index"`
+}
+
+type DockerSwarmSecretSpec struct {
+	Name   string            `json:"Name,omitempty"`
+	Data   string            `json:"Data,omitempty"`
+	Labels map[string]string `json:"Labels,omitempty"`
+}
+
+type SwarmSecretSummary struct {
+	ID        string               `json:"id"`
+	Spec      DockerSwarmSecretSpec `json:"spec"`
+	Version   DockerSwarmVersion   `json:"version"`
+	CreatedAt string               `json:"createdAt"`
+	UpdatedAt string               `json:"updatedAt"`
+}
+
+type SwarmSecretCreateRequest struct {
+	Spec DockerSwarmSecretSpec `json:"spec"`
+}
+
+type SwarmSecretUpdateRequest struct {
+	Spec    DockerSwarmSecretSpec `json:"spec"`
+	Version *int64               `json:"version,omitempty"`
+}
+
+type swarmStackDeployEnvelope struct {
+	Success bool                     `json:"success"`
+	Data    SwarmStackDeployResponse `json:"data"`
+}
+
+type swarmStackInspectEnvelope struct {
+	Success bool              `json:"success"`
+	Data    SwarmStackInspect `json:"data"`
+}
+
+type swarmStackSourceEnvelope struct {
+	Success bool             `json:"success"`
+	Data    SwarmStackSource `json:"data"`
+}
+
+type swarmSecretEnvelope struct {
+	Success bool               `json:"success"`
+	Data    SwarmSecretSummary `json:"data"`
+}
+
+func (c *Client) DeploySwarmStack(ctx context.Context, envID string, body SwarmStackDeployRequest) (*SwarmStackDeployResponse, error) {
+	req, err := c.newRequest(ctx, http.MethodPost, path.Join("environments", envID, "swarm", "stacks"), body)
+	if err != nil {
+		return nil, err
+	}
+	var env swarmStackDeployEnvelope
+	if err := c.do(req, &env); err != nil {
+		return nil, err
+	}
+	return &env.Data, nil
+}
+
+func (c *Client) GetSwarmStack(ctx context.Context, envID, stackName string) (*SwarmStackInspect, error) {
+	req, err := c.newRequest(ctx, http.MethodGet, path.Join("environments", envID, "swarm", "stacks", stackName), nil)
+	if err != nil {
+		return nil, err
+	}
+	var env swarmStackInspectEnvelope
+	if err := c.do(req, &env); err != nil {
+		return nil, err
+	}
+	return &env.Data, nil
+}
+
+func (c *Client) GetSwarmStackSource(ctx context.Context, envID, stackName string) (*SwarmStackSource, error) {
+	req, err := c.newRequest(ctx, http.MethodGet, path.Join("environments", envID, "swarm", "stacks", stackName, "source"), nil)
+	if err != nil {
+		return nil, err
+	}
+	var env swarmStackSourceEnvelope
+	if err := c.do(req, &env); err != nil {
+		return nil, err
+	}
+	return &env.Data, nil
+}
+
+func (c *Client) UpdateSwarmStackSource(ctx context.Context, envID, stackName string, body SwarmStackSourceUpdateRequest) (*SwarmStackSource, error) {
+	req, err := c.newRequest(ctx, http.MethodPut, path.Join("environments", envID, "swarm", "stacks", stackName, "source"), body)
+	if err != nil {
+		return nil, err
+	}
+	var env swarmStackSourceEnvelope
+	if err := c.do(req, &env); err != nil {
+		return nil, err
+	}
+	return &env.Data, nil
+}
+
+func (c *Client) DeleteSwarmStack(ctx context.Context, envID, stackName string) error {
+	req, err := c.newRequest(ctx, http.MethodDelete, path.Join("environments", envID, "swarm", "stacks", stackName), nil)
+	if err != nil {
+		return err
+	}
+	return c.do(req, nil)
+}
+
+func EncodeSwarmSecretData(raw string) string {
+	return base64.StdEncoding.EncodeToString([]byte(raw))
+}
+
+func (c *Client) CreateSwarmSecret(ctx context.Context, envID string, body SwarmSecretCreateRequest) (*SwarmSecretSummary, error) {
+	req, err := c.newRequest(ctx, http.MethodPost, path.Join("environments", envID, "swarm", "secrets"), body)
+	if err != nil {
+		return nil, err
+	}
+	var env swarmSecretEnvelope
+	if err := c.do(req, &env); err != nil {
+		return nil, err
+	}
+	return &env.Data, nil
+}
+
+func (c *Client) GetSwarmSecret(ctx context.Context, envID, secretID string) (*SwarmSecretSummary, error) {
+	req, err := c.newRequest(ctx, http.MethodGet, path.Join("environments", envID, "swarm", "secrets", secretID), nil)
+	if err != nil {
+		return nil, err
+	}
+	var env swarmSecretEnvelope
+	if err := c.do(req, &env); err != nil {
+		return nil, err
+	}
+	return &env.Data, nil
+}
+
+func (c *Client) UpdateSwarmSecret(ctx context.Context, envID, secretID string, body SwarmSecretUpdateRequest) error {
+	req, err := c.newRequest(ctx, http.MethodPut, path.Join("environments", envID, "swarm", "secrets", secretID), body)
+	if err != nil {
+		return err
+	}
+	return c.do(req, nil)
+}
+
+func (c *Client) DeleteSwarmSecret(ctx context.Context, envID, secretID string) error {
+	req, err := c.newRequest(ctx, http.MethodDelete, path.Join("environments", envID, "swarm", "secrets", secretID), nil)
+	if err != nil {
+		return err
+	}
+	return c.do(req, nil)
 }
 
 // -------- Notifications --------
