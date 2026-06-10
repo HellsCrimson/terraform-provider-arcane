@@ -295,6 +295,107 @@ type ProjectDestroyOptions struct {
 	RemoveVolumes bool `json:"removeVolumes"`
 }
 
+func (c *Client) CreateProject(ctx context.Context, envID string, body ProjectCreateRequest) (*ProjectCreateResponse, error) {
+	req, err := c.newRequest(ctx, http.MethodPost, path.Join("environments", envID, "projects"), body)
+	if err != nil {
+		return nil, err
+	}
+	var env projectCreateEnvelope
+	if err := c.do(req, &env); err != nil {
+		return nil, err
+	}
+	return &env.Data, nil
+}
+
+func (c *Client) GetProject(ctx context.Context, envID, projectID string) (*ProjectDetails, error) {
+	req, err := c.newRequest(ctx, http.MethodGet, path.Join("environments", envID, "projects", projectID), nil)
+	if err != nil {
+		return nil, err
+	}
+	var env projectDetailsEnvelope
+	if err := c.do(req, &env); err != nil {
+		return nil, err
+	}
+	return &env.Data, nil
+}
+
+func (c *Client) UpdateProject(ctx context.Context, envID, projectID string, body ProjectUpdateRequest) (*ProjectDetails, error) {
+	req, err := c.newRequest(ctx, http.MethodPut, path.Join("environments", envID, "projects", projectID), body)
+	if err != nil {
+		return nil, err
+	}
+	var env projectDetailsEnvelope
+	if err := c.do(req, &env); err != nil {
+		return nil, err
+	}
+	return &env.Data, nil
+}
+
+// DeployProject POST /environments/{id}/projects/{projectId}/up
+func (c *Client) DeployProject(ctx context.Context, envID, projectID string) error {
+	req, err := c.newRequest(ctx, http.MethodPost, path.Join("environments", envID, "projects", projectID, "up"), nil)
+	if err != nil {
+		return err
+	}
+	return c.do(req, nil)
+}
+
+func (c *Client) DestroyProject(ctx context.Context, envID, projectID string, opts ProjectDestroyOptions) error {
+	req, err := c.newRequest(ctx, http.MethodDelete, path.Join("environments", envID, "projects", projectID, "destroy"), opts)
+	if err != nil {
+		return err
+	}
+	return c.do(req, nil)
+}
+
+type projectListPagination struct {
+	TotalPages   int `json:"totalPages"`
+	TotalItems   int `json:"totalItems"`
+	CurrentPage  int `json:"currentPage"`
+	ItemsPerPage int `json:"itemsPerPage"`
+}
+
+type projectListEnvelope struct {
+	Success    bool                  `json:"success"`
+	Data       []ProjectDetails      `json:"data"`
+	Pagination projectListPagination `json:"pagination"`
+}
+
+// ListProjects returns every project in the environment. The result includes
+// archived projects (archived=all) and folders Arcane has discovered on disk
+// but that are not yet fully registered (these surface in this listing once
+// Arcane has scanned the projects directory). It paginates through all pages.
+func (c *Client) ListProjects(ctx context.Context, envID string) ([]ProjectDetails, error) {
+	const pageSize = 100
+	var all []ProjectDetails
+	start := 0
+	for {
+		u := *c.BaseURL
+		u.Path = path.Join(c.BaseURL.Path, "environments", envID, "projects")
+		q := u.Query()
+		q.Set("limit", strconv.Itoa(pageSize))
+		q.Set("start", strconv.Itoa(start))
+		q.Set("archived", "all")
+		u.RawQuery = q.Encode()
+		req, err := http.NewRequestWithContext(ctx, http.MethodGet, u.String(), nil)
+		if err != nil {
+			return nil, err
+		}
+		req.Header.Set("Accept", "application/json")
+		req.Header.Set("X-API-Key", c.APIKey)
+		var out projectListEnvelope
+		if err := c.do(req, &out); err != nil {
+			return nil, err
+		}
+		all = append(all, out.Data...)
+		start += pageSize
+		if len(out.Data) == 0 || start >= out.Pagination.TotalItems {
+			break
+		}
+	}
+	return all, nil
+}
+
 // -------- Swarm Stacks --------
 type SwarmStackDeployRequest struct {
 	Name             string  `json:"name"`
@@ -480,107 +581,6 @@ func (c *Client) DeleteSwarmSecret(ctx context.Context, envID, secretID string) 
 		return err
 	}
 	return c.do(req, nil)
-}
-
-func (c *Client) CreateProject(ctx context.Context, envID string, body ProjectCreateRequest) (*ProjectCreateResponse, error) {
-	req, err := c.newRequest(ctx, http.MethodPost, path.Join("environments", envID, "projects"), body)
-	if err != nil {
-		return nil, err
-	}
-	var env projectCreateEnvelope
-	if err := c.do(req, &env); err != nil {
-		return nil, err
-	}
-	return &env.Data, nil
-}
-
-func (c *Client) GetProject(ctx context.Context, envID, projectID string) (*ProjectDetails, error) {
-	req, err := c.newRequest(ctx, http.MethodGet, path.Join("environments", envID, "projects", projectID), nil)
-	if err != nil {
-		return nil, err
-	}
-	var env projectDetailsEnvelope
-	if err := c.do(req, &env); err != nil {
-		return nil, err
-	}
-	return &env.Data, nil
-}
-
-func (c *Client) UpdateProject(ctx context.Context, envID, projectID string, body ProjectUpdateRequest) (*ProjectDetails, error) {
-	req, err := c.newRequest(ctx, http.MethodPut, path.Join("environments", envID, "projects", projectID), body)
-	if err != nil {
-		return nil, err
-	}
-	var env projectDetailsEnvelope
-	if err := c.do(req, &env); err != nil {
-		return nil, err
-	}
-	return &env.Data, nil
-}
-
-// DeployProject POST /environments/{id}/projects/{projectId}/up
-func (c *Client) DeployProject(ctx context.Context, envID, projectID string) error {
-	req, err := c.newRequest(ctx, http.MethodPost, path.Join("environments", envID, "projects", projectID, "up"), nil)
-	if err != nil {
-		return err
-	}
-	return c.do(req, nil)
-}
-
-func (c *Client) DestroyProject(ctx context.Context, envID, projectID string, opts ProjectDestroyOptions) error {
-	req, err := c.newRequest(ctx, http.MethodDelete, path.Join("environments", envID, "projects", projectID, "destroy"), opts)
-	if err != nil {
-		return err
-	}
-	return c.do(req, nil)
-}
-
-type projectListPagination struct {
-	TotalPages   int `json:"totalPages"`
-	TotalItems   int `json:"totalItems"`
-	CurrentPage  int `json:"currentPage"`
-	ItemsPerPage int `json:"itemsPerPage"`
-}
-
-type projectListEnvelope struct {
-	Success    bool                  `json:"success"`
-	Data       []ProjectDetails      `json:"data"`
-	Pagination projectListPagination `json:"pagination"`
-}
-
-// ListProjects returns every project in the environment. The result includes
-// archived projects (archived=all) and folders Arcane has discovered on disk
-// but that are not yet fully registered (these surface in this listing once
-// Arcane has scanned the projects directory). It paginates through all pages.
-func (c *Client) ListProjects(ctx context.Context, envID string) ([]ProjectDetails, error) {
-	const pageSize = 100
-	var all []ProjectDetails
-	start := 0
-	for {
-		u := *c.BaseURL
-		u.Path = path.Join(c.BaseURL.Path, "environments", envID, "projects")
-		q := u.Query()
-		q.Set("limit", strconv.Itoa(pageSize))
-		q.Set("start", strconv.Itoa(start))
-		q.Set("archived", "all")
-		u.RawQuery = q.Encode()
-		req, err := http.NewRequestWithContext(ctx, http.MethodGet, u.String(), nil)
-		if err != nil {
-			return nil, err
-		}
-		req.Header.Set("Accept", "application/json")
-		req.Header.Set("X-API-Key", c.APIKey)
-		var out projectListEnvelope
-		if err := c.do(req, &out); err != nil {
-			return nil, err
-		}
-		all = append(all, out.Data...)
-		start += pageSize
-		if len(out.Data) == 0 || start >= out.Pagination.TotalItems {
-			break
-		}
-	}
-	return all, nil
 }
 
 // -------- Notifications --------
