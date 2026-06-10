@@ -91,14 +91,14 @@ func (r *SwarmSecretResource) Configure(_ context.Context, req resource.Configur
 }
 
 type swarmSecretModel struct {
-	ID           types.String `tfsdk:"id"`
+	ID            types.String `tfsdk:"id"`
 	EnvironmentID types.String `tfsdk:"environment_id"`
-	Name         types.String `tfsdk:"name"`
-	Data         types.String `tfsdk:"data"`
-	Labels       types.Map    `tfsdk:"labels"`
-	VersionIndex types.Int64  `tfsdk:"version_index"`
-	CreatedAt    types.String `tfsdk:"created_at"`
-	UpdatedAt    types.String `tfsdk:"updated_at"`
+	Name          types.String `tfsdk:"name"`
+	Data          types.String `tfsdk:"data"`
+	Labels        types.Map    `tfsdk:"labels"`
+	VersionIndex  types.Int64  `tfsdk:"version_index"`
+	CreatedAt     types.String `tfsdk:"created_at"`
+	UpdatedAt     types.String `tfsdk:"updated_at"`
 }
 
 func (r *SwarmSecretResource) Create(ctx context.Context, req resource.CreateRequest, resp *resource.CreateResponse) {
@@ -154,7 +154,9 @@ func (r *SwarmSecretResource) Read(ctx context.Context, req resource.ReadRequest
 	}
 
 	state.Name = types.StringValue(secret.Spec.Name)
-	state.Labels = stringMapToMap(ctx, secret.Spec.Labels)
+	if !state.Labels.IsNull() && !state.Labels.IsUnknown() {
+		state.Labels = stringMapToMap(ctx, secret.Spec.Labels)
+	}
 	state.VersionIndex = types.Int64Value(secret.Version.Index)
 	state.CreatedAt = types.StringValue(secret.CreatedAt)
 	state.UpdatedAt = types.StringValue(secret.UpdatedAt)

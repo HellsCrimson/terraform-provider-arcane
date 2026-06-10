@@ -222,15 +222,11 @@ func (r *SwarmStackResource) Read(ctx context.Context, req resource.ReadRequest,
 	state.ID = types.StringValue(inspect.Name)
 	state.Name = types.StringValue(inspect.Name)
 	state.ComposeContent = types.StringValue(source.ComposeContent)
-	if source.EnvContent != "" {
+	if !state.EnvContent.IsNull() && !state.EnvContent.IsUnknown() && source.EnvContent != "" {
 		state.EnvContent = types.StringValue(source.EnvContent)
-	} else {
-		state.EnvContent = types.StringNull()
 	}
 	state.Namespace = types.StringValue(inspect.Namespace)
 	state.Services = types.Int64Value(inspect.Services)
-	state.CreatedAt = types.StringValue(inspect.CreatedAt)
-	state.UpdatedAt = types.StringValue(inspect.UpdatedAt)
 
 	resp.Diagnostics.Append(resp.State.Set(ctx, &state)...)
 }
@@ -252,8 +248,7 @@ func (r *SwarmStackResource) Update(ctx context.Context, req resource.UpdateRequ
 		body.EnvContent = &v
 	}
 
-	source, err := r.client.UpdateSwarmStackSource(ctx, envID, stackName, body)
-	if err != nil {
+	if _, err := r.client.UpdateSwarmStackSource(ctx, envID, stackName, body); err != nil {
 		resp.Diagnostics.AddError("update swarm stack source failed", err.Error())
 		return
 	}
@@ -265,15 +260,14 @@ func (r *SwarmStackResource) Update(ctx context.Context, req resource.UpdateRequ
 	}
 
 	state.Name = types.StringValue(inspect.Name)
-	state.ComposeContent = types.StringValue(source.ComposeContent)
-	if source.EnvContent != "" {
-		state.EnvContent = types.StringValue(source.EnvContent)
-	} else {
-		state.EnvContent = types.StringNull()
-	}
+	// Keep the configured compose/env values instead of the server-normalized
+	// response to avoid "inconsistent result after apply" when the server
+	// reformats content (whitespace, trailing newline, ordering).
+	state.ComposeContent = plan.ComposeContent
+	state.EnvContent = plan.EnvContent
 	state.Namespace = types.StringValue(inspect.Namespace)
 	state.Services = types.Int64Value(inspect.Services)
-	state.UpdatedAt = types.StringValue(inspect.UpdatedAt)
+	// Leave updated_at unchanged to avoid plan inconsistency on server-side timestamp changes
 	state.Prune = plan.Prune
 	state.ResolveImage = plan.ResolveImage
 	state.WithRegistryAuth = plan.WithRegistryAuth
