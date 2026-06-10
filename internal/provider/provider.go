@@ -158,7 +158,6 @@ func (p *ArcaneProvider) DataSources(_ context.Context) []func() datasource.Data
 		NewJobsDataSource,
 		NewProjectIncludesDataSource,
 		NewSwarmStackDataSource,
-		NewSwarmSecretDataSource,
 
 		// Special cases
 		NewSettingsDataSource,
@@ -194,6 +193,5 @@ func (p *ArcaneProvider) Resources(_ context.Context) []func() resource.Resource
 		NewJobSchedulesResource,
 		NewVulnerabilityIgnoreResource,
 		NewSwarmStackResource,
-		NewSwarmSecretResource,
 	}
 }
