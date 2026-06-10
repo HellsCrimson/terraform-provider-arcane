@@ -169,8 +169,6 @@ func (p *ArcaneProvider) DataSources(_ context.Context) []func() datasource.Data
 		NewDefaultTemplatesDataSource,
 		NewTemplateVariablesDataSource,
 		NewPublicSettingsDataSource,
-		NewRoleDataSource,
-		NewRolePermissionsDataSource,
 	}
 }
 
@@ -195,9 +193,6 @@ func (p *ArcaneProvider) Resources(_ context.Context) []func() resource.Resource
 		NewNetworkResource,
 		NewJobSchedulesResource,
 		NewVulnerabilityIgnoreResource,
-		NewRoleResource,
-		NewOidcRoleMappingResource,
-		NewFederatedCredentialResource,
 		NewSwarmStackResource,
 		NewSwarmSecretResource,
 	}

@@ -41,10 +41,9 @@ func (r *SettingsResource) Schema(_ context.Context, _ resource.SchemaRequest, r
 			},
 			// SettingsUpdate attributes (all strings per OpenAPI schema)
 			"accent_color":                         resourceschema.StringAttribute{Optional: true, Description: "accentColor"},
-			"activity_history_max_entries":         resourceschema.StringAttribute{Optional: true, Description: "activityHistoryMaxEntries"},
-			"activity_history_retention_days":      resourceschema.StringAttribute{Optional: true, Description: "activityHistoryRetentionDays"},
 			"application_theme":                    resourceschema.StringAttribute{Optional: true, Description: "applicationTheme"},
 			"auth_local_enabled":                   resourceschema.StringAttribute{Optional: true, Description: "authLocalEnabled"},
+			"auth_oidc_config":                     resourceschema.StringAttribute{Optional: true, Description: "authOidcConfig"},
 			"auth_password_policy":                 resourceschema.StringAttribute{Optional: true, Description: "authPasswordPolicy"},
 			"auth_session_timeout":                 resourceschema.StringAttribute{Optional: true, Description: "authSessionTimeout"},
 			"auto_heal_enabled":                    resourceschema.StringAttribute{Optional: true, Description: "autoHealEnabled"},
@@ -66,6 +65,7 @@ func (r *SettingsResource) Schema(_ context.Context, _ resource.SchemaRequest, r
 			"depot_token":                          resourceschema.StringAttribute{Optional: true, Description: "depotToken"},
 			"disk_usage_path":                      resourceschema.StringAttribute{Optional: true, Description: "diskUsagePath"},
 			"docker_host":                          resourceschema.StringAttribute{Optional: true, Description: "dockerHost"},
+			"docker_prune_mode":                    resourceschema.StringAttribute{Optional: true, Description: "dockerPruneMode"},
 			"docker_api_timeout":                   resourceschema.StringAttribute{Optional: true, Description: "dockerApiTimeout"},
 			"docker_client_refresh_interval":       resourceschema.StringAttribute{Optional: true, Description: "dockerClientRefreshInterval"},
 			"docker_image_pull_timeout":            resourceschema.StringAttribute{Optional: true, Description: "dockerImagePullTimeout"},
@@ -77,16 +77,16 @@ func (r *SettingsResource) Schema(_ context.Context, _ resource.SchemaRequest, r
 			"git_sync_max_files":                   resourceschema.StringAttribute{Optional: true, Description: "gitSyncMaxFiles"},
 			"git_sync_max_total_size_mb":           resourceschema.StringAttribute{Optional: true, Description: "gitSyncMaxTotalSizeMb"},
 			"http_client_timeout":                  resourceschema.StringAttribute{Optional: true, Description: "httpClientTimeout"},
-			"icon_catalog":                         resourceschema.StringAttribute{Optional: true, Description: "iconCatalog"},
 			"keyboard_shortcuts_enabled":           resourceschema.StringAttribute{Optional: true, Description: "keyboardShortcutsEnabled"},
 			"max_image_upload_size":                resourceschema.StringAttribute{Optional: true, Description: "maxImageUploadSize"},
 			"mobile_navigation_mode":               resourceschema.StringAttribute{Optional: true, Description: "mobileNavigationMode"},
 			"mobile_navigation_show_labels":        resourceschema.StringAttribute{Optional: true, Description: "mobileNavigationShowLabels"},
+			"oidc_admin_claim":                     resourceschema.StringAttribute{Optional: true, Description: "oidcAdminClaim"},
+			"oidc_admin_value":                     resourceschema.StringAttribute{Optional: true, Description: "oidcAdminValue"},
 			"oidc_auto_redirect_to_provider":       resourceschema.StringAttribute{Optional: true, Description: "oidcAutoRedirectToProvider"},
 			"oidc_client_id":                       resourceschema.StringAttribute{Optional: true, Description: "oidcClientId"},
 			"oidc_client_secret":                   resourceschema.StringAttribute{Optional: true, Description: "oidcClientSecret"},
 			"oidc_enabled":                         resourceschema.StringAttribute{Optional: true, Description: "oidcEnabled"},
-			"oidc_groups_claim":                    resourceschema.StringAttribute{Optional: true, Description: "oidcGroupsClaim"},
 			"oidc_issuer_url":                      resourceschema.StringAttribute{Optional: true, Description: "oidcIssuerUrl"},
 			"oidc_merge_accounts":                  resourceschema.StringAttribute{Optional: true, Description: "oidcMergeAccounts"},
 			"oidc_provider_logo_url":               resourceschema.StringAttribute{Optional: true, Description: "oidcProviderLogoUrl"},
@@ -108,8 +108,13 @@ func (r *SettingsResource) Schema(_ context.Context, _ resource.SchemaRequest, r
 			"prune_volume_mode":                    resourceschema.StringAttribute{Optional: true, Description: "pruneVolumeMode"},
 			"proxy_request_timeout":                resourceschema.StringAttribute{Optional: true, Description: "proxyRequestTimeout"},
 			"registry_timeout":                     resourceschema.StringAttribute{Optional: true, Description: "registryTimeout"},
+			"scheduled_prune_build_cache":          resourceschema.StringAttribute{Optional: true, Description: "scheduledPruneBuildCache"},
+			"scheduled_prune_containers":           resourceschema.StringAttribute{Optional: true, Description: "scheduledPruneContainers"},
 			"scheduled_prune_enabled":              resourceschema.StringAttribute{Optional: true, Description: "scheduledPruneEnabled"},
+			"scheduled_prune_images":               resourceschema.StringAttribute{Optional: true, Description: "scheduledPruneImages"},
 			"scheduled_prune_interval":             resourceschema.StringAttribute{Optional: true, Description: "scheduledPruneInterval"},
+			"scheduled_prune_networks":             resourceschema.StringAttribute{Optional: true, Description: "scheduledPruneNetworks"},
+			"scheduled_prune_volumes":              resourceschema.StringAttribute{Optional: true, Description: "scheduledPruneVolumes"},
 			"sidebar_hover_expansion":              resourceschema.StringAttribute{Optional: true, Description: "sidebarHoverExpansion"},
 			"swarm_stack_sources_directory":        resourceschema.StringAttribute{Optional: true, Description: "swarmStackSourcesDirectory"},
 			"templates_directory":                  resourceschema.StringAttribute{Optional: true, Description: "templatesDirectory"},
@@ -123,7 +128,6 @@ func (r *SettingsResource) Schema(_ context.Context, _ resource.SchemaRequest, r
 			"trivy_resource_limits_enabled":        resourceschema.StringAttribute{Optional: true, Description: "trivyResourceLimitsEnabled"},
 			"trivy_scan_timeout":                   resourceschema.StringAttribute{Optional: true, Description: "trivyScanTimeout"},
 			"trivy_security_opts":                  resourceschema.StringAttribute{Optional: true, Description: "trivySecurityOpts"},
-			"volume_browser_helper_idle_timeout":   resourceschema.StringAttribute{Optional: true, Description: "volumeBrowserHelperIdleTimeout"},
 			"vulnerability_scan_enabled":           resourceschema.StringAttribute{Optional: true, Description: "vulnerabilityScanEnabled"},
 			"vulnerability_scan_interval":          resourceschema.StringAttribute{Optional: true, Description: "vulnerabilityScanInterval"},
 
@@ -149,10 +153,9 @@ type settingsModel struct {
 	ID                              types.String `tfsdk:"id"`
 	EnvironmentID                   types.String `tfsdk:"environment_id"`
 	AccentColor                     types.String `tfsdk:"accent_color"`
-	ActivityHistoryMaxEntries       types.String `tfsdk:"activity_history_max_entries"`
-	ActivityHistoryRetentionDays    types.String `tfsdk:"activity_history_retention_days"`
 	ApplicationTheme                types.String `tfsdk:"application_theme"`
 	AuthLocalEnabled                types.String `tfsdk:"auth_local_enabled"`
+	AuthOidcConfig                  types.String `tfsdk:"auth_oidc_config"`
 	AuthPasswordPolicy              types.String `tfsdk:"auth_password_policy"`
 	AuthSessionTimeout              types.String `tfsdk:"auth_session_timeout"`
 	AutoHealEnabled                 types.String `tfsdk:"auto_heal_enabled"`
@@ -177,6 +180,7 @@ type settingsModel struct {
 	DockerClientRefreshInterval     types.String `tfsdk:"docker_client_refresh_interval"`
 	DockerHost                      types.String `tfsdk:"docker_host"`
 	DockerImagePullTimeout          types.String `tfsdk:"docker_image_pull_timeout"`
+	DockerPruneMode                 types.String `tfsdk:"docker_prune_mode"`
 	EnableGravatar                  types.String `tfsdk:"enable_gravatar"`
 	EnvironmentHealthInterval       types.String `tfsdk:"environment_health_interval"`
 	FollowProjectSymlinks           types.String `tfsdk:"follow_project_symlinks"`
@@ -185,16 +189,16 @@ type settingsModel struct {
 	GitSyncMaxFiles                 types.String `tfsdk:"git_sync_max_files"`
 	GitSyncMaxTotalSizeMb           types.String `tfsdk:"git_sync_max_total_size_mb"`
 	HttpClientTimeout               types.String `tfsdk:"http_client_timeout"`
-	IconCatalog                     types.String `tfsdk:"icon_catalog"`
 	KeyboardShortcutsEnabled        types.String `tfsdk:"keyboard_shortcuts_enabled"`
 	MaxImageUploadSize              types.String `tfsdk:"max_image_upload_size"`
 	MobileNavigationMode            types.String `tfsdk:"mobile_navigation_mode"`
 	MobileNavigationShowLabels      types.String `tfsdk:"mobile_navigation_show_labels"`
+	OidcAdminClaim                  types.String `tfsdk:"oidc_admin_claim"`
+	OidcAdminValue                  types.String `tfsdk:"oidc_admin_value"`
 	OidcAutoRedirectToProvider      types.String `tfsdk:"oidc_auto_redirect_to_provider"`
 	OidcClientId                    types.String `tfsdk:"oidc_client_id"`
 	OidcClientSecret                types.String `tfsdk:"oidc_client_secret"`
 	OidcEnabled                     types.String `tfsdk:"oidc_enabled"`
-	OidcGroupsClaim                 types.String `tfsdk:"oidc_groups_claim"`
 	OidcIssuerUrl                   types.String `tfsdk:"oidc_issuer_url"`
 	OidcMergeAccounts               types.String `tfsdk:"oidc_merge_accounts"`
 	OidcProviderLogoUrl             types.String `tfsdk:"oidc_provider_logo_url"`
@@ -216,8 +220,13 @@ type settingsModel struct {
 	PruneVolumeMode                 types.String `tfsdk:"prune_volume_mode"`
 	ProxyRequestTimeout             types.String `tfsdk:"proxy_request_timeout"`
 	RegistryTimeout                 types.String `tfsdk:"registry_timeout"`
+	ScheduledPruneBuildCache        types.String `tfsdk:"scheduled_prune_build_cache"`
+	ScheduledPruneContainers        types.String `tfsdk:"scheduled_prune_containers"`
 	ScheduledPruneEnabled           types.String `tfsdk:"scheduled_prune_enabled"`
+	ScheduledPruneImages            types.String `tfsdk:"scheduled_prune_images"`
 	ScheduledPruneInterval          types.String `tfsdk:"scheduled_prune_interval"`
+	ScheduledPruneNetworks          types.String `tfsdk:"scheduled_prune_networks"`
+	ScheduledPruneVolumes           types.String `tfsdk:"scheduled_prune_volumes"`
 	SidebarHoverExpansion           types.String `tfsdk:"sidebar_hover_expansion"`
 	SwarmStackSourcesDirectory      types.String `tfsdk:"swarm_stack_sources_directory"`
 	TemplatesDirectory              types.String `tfsdk:"templates_directory"`
@@ -231,7 +240,6 @@ type settingsModel struct {
 	TrivyResourceLimitsEnabled      types.String `tfsdk:"trivy_resource_limits_enabled"`
 	TrivyScanTimeout                types.String `tfsdk:"trivy_scan_timeout"`
 	TrivySecurityOpts               types.String `tfsdk:"trivy_security_opts"`
-	VolumeBrowserHelperIdleTimeout  types.String `tfsdk:"volume_browser_helper_idle_timeout"`
 	VulnerabilityScanEnabled        types.String `tfsdk:"vulnerability_scan_enabled"`
 	VulnerabilityScanInterval       types.String `tfsdk:"vulnerability_scan_interval"`
 	Applied                         types.Map    `tfsdk:"applied"`
@@ -332,10 +340,9 @@ func addIfSet(m map[string]string, key string, v types.String) {
 func buildSettingsMapFromModel(s settingsModel) map[string]string {
 	out := map[string]string{}
 	addIfSet(out, "accentColor", s.AccentColor)
-	addIfSet(out, "activityHistoryMaxEntries", s.ActivityHistoryMaxEntries)
-	addIfSet(out, "activityHistoryRetentionDays", s.ActivityHistoryRetentionDays)
 	addIfSet(out, "applicationTheme", s.ApplicationTheme)
 	addIfSet(out, "authLocalEnabled", s.AuthLocalEnabled)
+	addIfSet(out, "authOidcConfig", s.AuthOidcConfig)
 	addIfSet(out, "authPasswordPolicy", s.AuthPasswordPolicy)
 	addIfSet(out, "authSessionTimeout", s.AuthSessionTimeout)
 	addIfSet(out, "autoHealEnabled", s.AutoHealEnabled)
@@ -360,6 +367,7 @@ func buildSettingsMapFromModel(s settingsModel) map[string]string {
 	addIfSet(out, "dockerClientRefreshInterval", s.DockerClientRefreshInterval)
 	addIfSet(out, "dockerHost", s.DockerHost)
 	addIfSet(out, "dockerImagePullTimeout", s.DockerImagePullTimeout)
+	addIfSet(out, "dockerPruneMode", s.DockerPruneMode)
 	addIfSet(out, "enableGravatar", s.EnableGravatar)
 	addIfSet(out, "environmentHealthInterval", s.EnvironmentHealthInterval)
 	addIfSet(out, "followProjectSymlinks", s.FollowProjectSymlinks)
@@ -368,16 +376,16 @@ func buildSettingsMapFromModel(s settingsModel) map[string]string {
 	addIfSet(out, "gitSyncMaxFiles", s.GitSyncMaxFiles)
 	addIfSet(out, "gitSyncMaxTotalSizeMb", s.GitSyncMaxTotalSizeMb)
 	addIfSet(out, "httpClientTimeout", s.HttpClientTimeout)
-	addIfSet(out, "iconCatalog", s.IconCatalog)
 	addIfSet(out, "keyboardShortcutsEnabled", s.KeyboardShortcutsEnabled)
 	addIfSet(out, "maxImageUploadSize", s.MaxImageUploadSize)
 	addIfSet(out, "mobileNavigationMode", s.MobileNavigationMode)
 	addIfSet(out, "mobileNavigationShowLabels", s.MobileNavigationShowLabels)
+	addIfSet(out, "oidcAdminClaim", s.OidcAdminClaim)
+	addIfSet(out, "oidcAdminValue", s.OidcAdminValue)
 	addIfSet(out, "oidcAutoRedirectToProvider", s.OidcAutoRedirectToProvider)
 	addIfSet(out, "oidcClientId", s.OidcClientId)
 	addIfSet(out, "oidcClientSecret", s.OidcClientSecret)
 	addIfSet(out, "oidcEnabled", s.OidcEnabled)
-	addIfSet(out, "oidcGroupsClaim", s.OidcGroupsClaim)
 	addIfSet(out, "oidcIssuerUrl", s.OidcIssuerUrl)
 	addIfSet(out, "oidcMergeAccounts", s.OidcMergeAccounts)
 	addIfSet(out, "oidcProviderLogoUrl", s.OidcProviderLogoUrl)
@@ -399,8 +407,13 @@ func buildSettingsMapFromModel(s settingsModel) map[string]string {
 	addIfSet(out, "pruneVolumeMode", s.PruneVolumeMode)
 	addIfSet(out, "proxyRequestTimeout", s.ProxyRequestTimeout)
 	addIfSet(out, "registryTimeout", s.RegistryTimeout)
+	addIfSet(out, "scheduledPruneBuildCache", s.ScheduledPruneBuildCache)
+	addIfSet(out, "scheduledPruneContainers", s.ScheduledPruneContainers)
 	addIfSet(out, "scheduledPruneEnabled", s.ScheduledPruneEnabled)
+	addIfSet(out, "scheduledPruneImages", s.ScheduledPruneImages)
 	addIfSet(out, "scheduledPruneInterval", s.ScheduledPruneInterval)
+	addIfSet(out, "scheduledPruneNetworks", s.ScheduledPruneNetworks)
+	addIfSet(out, "scheduledPruneVolumes", s.ScheduledPruneVolumes)
 	addIfSet(out, "sidebarHoverExpansion", s.SidebarHoverExpansion)
 	addIfSet(out, "swarmStackSourcesDirectory", s.SwarmStackSourcesDirectory)
 	addIfSet(out, "templatesDirectory", s.TemplatesDirectory)
@@ -414,7 +427,6 @@ func buildSettingsMapFromModel(s settingsModel) map[string]string {
 	addIfSet(out, "trivyResourceLimitsEnabled", s.TrivyResourceLimitsEnabled)
 	addIfSet(out, "trivyScanTimeout", s.TrivyScanTimeout)
 	addIfSet(out, "trivySecurityOpts", s.TrivySecurityOpts)
-	addIfSet(out, "volumeBrowserHelperIdleTimeout", s.VolumeBrowserHelperIdleTimeout)
 	addIfSet(out, "vulnerabilityScanEnabled", s.VulnerabilityScanEnabled)
 	addIfSet(out, "vulnerabilityScanInterval", s.VulnerabilityScanInterval)
 	return out

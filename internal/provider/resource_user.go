@@ -8,7 +8,6 @@ import (
 
 	"github.com/hashicorp/terraform-plugin-framework-validators/stringvalidator"
 	"github.com/hashicorp/terraform-plugin-framework/attr"
-	"github.com/hashicorp/terraform-plugin-framework/diag"
 	"github.com/hashicorp/terraform-plugin-framework/path"
 	"github.com/hashicorp/terraform-plugin-framework/resource"
 	resourceschema "github.com/hashicorp/terraform-plugin-framework/resource/schema"
@@ -69,24 +68,10 @@ func (r *UserResource) Schema(_ context.Context, _ resource.SchemaRequest, resp 
 				Optional:    true,
 				Description: "Locale preference (e.g., en-US).",
 			},
-			"role_assignments": resourceschema.SetNestedAttribute{
-				Optional: true,
-				Description: "Manual role assignments for the user. Each entry references a role by ID " +
-					"and may optionally be scoped to an environment (omit environment_id for a global " +
-					"assignment). This manages only manual assignments; assignments created via OIDC are " +
-					"left untouched.",
-				NestedObject: resourceschema.NestedAttributeObject{
-					Attributes: map[string]resourceschema.Attribute{
-						"role_id": resourceschema.StringAttribute{
-							Required:    true,
-							Description: "ID of the role to grant.",
-						},
-						"environment_id": resourceschema.StringAttribute{
-							Optional:    true,
-							Description: "Environment ID to scope the assignment to; omit for a global assignment.",
-						},
-					},
-				},
+			"roles": resourceschema.SetAttribute{
+				Optional:    true,
+				ElementType: types.StringType,
+				Description: "Roles assigned to the user.",
 			},
 			"created_at": resourceschema.StringAttribute{
 				Computed:    true,
@@ -113,26 +98,16 @@ func (r *UserResource) Configure(_ context.Context, req resource.ConfigureReques
 }
 
 type userModel struct {
-	ID              types.String `tfsdk:"id"`
-	Username        types.String `tfsdk:"username"`
-	Password        types.String `tfsdk:"password"`
-	DisplayName     types.String `tfsdk:"display_name"`
-	Email           types.String `tfsdk:"email"`
-	Locale          types.String `tfsdk:"locale"`
-	RoleAssignments types.Set    `tfsdk:"role_assignments"`
-	CreatedAt       types.String `tfsdk:"created_at"`
-	UpdatedAt       types.String `tfsdk:"updated_at"`
+	ID          types.String `tfsdk:"id"`
+	Username    types.String `tfsdk:"username"`
+	Password    types.String `tfsdk:"password"`
+	DisplayName types.String `tfsdk:"display_name"`
+	Email       types.String `tfsdk:"email"`
+	Locale      types.String `tfsdk:"locale"`
+	Roles       types.Set    `tfsdk:"roles"`
+	CreatedAt   types.String `tfsdk:"created_at"`
+	UpdatedAt   types.String `tfsdk:"updated_at"`
 }
-
-type roleAssignmentModel struct {
-	RoleID        types.String `tfsdk:"role_id"`
-	EnvironmentID types.String `tfsdk:"environment_id"`
-}
-
-var roleAssignmentObjectType = types.ObjectType{AttrTypes: map[string]attr.Type{
-	"role_id":        types.StringType,
-	"environment_id": types.StringType,
-}}
 
 func (r *UserResource) Create(ctx context.Context, req resource.CreateRequest, resp *resource.CreateResponse) {
 	var plan userModel
@@ -142,9 +117,11 @@ func (r *UserResource) Create(ctx context.Context, req resource.CreateRequest, r
 		return
 	}
 
+	roles := setToStringSlice(ctx, plan.Roles)
 	body := sdkclient.CreateUserRequest{
 		Username: plan.Username.ValueString(),
 		Password: plan.Password.ValueString(),
+		Roles:    roles,
 	}
 	if !plan.DisplayName.IsNull() && !plan.DisplayName.IsUnknown() {
 		v := plan.DisplayName.ValueString()
@@ -189,21 +166,10 @@ func (r *UserResource) Create(ctx context.Context, req resource.CreateRequest, r
 	} else {
 		state.Locale = plan.Locale
 	}
-	// Apply manual role assignments via the dedicated endpoint (the create
-	// endpoint does not accept them).
-	if !plan.RoleAssignments.IsNull() && !plan.RoleAssignments.IsUnknown() {
-		inputs, diags := roleAssignmentsToInputs(ctx, plan.RoleAssignments)
-		resp.Diagnostics.Append(diags...)
-		if resp.Diagnostics.HasError() {
-			return
-		}
-		if err := r.client.SetUserRoleAssignments(ctx, u.ID, inputs); err != nil {
-			resp.Diagnostics.AddError("Error setting user role assignments", err.Error())
-			return
-		}
-		state.RoleAssignments = plan.RoleAssignments
+	if !plan.Roles.IsNull() && !plan.Roles.IsUnknown() {
+		state.Roles = stringSliceToSet(ctx, u.Roles)
 	} else {
-		state.RoleAssignments = types.SetNull(roleAssignmentObjectType)
+		state.Roles = plan.Roles
 	}
 
 	diags = resp.State.Set(ctx, &state)
@@ -242,13 +208,8 @@ func (r *UserResource) Read(ctx context.Context, req resource.ReadRequest, resp 
 	if !state.Locale.IsNull() && !state.Locale.IsUnknown() && u.Locale != nil {
 		state.Locale = types.StringValue(*u.Locale)
 	}
-	if !state.RoleAssignments.IsNull() && !state.RoleAssignments.IsUnknown() {
-		set, diags := roleAssignmentsToSet(ctx, u.RoleAssignments)
-		resp.Diagnostics.Append(diags...)
-		if resp.Diagnostics.HasError() {
-			return
-		}
-		state.RoleAssignments = set
+	if !state.Roles.IsNull() && !state.Roles.IsUnknown() {
+		state.Roles = stringSliceToSet(ctx, u.Roles)
 	}
 
 	diags = resp.State.Set(ctx, &state)
@@ -282,25 +243,13 @@ func (r *UserResource) Update(ctx context.Context, req resource.UpdateRequest, r
 		v := plan.Password.ValueString()
 		body.Password = &v
 	}
+	body.Roles = setToStringSlice(ctx, plan.Roles)
 
 	tflog.Info(ctx, "Updating Arcane user", map[string]any{"id": id})
 	u, err := r.client.UpdateUser(ctx, id, body)
 	if err != nil {
 		resp.Diagnostics.AddError("Error updating user", err.Error())
 		return
-	}
-
-	// Reconcile manual role assignments when configured.
-	if !plan.RoleAssignments.IsNull() && !plan.RoleAssignments.IsUnknown() {
-		inputs, diags := roleAssignmentsToInputs(ctx, plan.RoleAssignments)
-		resp.Diagnostics.Append(diags...)
-		if resp.Diagnostics.HasError() {
-			return
-		}
-		if err := r.client.SetUserRoleAssignments(ctx, id, inputs); err != nil {
-			resp.Diagnostics.AddError("Error setting user role assignments", err.Error())
-			return
-		}
 	}
 
 	state.Username = types.StringValue(u.Username)
@@ -321,10 +270,10 @@ func (r *UserResource) Update(ctx context.Context, req resource.UpdateRequest, r
 	} else {
 		state.Locale = plan.Locale
 	}
-	if !plan.RoleAssignments.IsNull() && !plan.RoleAssignments.IsUnknown() {
-		state.RoleAssignments = plan.RoleAssignments
+	if !plan.Roles.IsNull() && !plan.Roles.IsUnknown() {
+		state.Roles = stringSliceToSet(ctx, u.Roles)
 	} else {
-		state.RoleAssignments = types.SetNull(roleAssignmentObjectType)
+		state.Roles = plan.Roles
 	}
 	// If password provided in plan, keep it in state to match planned value
 	if !plan.Password.IsNull() && !plan.Password.IsUnknown() && plan.Password.ValueString() != "" {
@@ -359,56 +308,30 @@ func (r *UserResource) ImportState(ctx context.Context, req resource.ImportState
 }
 
 // Helpers
+func setToStringSlice(ctx context.Context, s types.Set) []string {
+	if s.IsNull() || s.IsUnknown() {
+		return nil
+	}
+	var out []string
+	_ = s.ElementsAs(ctx, &out, false)
+	return out
+}
+
+func stringSliceToSet(ctx context.Context, ss []string) types.Set {
+	if len(ss) == 0 {
+		return types.SetNull(types.StringType)
+	}
+	elems := make([]attr.Value, 0, len(ss))
+	for _, s := range ss {
+		elems = append(elems, types.StringValue(s))
+	}
+	v, _ := types.SetValue(types.StringType, elems)
+	return v
+}
+
 func stringOrNull(v *string) types.String {
 	if v == nil {
 		return types.StringNull()
 	}
 	return types.StringValue(*v)
-}
-
-// roleAssignmentsToInputs converts the configured role_assignments set into the
-// API request payload.
-func roleAssignmentsToInputs(ctx context.Context, set types.Set) ([]sdkclient.RoleAssignmentInput, diag.Diagnostics) {
-	var diags diag.Diagnostics
-	if set.IsNull() || set.IsUnknown() {
-		return []sdkclient.RoleAssignmentInput{}, diags
-	}
-	var models []roleAssignmentModel
-	diags.Append(set.ElementsAs(ctx, &models, false)...)
-	if diags.HasError() {
-		return nil, diags
-	}
-	out := make([]sdkclient.RoleAssignmentInput, 0, len(models))
-	for _, m := range models {
-		in := sdkclient.RoleAssignmentInput{RoleID: m.RoleID.ValueString()}
-		if !m.EnvironmentID.IsNull() && !m.EnvironmentID.IsUnknown() && m.EnvironmentID.ValueString() != "" {
-			v := m.EnvironmentID.ValueString()
-			in.EnvironmentID = &v
-		}
-		out = append(out, in)
-	}
-	return out, diags
-}
-
-// roleAssignmentsToSet converts the role assignments returned by the API into a
-// Terraform set, keeping only manually-managed assignments (OIDC-sourced ones
-// are managed outside Terraform).
-func roleAssignmentsToSet(ctx context.Context, assignments []sdkclient.UserRoleAssignment) (types.Set, diag.Diagnostics) {
-	manual := make([]roleAssignmentModel, 0, len(assignments))
-	for _, a := range assignments {
-		if a.Source != "" && a.Source != "manual" {
-			continue
-		}
-		m := roleAssignmentModel{RoleID: types.StringValue(a.RoleID)}
-		if a.EnvironmentID != "" {
-			m.EnvironmentID = types.StringValue(a.EnvironmentID)
-		} else {
-			m.EnvironmentID = types.StringNull()
-		}
-		manual = append(manual, m)
-	}
-	if len(manual) == 0 {
-		return types.SetNull(roleAssignmentObjectType), nil
-	}
-	return types.SetValueFrom(ctx, roleAssignmentObjectType, manual)
 }
