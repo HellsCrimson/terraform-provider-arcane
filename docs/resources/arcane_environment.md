@@ -18,8 +18,9 @@ resource "arcane_environment" "agent" {
 - `api_url` (String, Required) — agent API URL.
 - `name` (String, Optional)
 - `access_token` (String, Optional, Sensitive)
-- `bootstrap_token` (String, Optional, Sensitive)
 - `use_api_key` (Bool, Optional) — request Arcane to generate an API key for pairing.
+- `is_edge` (Bool, Optional) — whether the environment uses edge transport.
+- `regenerate_api_key` (Bool, Optional) — regenerate the pairing API key on update.
 - `enabled` (Bool, Optional)
 
 ## Attributes Reference

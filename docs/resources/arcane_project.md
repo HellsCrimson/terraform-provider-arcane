@@ -20,9 +20,13 @@ resource "arcane_project" "demo" {
 - `compose_content` (String, Required)
 - `env_content` (String, Optional)
 - `archived` (Bool, Optional) — when true, brings the project down and archives it; when false, unarchives it.
+- `redeploy_on_update` (Bool, Optional) — when true, redeploys the project after updating `compose_content`/`env_content` (default true).
 - `pull_on_update` (Bool, Optional) — when true, pulls images before redeploy when `compose_content`/`env_content` change (default false).
+- `remove_orphans` (Bool, Optional) — when deploying (compose up), remove containers for services not defined in the compose file.
 - `running` (Bool, Optional) — when true, ensures the project is running (compose up); when false, brings it down. If unset, lifecycle is not managed.
 - `fail_if_name_exists` (Bool, Optional) — when true, the plan fails if a project with the same `name` already exists in the environment (including folders Arcane has discovered on disk), instead of letting Arcane auto-rename the new project with a numeric suffix (default false). The check runs during the plan phase, so the collision is reported before any change is applied.
+- `remove_files` (Bool, Optional) — remove files on destroy.
+- `remove_volumes` (Bool, Optional) — remove volumes on destroy.
 
 ## Attributes Reference
 

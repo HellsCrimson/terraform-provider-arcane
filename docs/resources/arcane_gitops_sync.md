@@ -62,6 +62,14 @@ resource "arcane_gitops_sync" "staging_sync" {
 - `project_name` (String, Optional) — Project name for the compose stack
 - `auto_sync` (Bool, Optional) — Enable automatic sync on interval
 - `sync_interval` (Int, Optional) — Sync interval in seconds
+- `sync_directory` (Bool, Optional) — Whether to sync the full directory instead of only the compose file
+- `target_type` (String, Optional) — GitOps sync target type
+- `max_sync_binary_size` (Int, Optional) — Maximum binary file size to sync, in bytes
+- `max_sync_files` (Int, Optional) — Maximum number of files to sync
+- `max_sync_total_size` (Int, Optional) — Maximum total sync size, in bytes
+- `environment_variables` (Map of String, Optional) — Environment variables for the synced project
+- `start_project` (Bool, Optional) — Whether to start the project after creation (default: `true`). Controls lifecycle behavior only; not sent to the API.
+- `fail_if_name_exists` (Bool, Optional) — If true, fail during the plan phase when a GitOps sync with the same name already exists in the environment, instead of creating a duplicate. Defaults to `false`.
 - `enabled` (Bool, Optional) — Whether the sync is enabled
 
 ## Attributes Reference

@@ -34,13 +34,23 @@ All optional attributes are strings:
 - `enable_gravatar` - Enable Gravatar for user avatars.
 - `keyboard_shortcuts_enabled` - Enable keyboard shortcuts.
 - `max_image_upload_size` - Maximum image upload size.
+- `follow_project_symlinks` - Follow symlinks when scanning project directories.
+- `icon_catalog` - Icon catalog.
+
+**Activity History Settings**
+- `activity_history_max_entries` - Maximum number of activity history entries to retain.
+- `activity_history_retention_days` - Activity history retention, in days.
+
+**GitOps Sync Settings**
+- `git_sync_max_files` - Maximum number of files to sync.
+- `git_sync_max_binary_size_mb` - Maximum binary file size to sync, in MB.
+- `git_sync_max_total_size_mb` - Maximum total sync size, in MB.
 
 **Docker Settings**
 - `docker_host` - Docker host socket/URL.
 - `docker_api_timeout` - Docker API timeout.
 - `docker_client_refresh_interval` - Docker client refresh interval.
 - `docker_image_pull_timeout` - Timeout for pulling images.
-- `docker_prune_mode` - Docker prune mode.
 
 **Polling Settings**
 - `polling_enabled` - Enable polling.
@@ -62,11 +72,6 @@ All optional attributes are strings:
 **Scheduled Prune Settings**
 - `scheduled_prune_enabled` - Enable scheduled pruning.
 - `scheduled_prune_interval` - Prune interval.
-- `scheduled_prune_build_cache` - Prune build cache.
-- `scheduled_prune_containers` - Prune containers.
-- `scheduled_prune_images` - Prune images.
-- `scheduled_prune_networks` - Prune networks.
-- `scheduled_prune_volumes` - Prune volumes.
 - `prune_build_cache_mode`, `prune_build_cache_until`
 - `prune_container_mode`, `prune_container_until`
 - `prune_image_mode`, `prune_image_until`
@@ -75,7 +80,6 @@ All optional attributes are strings:
 
 **Authentication Settings**
 - `auth_local_enabled` - Enable local authentication.
-- `auth_oidc_config` - OIDC configuration.
 - `auth_password_policy` - Password policy.
 - `auth_session_timeout` - Session timeout.
 
@@ -85,13 +89,12 @@ All optional attributes are strings:
 - `oidc_client_id` - OIDC client ID.
 - `oidc_client_secret` - OIDC client secret.
 - `oidc_scopes` - OIDC scopes.
-- `oidc_admin_claim` - OIDC admin claim.
-- `oidc_admin_value` - OIDC admin value.
 - `oidc_auto_redirect_to_provider` - Auto redirect to OIDC provider.
 - `oidc_merge_accounts` - Merge OIDC accounts.
 - `oidc_provider_name` - OIDC provider display name.
 - `oidc_provider_logo_url` - OIDC provider logo URL.
 - `oidc_skip_tls_verify` - Skip TLS verification for OIDC.
+- `oidc_groups_claim` - OIDC groups claim.
 
 **Build Settings**
 - `build_provider` - Build provider.
@@ -107,12 +110,14 @@ All optional attributes are strings:
 - `http_client_timeout` - HTTP client timeout.
 - `proxy_request_timeout` - Proxy request timeout.
 - `registry_timeout` - Registry timeout.
+- `volume_browser_helper_idle_timeout` - Idle timeout for the volume browser helper.
 
 **UI Settings**
 - `mobile_navigation_mode` - Mobile navigation mode.
 - `mobile_navigation_show_labels` - Show labels in mobile navigation.
 - `sidebar_hover_expansion` - Enable sidebar hover expansion.
 - `oled_mode` - OLED mode.
+- `application_theme` - Application theme.
 
 **Vulnerability Scan Settings**
 - `trivy_concurrent_scan_containers` - Trivy concurrent scan containers.

@@ -50,6 +50,7 @@ resource "arcane_git_repository" "public_repo" {
 - `auth_type` (String, Required) — Authentication type: `ssh`, `token`, or `none`
 - `description` (String, Optional) — Repository description
 - `enabled` (Bool, Optional) — Whether the repository is enabled
+- `ssh_host_key_verification` (String, Optional) — SSH host key verification mode
 - `ssh_key` (String, Optional, Sensitive) — SSH private key for authentication (required when auth_type is `ssh`)
 - `token` (String, Optional, Sensitive) — Access token for HTTP/HTTPS authentication (required when auth_type is `token`)
 - `username` (String, Optional) — Username for authentication (used with token auth)
