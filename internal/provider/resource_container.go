@@ -304,9 +304,11 @@ func (r *ContainerResource) Read(ctx context.Context, req resource.ReadRequest, 
 }
 
 func (r *ContainerResource) Update(ctx context.Context, req resource.UpdateRequest, resp *resource.UpdateResponse) {
-	// All container attributes force new via plan modifiers. Only the
-	// plan-time-only fail_if_name_exists flag can change in place, so carry its
-	// planned value into state.
+	// Every runtime container attribute forces new via plan modifiers. The only
+	// attributes that can change in place are the plan-time-only
+	// fail_if_name_exists flag and the delete-time options force_delete /
+	// remove_volumes (they only affect Delete). Carry their planned values into
+	// state so an in-place change does not produce an inconsistent result.
 	var plan containerModel
 	var state containerModel
 	resp.Diagnostics.Append(req.Plan.Get(ctx, &plan)...)
@@ -315,6 +317,8 @@ func (r *ContainerResource) Update(ctx context.Context, req resource.UpdateReque
 		return
 	}
 	state.FailIfNameExists = plan.FailIfNameExists
+	state.ForceDelete = plan.ForceDelete
+	state.RemoveVolumes = plan.RemoveVolumes
 	resp.Diagnostics.Append(resp.State.Set(ctx, &state)...)
 }
 

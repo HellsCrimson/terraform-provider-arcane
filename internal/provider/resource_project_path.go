@@ -425,6 +425,14 @@ func (r *ProjectPathResource) Update(ctx context.Context, req resource.UpdateReq
 			state.Running = plan.Running
 		}
 	}
+
+	// Persist the delete-time options so adding remove_files / remove_volumes to
+	// an existing resource does not leave stale state behind (which would produce
+	// a "provider produced inconsistent result after apply" error). Mirrors the
+	// same fix in resource_project.go.
+	state.RemoveFiles = plan.RemoveFiles
+	state.RemoveVolumes = plan.RemoveVolumes
+
 	resp.Diagnostics.Append(resp.State.Set(ctx, &state)...)
 }
 

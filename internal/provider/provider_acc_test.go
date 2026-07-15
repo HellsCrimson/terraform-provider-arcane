@@ -297,6 +297,196 @@ YAML
 	return cfg
 }
 
+// TestAccArcaneProject_addRemoveFilesToExisting is a regression test for issue
+// #16: adding remove_files / remove_volumes to an already-created arcane_project
+// failed with "Provider produced inconsistent result after apply:
+// .remove_volumes: was cty.True, but now null".
+//
+// The project is first created WITHOUT remove_files / remove_volumes, so both
+// land in state as null. A second step then adds remove_files = true and
+// remove_volumes = true, which is an in-place Update. The Update handler must
+// copy these planned values into the new state; if it does not, Terraform sees
+// the planned value (true) replaced by null after apply and fails.
+//
+// Before the fix this second step errors; after the fix it applies cleanly and
+// the attributes read back as true.
+func TestAccArcaneProject_addRemoveFilesToExisting(t *testing.T) {
+	name := testAccName("remove-files-project")
+
+	resource.Test(t, resource.TestCase{
+		ProtoV6ProviderFactories: testAccProtoV6ProviderFactories,
+		PreCheck:                 func() { testAccPreCheck(t) },
+		Steps: []resource.TestStep{
+			{
+				// Create without the delete options: both stay null in state.
+				Config: testAccProjectRemoveFilesConfig(name, false),
+				Check: resource.ComposeAggregateTestCheckFunc(
+					resource.TestCheckResourceAttrSet("arcane_project.test", "id"),
+					resource.TestCheckNoResourceAttr("arcane_project.test", "remove_files"),
+					resource.TestCheckNoResourceAttr("arcane_project.test", "remove_volumes"),
+				),
+			},
+			{
+				// Add the delete options: in-place Update must persist them.
+				Config: testAccProjectRemoveFilesConfig(name, true),
+				Check: resource.ComposeAggregateTestCheckFunc(
+					resource.TestCheckResourceAttr("arcane_project.test", "remove_files", "true"),
+					resource.TestCheckResourceAttr("arcane_project.test", "remove_volumes", "true"),
+				),
+			},
+		},
+	})
+}
+
+func testAccProjectRemoveFilesConfig(name string, withRemoveOpts bool) string {
+	removeOpts := ""
+	if withRemoveOpts {
+		removeOpts = `
+  remove_files       = true
+  remove_volumes     = true`
+	}
+
+	return fmt.Sprintf(`
+provider "arcane" {
+  endpoint     = %q
+  api_key      = %q
+  http_timeout = "180s"
+}
+
+resource "arcane_project" "test" {
+  environment_id     = %q
+  name               = %q
+  compose_content    = <<YAML
+services:
+  app:
+    image: alpine:latest
+    command: ["sh", "-c", "echo remove-files && sleep 1"]
+YAML
+  running            = false
+  redeploy_on_update = false
+  pull_on_update     = false%s
+}
+`, testAccEndpoint(), testAccAPIKey(), testAccEnvironmentID(), name, removeOpts)
+}
+
+// TestAccArcaneContainer_addRemoveOptionsToExisting is the arcane_container
+// analogue of TestAccArcaneProject_addRemoveFilesToExisting. force_delete and
+// remove_volumes are delete-time options with no RequiresReplace, so adding them
+// to an existing container is an in-place Update. The Update handler must persist
+// their planned values into state, otherwise the null prior-state value is
+// written back and apply fails with an inconsistent-result error.
+func TestAccArcaneContainer_addRemoveOptionsToExisting(t *testing.T) {
+	name := testAccName("remove-opts-container")
+
+	resource.Test(t, resource.TestCase{
+		ProtoV6ProviderFactories: testAccProtoV6ProviderFactories,
+		PreCheck:                 func() { testAccPreCheck(t) },
+		Steps: []resource.TestStep{
+			{
+				Config: testAccContainerRemoveOptionsConfig(name, false),
+				Check: resource.ComposeAggregateTestCheckFunc(
+					resource.TestCheckResourceAttrSet("arcane_container.test", "id"),
+					resource.TestCheckNoResourceAttr("arcane_container.test", "force_delete"),
+					resource.TestCheckNoResourceAttr("arcane_container.test", "remove_volumes"),
+				),
+			},
+			{
+				Config: testAccContainerRemoveOptionsConfig(name, true),
+				Check: resource.ComposeAggregateTestCheckFunc(
+					resource.TestCheckResourceAttr("arcane_container.test", "force_delete", "true"),
+					resource.TestCheckResourceAttr("arcane_container.test", "remove_volumes", "true"),
+				),
+			},
+		},
+	})
+}
+
+func testAccContainerRemoveOptionsConfig(name string, withRemoveOpts bool) string {
+	removeOpts := ""
+	if withRemoveOpts {
+		removeOpts = `
+  force_delete   = true
+  remove_volumes = true`
+	}
+
+	return fmt.Sprintf(`
+provider "arcane" {
+  endpoint     = %q
+  api_key      = %q
+  http_timeout = "180s"
+}
+
+resource "arcane_container" "test" {
+  environment_id = %q
+  name           = %q
+  image          = "alpine:latest"
+  command        = ["sh", "-c", "sleep 60"]%s
+}
+`, testAccEndpoint(), testAccAPIKey(), testAccEnvironmentID(), name, removeOpts)
+}
+
+// TestAccArcaneProjectPath_addRemoveFilesToExisting is the arcane_project_path
+// analogue of TestAccArcaneProject_addRemoveFilesToExisting. remove_files and
+// remove_volumes (delete-time options) are added to an already-created resource
+// via an in-place Update; the Update handler must persist them into state.
+func TestAccArcaneProjectPath_addRemoveFilesToExisting(t *testing.T) {
+	name := testAccName("remove-files-project-path")
+
+	resource.Test(t, resource.TestCase{
+		ProtoV6ProviderFactories: testAccProtoV6ProviderFactories,
+		PreCheck:                 func() { testAccPreCheck(t) },
+		Steps: []resource.TestStep{
+			{
+				PreConfig: func() { writeProjectPathFixtures(t, "1") },
+				Config:    testAccProjectPathRemoveFilesConfig(name, false),
+				Check: resource.ComposeAggregateTestCheckFunc(
+					resource.TestCheckResourceAttrSet("arcane_project_path.test", "id"),
+					resource.TestCheckNoResourceAttr("arcane_project_path.test", "remove_files"),
+					resource.TestCheckNoResourceAttr("arcane_project_path.test", "remove_volumes"),
+				),
+			},
+			{
+				PreConfig: func() { writeProjectPathFixtures(t, "1") },
+				Config:    testAccProjectPathRemoveFilesConfig(name, true),
+				Check: resource.ComposeAggregateTestCheckFunc(
+					resource.TestCheckResourceAttr("arcane_project_path.test", "remove_files", "true"),
+					resource.TestCheckResourceAttr("arcane_project_path.test", "remove_volumes", "true"),
+				),
+			},
+		},
+	})
+}
+
+func testAccProjectPathRemoveFilesConfig(name string, withRemoveOpts bool) string {
+	removeOpts := ""
+	if withRemoveOpts {
+		removeOpts = `
+  remove_files      = true
+  remove_volumes    = true`
+	}
+
+	return fmt.Sprintf(`
+provider "arcane" {
+  endpoint     = %q
+  api_key      = %q
+  http_timeout = "180s"
+}
+
+resource "arcane_project_path" "test" {
+  environment_id    = %q
+  name              = %q
+  compose_path      = %q
+  env_path          = %q
+  content_hash_mode = true
+  running           = false
+  pull_on_update    = false%s
+}
+`, testAccEndpoint(), testAccAPIKey(), testAccEnvironmentID(), name,
+		filepath.Join(testAccFixtureDirPath(), "docker-compose.yml"),
+		filepath.Join(testAccFixtureDirPath(), ".env"),
+		removeOpts)
+}
+
 // TestAccArcaneContainer_failIfNameExists verifies the opt-in fail_if_name_exists
 // guard on arcane_container. With fail_if_name_exists = true the provider fails
 // the plan when a container of the same name already exists in the environment,
