@@ -419,6 +419,8 @@ func (r *ProjectResource) Update(ctx context.Context, req resource.UpdateRequest
 	state.RedeployOnUpdate = plan.RedeployOnUpdate
 	state.RemoveOrphans = plan.RemoveOrphans
 	state.FailIfNameExists = plan.FailIfNameExists
+	state.RemoveFiles = plan.RemoveFiles
+	state.RemoveVolumes = plan.RemoveVolumes
 	// state.Running is already updated above if changed
 	resp.Diagnostics.Append(resp.State.Set(ctx, &state)...)
 }
