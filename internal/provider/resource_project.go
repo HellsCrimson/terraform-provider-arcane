@@ -421,7 +421,10 @@ func (r *ProjectResource) Update(ctx context.Context, req resource.UpdateRequest
 	state.FailIfNameExists = plan.FailIfNameExists
 	state.RemoveFiles = plan.RemoveFiles
 	state.RemoveVolumes = plan.RemoveVolumes
-	// state.Running is already updated above if changed
+	// Persist running unconditionally: the lifecycle block above only assigns it
+	// when desired != current, so other transitions would otherwise keep the
+	// stale prior value and produce an inconsistent-result error.
+	state.Running = plan.Running
 	resp.Diagnostics.Append(resp.State.Set(ctx, &state)...)
 }
 

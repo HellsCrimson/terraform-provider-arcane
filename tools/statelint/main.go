@@ -9,8 +9,6 @@
 //	Error: Provider produced inconsistent result after apply
 //	... produced an unexpected new value: .<attr>: was X, but now Y.
 //
-// See STALE_STATE_UPDATE_FINDINGS.md for the full write-up.
-//
 // This tool parses every resource_*.go, links each Schema to its model struct
 // and Update handler, and reports settable attributes that are not safely
 // persisted. It intentionally over-reports nothing it can prove safe:

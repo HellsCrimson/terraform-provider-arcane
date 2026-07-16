@@ -285,15 +285,12 @@ func (r *EnvironmentResource) Update(ctx context.Context, req resource.UpdateReq
 		state.IsEdge = plan.IsEdge
 	}
 	applyEnvironmentEdgeFields(ctx, &state, env)
-	if !plan.AccessToken.IsNull() && !plan.AccessToken.IsUnknown() {
-		state.AccessToken = plan.AccessToken
-	}
-	if !plan.UseAPIKey.IsNull() && !plan.UseAPIKey.IsUnknown() {
-		state.UseAPIKey = plan.UseAPIKey
-	}
-	if !plan.RegenerateAPIKey.IsNull() && !plan.RegenerateAPIKey.IsUnknown() {
-		state.RegenerateAPIKey = plan.RegenerateAPIKey
-	}
+	// Persist unconditionally so clearing any of these to null also updates
+	// state; a guarded copy would keep the stale prior value and produce an
+	// inconsistent-result error on the clear-to-null transition.
+	state.AccessToken = plan.AccessToken
+	state.UseAPIKey = plan.UseAPIKey
+	state.RegenerateAPIKey = plan.RegenerateAPIKey
 	resp.Diagnostics.Append(resp.State.Set(ctx, &state)...)
 }
 

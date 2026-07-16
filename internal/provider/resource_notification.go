@@ -34,7 +34,7 @@ func (r *NotificationResource) Schema(_ context.Context, _ resource.SchemaReques
 		Attributes: map[string]resourceschema.Attribute{
 			"id":             resourceschema.StringAttribute{Computed: true, PlanModifiers: []planmodifier.String{stringplanmodifier.UseStateForUnknown()}},
 			"environment_id": resourceschema.StringAttribute{Required: true, Description: "Environment ID", PlanModifiers: []planmodifier.String{stringplanmodifier.RequiresReplace()}},
-			"provider_name":  resourceschema.StringAttribute{Required: true, Description: "Notification provider name"},
+			"provider_name":  resourceschema.StringAttribute{Required: true, Description: "Notification provider name", PlanModifiers: []planmodifier.String{stringplanmodifier.RequiresReplace()}},
 			"enabled":        resourceschema.BoolAttribute{Required: true},
 			"config":         resourceschema.DynamicAttribute{Optional: true, Description: "Provider-specific config object"},
 		},

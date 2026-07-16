@@ -166,8 +166,7 @@ func (r *RegistryResource) Read(ctx context.Context, req resource.ReadRequest, r
 	if reg.RegistryType != "" {
 		state.RegistryType = types.StringValue(reg.RegistryType)
 	}
-	state.AWSAccessKeyID = state.AWSAccessKeyID
-	state.AWSSecretAccessKey = state.AWSSecretAccessKey
+	// AWS credentials are not returned by the API; keep whatever is in state.
 	if !state.AWSRegion.IsNull() && !state.AWSRegion.IsUnknown() {
 		state.AWSRegion = types.StringValue(reg.AWSRegion)
 	}
@@ -256,12 +255,11 @@ func (r *RegistryResource) Update(ctx context.Context, req resource.UpdateReques
 	} else {
 		state.RegistryType = plan.RegistryType
 	}
-	if !plan.AWSAccessKeyID.IsNull() && !plan.AWSAccessKeyID.IsUnknown() {
-		state.AWSAccessKeyID = plan.AWSAccessKeyID
-	}
-	if !plan.AWSSecretAccessKey.IsNull() && !plan.AWSSecretAccessKey.IsUnknown() {
-		state.AWSSecretAccessKey = plan.AWSSecretAccessKey
-	}
+	// Persist unconditionally so clearing a previously-set credential to null
+	// also updates state (a guarded copy would leave the old secret behind and
+	// produce an inconsistent-result error on the clear-to-null transition).
+	state.AWSAccessKeyID = plan.AWSAccessKeyID
+	state.AWSSecretAccessKey = plan.AWSSecretAccessKey
 	if !plan.AWSRegion.IsNull() && !plan.AWSRegion.IsUnknown() {
 		state.AWSRegion = types.StringValue(reg.AWSRegion)
 	} else {
