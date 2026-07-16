@@ -487,6 +487,410 @@ resource "arcane_project_path" "test" {
 		removeOpts)
 }
 
+// TestAccArcaneProjectPath_addOptionalAttrsToExisting is a regression test for
+// the stale-state Update bug on arcane_project_path (STALE_STATE_UPDATE_FINDINGS
+// #1). env_path and running are Optional attributes with no RequiresReplace, so
+// adding them to an already-created resource is an in-place Update. The Update
+// handler previously never (env_path) or only conditionally (running) copied
+// them into the new state, so Terraform saw the planned value replaced by the
+// stale prior value after apply and failed with "provider produced inconsistent
+// result after apply". (content_hash_mode has the same fix but can't be toggled
+// here — see the config helper — so it is covered by statelint only.)
+func TestAccArcaneProjectPath_addOptionalAttrsToExisting(t *testing.T) {
+	name := testAccName("optattrs-project-path")
+
+	resource.Test(t, resource.TestCase{
+		ProtoV6ProviderFactories: testAccProtoV6ProviderFactories,
+		PreCheck:                 func() { testAccPreCheck(t) },
+		Steps: []resource.TestStep{
+			{
+				// Create without the optional attributes: all stay null in state.
+				PreConfig: func() { writeProjectPathFixtures(t, "1") },
+				Config:    testAccProjectPathOptionalAttrsConfig(name, false),
+				Check: resource.ComposeAggregateTestCheckFunc(
+					resource.TestCheckResourceAttrSet("arcane_project_path.test", "id"),
+					resource.TestCheckNoResourceAttr("arcane_project_path.test", "env_path"),
+					resource.TestCheckNoResourceAttr("arcane_project_path.test", "running"),
+				),
+			},
+			{
+				// Add them: the in-place Update must persist every planned value.
+				PreConfig: func() { writeProjectPathFixtures(t, "1") },
+				Config:    testAccProjectPathOptionalAttrsConfig(name, true),
+				Check: resource.ComposeAggregateTestCheckFunc(
+					resource.TestCheckResourceAttrSet("arcane_project_path.test", "env_path"),
+					resource.TestCheckResourceAttr("arcane_project_path.test", "running", "false"),
+				),
+			},
+		},
+	})
+}
+
+func testAccProjectPathOptionalAttrsConfig(name string, withOpts bool) string {
+	opts := ""
+	if withOpts {
+		opts = fmt.Sprintf(`
+  env_path = %q
+  running  = false`, filepath.Join(testAccFixtureDirPath(), ".env"))
+	}
+
+	// content_hash_mode is held true throughout: content_hash_mode = false is an
+	// unrelated pre-existing bug (Create leaves the computed *_content_hash fields
+	// unknown), so toggling it would mask the stale-state Update behaviour tested
+	// here (env_path never-persisted, running conditionally-persisted).
+	return fmt.Sprintf(`
+provider "arcane" {
+  endpoint     = %q
+  api_key      = %q
+  http_timeout = "180s"
+}
+
+resource "arcane_project_path" "test" {
+  environment_id    = %q
+  name              = %q
+  compose_path      = %q
+  content_hash_mode = true
+  pull_on_update    = false%s
+}
+`, testAccEndpoint(), testAccAPIKey(), testAccEnvironmentID(), name,
+		filepath.Join(testAccFixtureDirPath(), "docker-compose.yml"), opts)
+}
+
+// TestAccArcaneProjectPath_environmentIDForcesReplace verifies environment_id on
+// arcane_project_path is now RequiresReplace (STALE_STATE_UPDATE_FINDINGS #1,
+// extra). Previously it lacked the plan modifier, so changing it routed to an
+// in-place Update that never re-persisted it and left the resource pointing at
+// the old environment.
+func TestAccArcaneProjectPath_environmentIDForcesReplace(t *testing.T) {
+	name := testAccName("envrepl-project-path")
+
+	resource.Test(t, resource.TestCase{
+		ProtoV6ProviderFactories: testAccProtoV6ProviderFactories,
+		PreCheck:                 func() { testAccPreCheck(t) },
+		Steps: []resource.TestStep{
+			{
+				PreConfig: func() { writeProjectPathFixtures(t, "1") },
+				Config:    testAccProjectPathEnvConfig(name, testAccEnvironmentID()),
+				Check:     resource.TestCheckResourceAttr("arcane_project_path.test", "environment_id", testAccEnvironmentID()),
+			},
+			{
+				PreConfig:          func() { writeProjectPathFixtures(t, "1") },
+				Config:             testAccProjectPathEnvConfig(name, "tfacc-nonexistent-environment"),
+				PlanOnly:           true,
+				ExpectNonEmptyPlan: true,
+				ConfigPlanChecks: resource.ConfigPlanChecks{
+					PostApplyPreRefresh: []plancheck.PlanCheck{
+						plancheck.ExpectResourceAction("arcane_project_path.test", plancheck.ResourceActionReplace),
+					},
+				},
+			},
+		},
+	})
+}
+
+func testAccProjectPathEnvConfig(name, envID string) string {
+	return fmt.Sprintf(`
+provider "arcane" {
+  endpoint     = %q
+  api_key      = %q
+  http_timeout = "180s"
+}
+
+resource "arcane_project_path" "test" {
+  environment_id    = %q
+  name              = %q
+  compose_path      = %q
+  content_hash_mode = true
+  pull_on_update    = false
+}
+`, testAccEndpoint(), testAccAPIKey(), envID, name,
+		filepath.Join(testAccFixtureDirPath(), "docker-compose.yml"))
+}
+
+// TestAccArcaneProject_addRunningToExisting is a regression test for the extra
+// finding on arcane_project: running was only copied into state inside the
+// lifecycle branch (when desired != current), so a no-op or clear transition
+// left the stale prior value and produced an inconsistent-result error.
+func TestAccArcaneProject_addRunningToExisting(t *testing.T) {
+	name := testAccName("running-project")
+
+	resource.Test(t, resource.TestCase{
+		ProtoV6ProviderFactories: testAccProtoV6ProviderFactories,
+		PreCheck:                 func() { testAccPreCheck(t) },
+		Steps: []resource.TestStep{
+			{
+				Config: testAccProjectRunningConfig(name, false),
+				Check: resource.ComposeAggregateTestCheckFunc(
+					resource.TestCheckResourceAttrSet("arcane_project.test", "id"),
+					resource.TestCheckNoResourceAttr("arcane_project.test", "running"),
+				),
+			},
+			{
+				Config: testAccProjectRunningConfig(name, true),
+				Check:  resource.TestCheckResourceAttr("arcane_project.test", "running", "false"),
+			},
+		},
+	})
+}
+
+func testAccProjectRunningConfig(name string, withRunning bool) string {
+	running := ""
+	if withRunning {
+		running = "\n  running            = false"
+	}
+
+	return fmt.Sprintf(`
+provider "arcane" {
+  endpoint     = %q
+  api_key      = %q
+  http_timeout = "180s"
+}
+
+resource "arcane_project" "test" {
+  environment_id     = %q
+  name               = %q
+  compose_content    = <<YAML
+services:
+  app:
+    image: alpine:latest
+    command: ["sh", "-c", "echo running && sleep 1"]
+YAML
+  redeploy_on_update = false
+  pull_on_update     = false%s
+}
+`, testAccEndpoint(), testAccAPIKey(), testAccEnvironmentID(), name, running)
+}
+
+// TestAccArcaneRegistry_clearAWSCredsToNull is a regression test for
+// STALE_STATE_UPDATE_FINDINGS #3. The AWS credential attributes were copied into
+// state only when the planned value was non-null, so removing a previously-set
+// value left the old secret behind and produced an inconsistent-result error on
+// the clear-to-null transition.
+func TestAccArcaneRegistry_clearAWSCredsToNull(t *testing.T) {
+	resource.Test(t, resource.TestCase{
+		ProtoV6ProviderFactories: testAccProtoV6ProviderFactories,
+		PreCheck:                 func() { testAccPreCheck(t) },
+		Steps: []resource.TestStep{
+			{
+				Config: testAccRegistryAWSConfig(true),
+				Check: resource.ComposeAggregateTestCheckFunc(
+					resource.TestCheckResourceAttr("arcane_container_registry.test", "aws_access_key_id", "AKIAEXAMPLE"),
+					resource.TestCheckResourceAttr("arcane_container_registry.test", "aws_secret_access_key", "secretexample"),
+				),
+			},
+			{
+				// Clear both credentials: the in-place Update must persist null.
+				Config: testAccRegistryAWSConfig(false),
+				Check: resource.ComposeAggregateTestCheckFunc(
+					resource.TestCheckNoResourceAttr("arcane_container_registry.test", "aws_access_key_id"),
+					resource.TestCheckNoResourceAttr("arcane_container_registry.test", "aws_secret_access_key"),
+				),
+			},
+		},
+	})
+}
+
+func testAccRegistryAWSConfig(withAWS bool) string {
+	aws := ""
+	if withAWS {
+		aws = `
+  aws_access_key_id     = "AKIAEXAMPLE"
+  aws_secret_access_key = "secretexample"`
+	}
+
+	return fmt.Sprintf(`
+provider "arcane" {
+  endpoint     = %q
+  api_key      = %q
+  http_timeout = "180s"
+}
+
+resource "arcane_container_registry" "test" {
+  url           = "https://example.test"
+  username      = "tfacc"
+  token         = "tfacc-token"
+  registry_type = "generic"
+  insecure      = true
+  enabled       = true%s
+}
+`, testAccEndpoint(), testAccAPIKey(), aws)
+}
+
+// TestAccArcaneEnvironment_clearUseAPIKeyToNull is a regression test for
+// STALE_STATE_UPDATE_FINDINGS #4. use_api_key was copied into state only when the
+// planned value was non-null; removing it after it had been set left the stale
+// prior value and produced an inconsistent-result error. Step 1 sets it to an
+// explicit value so step 2 can clear it without generating a real API key.
+func TestAccArcaneEnvironment_clearUseAPIKeyToNull(t *testing.T) {
+	name := testAccName("clear-env")
+
+	resource.Test(t, resource.TestCase{
+		ProtoV6ProviderFactories: testAccProtoV6ProviderFactories,
+		PreCheck:                 func() { testAccPreCheck(t) },
+		Steps: []resource.TestStep{
+			{
+				Config: testAccEnvironmentClearConfig(name, true),
+				Check:  resource.TestCheckResourceAttr("arcane_environment.test", "use_api_key", "false"),
+			},
+			{
+				Config: testAccEnvironmentClearConfig(name, false),
+				Check:  resource.TestCheckNoResourceAttr("arcane_environment.test", "use_api_key"),
+			},
+		},
+	})
+}
+
+func testAccEnvironmentClearConfig(name string, setUseAPIKey bool) string {
+	line := ""
+	if setUseAPIKey {
+		line = "\n  use_api_key = false"
+	}
+
+	return fmt.Sprintf(`
+provider "arcane" {
+  endpoint     = %q
+  api_key      = %q
+  http_timeout = "180s"
+}
+
+resource "arcane_environment" "test" {
+  name    = %q
+  api_url = "http://localhost:3552"
+  enabled = true%s
+}
+`, testAccEndpoint(), testAccAPIKey(), name, line)
+}
+
+// TestAccArcaneNotification_providerNameForcesReplace verifies provider_name on
+// arcane_notification is now RequiresReplace (STALE_STATE_UPDATE_FINDINGS #2).
+// A notification is identified by (environment_id, provider_name); changing the
+// provider previously routed to an Update that never re-persisted provider_name
+// and targeted the old provider in the API body.
+func TestAccArcaneNotification_providerNameForcesReplace(t *testing.T) {
+	resource.Test(t, resource.TestCase{
+		ProtoV6ProviderFactories: testAccProtoV6ProviderFactories,
+		PreCheck:                 func() { testAccPreCheck(t) },
+		Steps: []resource.TestStep{
+			{
+				Config: testAccNotificationProviderConfig("generic"),
+				Check:  resource.TestCheckResourceAttr("arcane_notification.test", "provider_name", "generic"),
+			},
+			{
+				Config:             testAccNotificationProviderConfig("slack"),
+				PlanOnly:           true,
+				ExpectNonEmptyPlan: true,
+				ConfigPlanChecks: resource.ConfigPlanChecks{
+					PostApplyPreRefresh: []plancheck.PlanCheck{
+						plancheck.ExpectResourceAction("arcane_notification.test", plancheck.ResourceActionReplace),
+					},
+				},
+			},
+		},
+	})
+}
+
+func testAccNotificationProviderConfig(provider string) string {
+	return fmt.Sprintf(`
+provider "arcane" {
+  endpoint     = %q
+  api_key      = %q
+  http_timeout = "180s"
+}
+
+resource "arcane_notification" "test" {
+  environment_id = %q
+  provider_name  = %q
+  enabled        = false
+  config = {
+    webhookUrl = "http://example.com/hook"
+  }
+}
+`, testAccEndpoint(), testAccAPIKey(), testAccEnvironmentID(), provider)
+}
+
+// TestAccArcaneImmutableResources_forceReplace verifies STALE_STATE_UPDATE_
+// FINDINGS #5: arcane_network and arcane_volume Update handlers hard-error
+// ("update not supported"), so their mutable-looking attributes must be
+// RequiresReplace to route edits to a clean destroy+create instead. Before the
+// fix these attributes lacked the plan modifier and an edit planned an in-place
+// Update (asserted here as a Replace).
+func TestAccArcaneImmutableResources_forceReplace(t *testing.T) {
+	netName := testAccName("replace-network")
+	volName := testAccName("replace-volume")
+
+	cases := []struct {
+		name     string
+		addr     string
+		configFn func(labelVal string) string
+	}{
+		{"network_labels", "arcane_network.test", func(v string) string { return testAccNetworkLabelConfig(netName, v) }},
+		{"volume_labels", "arcane_volume.test", func(v string) string { return testAccVolumeLabelConfig(volName, v) }},
+	}
+
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			resource.Test(t, resource.TestCase{
+				ProtoV6ProviderFactories: testAccProtoV6ProviderFactories,
+				PreCheck:                 func() { testAccPreCheck(t) },
+				Steps: []resource.TestStep{
+					{
+						Config: tc.configFn("v1"),
+						Check:  resource.TestCheckResourceAttr(tc.addr, "labels.tfacc", "v1"),
+					},
+					{
+						Config:             tc.configFn("v2"),
+						PlanOnly:           true,
+						ExpectNonEmptyPlan: true,
+						ConfigPlanChecks: resource.ConfigPlanChecks{
+							PostApplyPreRefresh: []plancheck.PlanCheck{
+								plancheck.ExpectResourceAction(tc.addr, plancheck.ResourceActionReplace),
+							},
+						},
+					},
+				},
+			})
+		})
+	}
+}
+
+func testAccNetworkLabelConfig(name, labelVal string) string {
+	return fmt.Sprintf(`
+provider "arcane" {
+  endpoint     = %q
+  api_key      = %q
+  http_timeout = "180s"
+}
+
+resource "arcane_network" "test" {
+  environment_id = %q
+  name           = %q
+  driver         = "bridge"
+  labels = {
+    tfacc = %q
+  }
+}
+`, testAccEndpoint(), testAccAPIKey(), testAccEnvironmentID(), name, labelVal)
+}
+
+func testAccVolumeLabelConfig(name, labelVal string) string {
+	return fmt.Sprintf(`
+provider "arcane" {
+  endpoint     = %q
+  api_key      = %q
+  http_timeout = "180s"
+}
+
+resource "arcane_volume" "test" {
+  environment_id = %q
+  name           = %q
+  driver         = "local"
+  labels = {
+    tfacc = %q
+  }
+}
+`, testAccEndpoint(), testAccAPIKey(), testAccEnvironmentID(), name, labelVal)
+}
+
 // TestAccArcaneContainer_failIfNameExists verifies the opt-in fail_if_name_exists
 // guard on arcane_container. With fail_if_name_exists = true the provider fails
 // the plan when a container of the same name already exists in the environment,
