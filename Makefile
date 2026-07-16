@@ -9,10 +9,15 @@ ARCANE_ACC_EDGE_AGENT_TOKEN ?= arc_a54fe1040057252a19b34d72008395141a04de7731a28
 ARCANE_ACC_EDGE_AGENT_API_URL ?= http://arcane-test-edge-agent:3552
 ACC_TEST ?= TestAcc
 
-.PHONY: test test-up test-down test-clean wait-arcane test-acc test-suite test-acc-forget test-forget-down test-forget-clean test-all
+.PHONY: test lint-state test-up test-down test-clean wait-arcane test-acc test-suite test-acc-forget test-forget-down test-forget-clean test-all
 
 test:
 	go test ./...
+
+# lint-state statically detects the "stale-state Update" bug class
+# (see STALE_STATE_UPDATE_FINDINGS.md). Exits non-zero on any finding.
+lint-state:
+	go run ./tools/statelint ./internal/provider
 
 test-up:
 	docker compose -f $(COMPOSE_FILE) up -d

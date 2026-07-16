@@ -9,6 +9,8 @@ import (
 	"github.com/hashicorp/terraform-plugin-framework/path"
 	"github.com/hashicorp/terraform-plugin-framework/resource"
 	resourceschema "github.com/hashicorp/terraform-plugin-framework/resource/schema"
+	"github.com/hashicorp/terraform-plugin-framework/resource/schema/boolplanmodifier"
+	"github.com/hashicorp/terraform-plugin-framework/resource/schema/mapplanmodifier"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema/planmodifier"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema/stringplanmodifier"
 	"github.com/hashicorp/terraform-plugin-framework/types"
@@ -64,32 +66,53 @@ func (r *NetworkResource) Schema(_ context.Context, _ resource.SchemaRequest, re
 			"attachable": resourceschema.BoolAttribute{
 				Optional:    true,
 				Description: "Allow manual container attachment",
+				PlanModifiers: []planmodifier.Bool{
+					boolplanmodifier.RequiresReplace(),
+				},
 			},
 			"internal": resourceschema.BoolAttribute{
 				Optional:    true,
 				Description: "Restrict external access to the network",
+				PlanModifiers: []planmodifier.Bool{
+					boolplanmodifier.RequiresReplace(),
+				},
 			},
 			"enable_ipv6": resourceschema.BoolAttribute{
 				Optional:    true,
 				Description: "Enable IPv6 networking",
+				PlanModifiers: []planmodifier.Bool{
+					boolplanmodifier.RequiresReplace(),
+				},
 			},
 			"check_duplicate": resourceschema.BoolAttribute{
 				Optional:    true,
 				Description: "Check for duplicate network names",
+				PlanModifiers: []planmodifier.Bool{
+					boolplanmodifier.RequiresReplace(),
+				},
 			},
 			"ingress": resourceschema.BoolAttribute{
 				Optional:    true,
 				Description: "Enable routing-mesh for swarm cluster",
+				PlanModifiers: []planmodifier.Bool{
+					boolplanmodifier.RequiresReplace(),
+				},
 			},
 			"labels": resourceschema.MapAttribute{
 				Optional:    true,
 				ElementType: types.StringType,
 				Description: "User-defined labels for metadata",
+				PlanModifiers: []planmodifier.Map{
+					mapplanmodifier.RequiresReplace(),
+				},
 			},
 			"options": resourceschema.MapAttribute{
 				Optional:    true,
 				ElementType: types.StringType,
 				Description: "Driver-specific options",
+				PlanModifiers: []planmodifier.Map{
+					mapplanmodifier.RequiresReplace(),
+				},
 			},
 			// Computed fields
 			"scope": resourceschema.StringAttribute{

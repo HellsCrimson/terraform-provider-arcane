@@ -35,7 +35,7 @@ func (r *ProjectPathResource) Schema(_ context.Context, _ resource.SchemaRequest
 	resp.Schema = resourceschema.Schema{
 		Attributes: map[string]resourceschema.Attribute{
 			"id":             resourceschema.StringAttribute{Computed: true, Description: "Project ID", PlanModifiers: []planmodifier.String{stringplanmodifier.UseStateForUnknown()}},
-			"environment_id": resourceschema.StringAttribute{Required: true, Description: "Environment ID"},
+			"environment_id": resourceschema.StringAttribute{Required: true, Description: "Environment ID", PlanModifiers: []planmodifier.String{stringplanmodifier.RequiresReplace()}},
 			"name":           resourceschema.StringAttribute{Required: true, Description: "Project name"},
 			"compose_path":   resourceschema.StringAttribute{Required: true, Description: "Filesystem path to docker-compose.yml"},
 			"env_path":       resourceschema.StringAttribute{Optional: true, Description: "Filesystem path to .env"},
@@ -426,10 +426,15 @@ func (r *ProjectPathResource) Update(ctx context.Context, req resource.UpdateReq
 		}
 	}
 
-	// Persist the delete-time options so adding remove_files / remove_volumes to
-	// an existing resource does not leave stale state behind (which would produce
-	// a "provider produced inconsistent result after apply" error). Mirrors the
-	// same fix in resource_project.go.
+	// Persist user-settable attributes unconditionally so changing them on an
+	// existing resource does not leave stale prior-state behind (which would
+	// produce a "provider produced inconsistent result after apply" error).
+	// This covers both the delete-time options and the config attributes that
+	// are otherwise only read from plan or assigned on some paths (running).
+	state.ComposePath = plan.ComposePath
+	state.EnvPath = plan.EnvPath
+	state.ContentHashMode = plan.ContentHashMode
+	state.Running = plan.Running
 	state.RemoveFiles = plan.RemoveFiles
 	state.RemoveVolumes = plan.RemoveVolumes
 
