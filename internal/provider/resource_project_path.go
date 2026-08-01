@@ -6,16 +6,17 @@ import (
 	"encoding/hex"
 	"os"
 	"strings"
-	"time"
 
 	"terraform-provider-arcane/internal/sdkclient"
 
+	"github.com/hashicorp/terraform-plugin-framework-validators/stringvalidator"
 	"github.com/hashicorp/terraform-plugin-framework/path"
 	"github.com/hashicorp/terraform-plugin-framework/resource"
 	resourceschema "github.com/hashicorp/terraform-plugin-framework/resource/schema"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema/booldefault"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema/planmodifier"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema/stringplanmodifier"
+	"github.com/hashicorp/terraform-plugin-framework/schema/validator"
 	"github.com/hashicorp/terraform-plugin-framework/types"
 )
 
@@ -51,7 +52,18 @@ func (r *ProjectPathResource) Schema(_ context.Context, _ resource.SchemaRequest
 
 			// Lifecycle (optional)
 			"running":        resourceschema.BoolAttribute{Optional: true, Description: "If true, ensure project is running (compose up); if false, compose down. If unset, no lifecycle management."},
-			"pull_on_update": resourceschema.BoolAttribute{Optional: true, Computed: true, Description: "Pull images before redeploy when compose/env changes.", Default: booldefault.StaticBool(false)},
+			"pull_on_update": resourceschema.BoolAttribute{Optional: true, Computed: true, Description: "Pull images before redeploy.", Default: booldefault.StaticBool(false)},
+			"redeploy_trigger": resourceschema.StringAttribute{
+				Optional:    true,
+				Computed:    true,
+				Description: redeployTriggerDescription,
+				Validators:  []validator.String{stringvalidator.OneOf(redeployTriggerValues...)},
+			},
+			"last_redeploy": resourceschema.StringAttribute{
+				Computed:      true,
+				Description:   lastRedeployDescription,
+				PlanModifiers: []planmodifier.String{stringplanmodifier.UseStateForUnknown()},
+			},
 
 			// Computed info
 			"path":          resourceschema.StringAttribute{Computed: true},
@@ -89,6 +101,8 @@ type projectPathModel struct {
 	EnvHash         types.String `tfsdk:"env_content_hash"`
 	Running         types.Bool   `tfsdk:"running"`
 	PullOnUpdate    types.Bool   `tfsdk:"pull_on_update"`
+	RedeployTrigger types.String `tfsdk:"redeploy_trigger"`
+	LastRedeploy    types.String `tfsdk:"last_redeploy"`
 	Path            types.String `tfsdk:"path"`
 	Status          types.String `tfsdk:"status"`
 	ServiceCount    types.Int64  `tfsdk:"service_count"`
@@ -99,13 +113,42 @@ type projectPathModel struct {
 	RemoveVolumes   types.Bool   `tfsdk:"remove_volumes"`
 }
 
-// ModifyPlan loads compose/env file contents into computed attributes so file changes are detected during planning.
+// ModifyPlan loads compose/env file contents into computed attributes so file
+// changes are detected during planning, and resolves the redeploy trigger.
 func (r *ProjectPathResource) ModifyPlan(ctx context.Context, req resource.ModifyPlanRequest, resp *resource.ModifyPlanResponse) {
-	if req.Plan.Raw.IsNull() || !req.Plan.Raw.IsKnown() {
+	if req.Plan.Raw.IsNull() {
+		// Destroy plan: nothing to modify.
+		return
+	}
+
+	var configured types.String
+	resp.Diagnostics.Append(req.Config.GetAttribute(ctx, path.Root("redeploy_trigger"), &configured)...)
+	if resp.Diagnostics.HasError() {
+		return
+	}
+	if configured.IsUnknown() {
+		// The configured value only becomes known at apply time, and a planned
+		// value may not contradict the configuration. Create/Update resolve it then.
+		return
+	}
+
+	// Resolve the trigger before anything that can bail out early, so the
+	// attribute is never left unknown in the plan.
+	trigger, diags := resolveRedeployTrigger(ctx, req.Config, "")
+	resp.Diagnostics.Append(diags...)
+	if resp.Diagnostics.HasError() {
+		return
+	}
+	resp.Diagnostics.Append(resp.Plan.SetAttribute(ctx, path.Root("redeploy_trigger"), types.StringValue(trigger))...)
+	if resp.Diagnostics.HasError() {
+		return
+	}
+
+	if !req.Plan.Raw.IsKnown() {
 		return
 	}
 	var plan projectPathModel
-	diags := req.Plan.Get(ctx, &plan)
+	diags = req.Plan.Get(ctx, &plan)
 	resp.Diagnostics.Append(diags...)
 	if resp.Diagnostics.HasError() {
 		return
@@ -114,32 +157,93 @@ func (r *ProjectPathResource) ModifyPlan(ctx context.Context, req resource.Modif
 		return
 	}
 
+	hashMode := plan.ContentHashMode.ValueBool()
+
 	composeBytes, err := os.ReadFile(plan.ComposePath.ValueString())
 	if err != nil {
 		resp.Diagnostics.AddAttributeError(path.Root("compose_path"), "read compose file failed", err.Error())
 		return
 	}
 	// Compute and set content/hash depending on mode
-	if plan.ContentHashMode.ValueBool() {
+	if hashMode {
 		h := sha256.Sum256(composeBytes)
 		resp.Diagnostics.Append(resp.Plan.SetAttribute(ctx, path.Root("compose_content_hash"), hex.EncodeToString(h[:]))...)
 	} else {
 		resp.Diagnostics.Append(resp.Plan.SetAttribute(ctx, path.Root("compose_content"), string(composeBytes))...)
 	}
 
+	var envContent *string
 	if !plan.EnvPath.IsNull() && !plan.EnvPath.IsUnknown() {
 		b, err := os.ReadFile(plan.EnvPath.ValueString())
 		if err != nil {
 			resp.Diagnostics.AddAttributeError(path.Root("env_path"), "read env file failed", err.Error())
 			return
 		}
-		if plan.ContentHashMode.ValueBool() {
+		s := string(b)
+		envContent = &s
+		if hashMode {
 			h := sha256.Sum256(b)
 			resp.Diagnostics.Append(resp.Plan.SetAttribute(ctx, path.Root("env_content_hash"), hex.EncodeToString(h[:]))...)
 		} else {
-			resp.Diagnostics.Append(resp.Plan.SetAttribute(ctx, path.Root("env_content"), string(b))...)
+			resp.Diagnostics.Append(resp.Plan.SetAttribute(ctx, path.Root("env_content"), s)...)
 		}
 	}
+	if resp.Diagnostics.HasError() {
+		return
+	}
+
+	if req.State.Raw.IsNull() {
+		// Create: Create() seeds last_redeploy itself.
+		return
+	}
+
+	var state projectPathModel
+	resp.Diagnostics.Append(req.State.Get(ctx, &state)...)
+	if resp.Diagnostics.HasError() {
+		return
+	}
+
+	composeStr := string(composeBytes)
+	contentChanged := fileContentChanged(hashMode, &composeStr, state.Compose, state.ComposeHash) ||
+		fileContentChanged(hashMode, envContent, state.Env, state.EnvHash)
+	// Marking last_redeploy unknown is what makes redeploy_trigger = "always"
+	// work: Terraform only calls Update when the plan differs from state. The
+	// unknown is only injected when a redeploy is actually expected, so the other
+	// triggers keep producing empty plans when nothing changed.
+	if !redeployPlanned(trigger, contentChanged, !req.Plan.Raw.Equal(req.State.Raw)) {
+		return
+	}
+	if !projectPathRedeployAllowed(plan) {
+		return
+	}
+	resp.Diagnostics.Append(resp.Plan.SetAttribute(ctx, path.Root("last_redeploy"), types.StringUnknown())...)
+}
+
+// projectPathRedeployAllowed reports whether redeploying matches the desired
+// state: redeploying brings a project up, so it must not run against a project
+// explicitly configured as not running.
+func projectPathRedeployAllowed(m projectPathModel) bool {
+	if !m.Running.IsNull() && !m.Running.IsUnknown() {
+		return m.Running.ValueBool()
+	}
+	return true
+}
+
+// fileContentChanged reports whether freshly read file content differs from what
+// state recorded, in either storage mode. content is nil when the file is not
+// configured at all.
+func fileContentChanged(hashMode bool, content *string, stateContent, stateHash types.String) bool {
+	if content == nil {
+		if hashMode {
+			return !stateHash.IsNull()
+		}
+		return !stateContent.IsNull()
+	}
+	if hashMode {
+		h := sha256.Sum256([]byte(*content))
+		return stateHash.IsNull() || stateHash.ValueString() != hex.EncodeToString(h[:])
+	}
+	return stateContent.IsNull() || stateContent.ValueString() != *content
 }
 
 func (r *ProjectPathResource) Create(ctx context.Context, req resource.CreateRequest, resp *resource.CreateResponse) {
@@ -233,6 +337,14 @@ func (r *ProjectPathResource) Create(ctx context.Context, req resource.CreateReq
 	}
 	state.Running = plan.Running
 	state.PullOnUpdate = plan.PullOnUpdate
+	redeployTrigger, _, tdiags := resolvedRedeployAttrs(ctx, req.Config, "", plan.RedeployTrigger, types.BoolNull())
+	resp.Diagnostics.Append(tdiags...)
+	if resp.Diagnostics.HasError() {
+		return
+	}
+	state.RedeployTrigger = redeployTrigger
+	// Create deploys through "up", not "redeploy": nothing has been redeployed yet.
+	state.LastRedeploy = types.StringNull()
 	resp.Diagnostics.Append(resp.State.Set(ctx, &state)...)
 }
 
@@ -318,37 +430,38 @@ func (r *ProjectPathResource) Update(ctx context.Context, req resource.UpdateReq
 		return
 	}
 
-	// Redeploy if compose/env changed and desired running is true/unspecified
-	changedContent := (body.ComposeContent != nil) || (body.EnvContent != nil)
-	if changedContent {
+	// Redeploy according to redeploy_trigger, as long as the project is meant to
+	// be up. The trigger is resolved during plan (see ModifyPlan), so the plan
+	// value is authoritative here.
+	redeployTrigger, _, tdiags := resolvedRedeployAttrs(ctx, req.Config, "", plan.RedeployTrigger, types.BoolNull())
+	resp.Diagnostics.Append(tdiags...)
+	if resp.Diagnostics.HasError() {
+		return
+	}
+	contentChanged := fileContentChanged(plan.ContentHashMode.ValueBool(), &compose, state.Compose, state.ComposeHash) ||
+		fileContentChanged(plan.ContentHashMode.ValueBool(), envStr, state.Env, state.EnvHash)
+	redeployed := false
+	if shouldRedeploy(redeployTrigger.ValueString(), contentChanged) && projectPathRedeployAllowed(plan) {
 		// Optional pull before redeploy
-		if !plan.PullOnUpdate.IsNull() && !plan.PullOnUpdate.IsUnknown() && plan.PullOnUpdate.ValueBool() {
+		if boolValue(plan.PullOnUpdate) {
 			if err := r.client.PullProjectImages(ctx, envID, projID); err != nil {
 				resp.Diagnostics.AddError("project image pull failed", err.Error())
 				return
 			}
 		}
 
-		shouldRedeploy := true
-		if !plan.Running.IsNull() && !plan.Running.IsUnknown() && !plan.Running.ValueBool() {
-			shouldRedeploy = false
-		}
-		if shouldRedeploy {
-			if err := r.client.RedeployProject(ctx, envID, projID); err != nil {
-				if strings.Contains(strings.ToLower(err.Error()), "unhealthy") {
-					resp.Diagnostics.AddWarning("project redeploy reported unhealthy", err.Error())
-				} else {
-					resp.Diagnostics.AddError("project redeploy failed", err.Error())
-					return
-				}
-			}
-			// wait a bit for status if running
-			timeout := 5 * time.Minute
-			if det, derr := r.client.GetProject(ctx, envID, projID); derr == nil {
-				state.Status = types.StringValue(det.Status)
+		if err := r.client.RedeployProject(ctx, envID, projID); err != nil {
+			if strings.Contains(strings.ToLower(err.Error()), "unhealthy") {
+				resp.Diagnostics.AddWarning("project redeploy reported unhealthy", err.Error())
 			} else {
-				_ = timeout // placeholder unused if not waiting further
+				resp.Diagnostics.AddError("project redeploy failed", err.Error())
+				return
 			}
+		}
+		redeployed = true
+		// Refresh through out: state.Status is overwritten from it below.
+		if det, derr := r.client.GetProject(ctx, envID, projID); derr == nil {
+			out.Status = det.Status
 		}
 	}
 
@@ -381,27 +494,6 @@ func (r *ProjectPathResource) Update(ctx context.Context, req resource.UpdateReq
 		}
 	}
 	state.PullOnUpdate = plan.PullOnUpdate
-	// Redeploy if compose/env changed and enabled (default true) and desired running true/unspecified
-	changedContent = (body.ComposeContent != nil) || (body.EnvContent != nil)
-	if changedContent {
-		// default to true if unset
-		redeploy := true
-		if !plan.Running.IsNull() && !plan.Running.IsUnknown() {
-			// redeploy only if intend to be running
-			if !plan.Running.ValueBool() {
-				redeploy = false
-			}
-		}
-		if redeploy {
-			if err := r.client.RedeployProject(ctx, envID, projID); err != nil {
-				resp.Diagnostics.AddError("project redeploy failed", err.Error())
-				return
-			}
-			if det, derr := r.client.GetProject(ctx, envID, projID); derr == nil {
-				state.Status = types.StringValue(det.Status)
-			}
-		}
-	}
 
 	// Lifecycle management if configured and changed
 	if !plan.Running.IsNull() && !plan.Running.IsUnknown() {
@@ -437,6 +529,18 @@ func (r *ProjectPathResource) Update(ctx context.Context, req resource.UpdateReq
 	state.Running = plan.Running
 	state.RemoveFiles = plan.RemoveFiles
 	state.RemoveVolumes = plan.RemoveVolumes
+	state.RedeployTrigger = redeployTrigger
+	// last_redeploy only moves when the plan left it unknown (ModifyPlan marks it
+	// whenever a redeploy is expected); otherwise the planned value, which
+	// UseStateForUnknown pinned to the prior state, has to be written back
+	// verbatim or the apply is inconsistent with the plan.
+	if plan.LastRedeploy.IsUnknown() {
+		if redeployed {
+			state.LastRedeploy = types.StringValue(redeployTimestamp())
+		}
+	} else {
+		state.LastRedeploy = plan.LastRedeploy
+	}
 
 	resp.Diagnostics.Append(resp.State.Set(ctx, &state)...)
 }
