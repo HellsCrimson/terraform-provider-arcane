@@ -346,10 +346,11 @@ func (r *ApiKeyResource) Update(ctx context.Context, req resource.UpdateRequest,
 	}
 
 	state = plan
-	state.ID = types.StringValue(apiKey.ID)
+	// id and created_at keep their planned value. Both carry UseStateForUnknown,
+	// so the plan promises the prior one, and an update that rewrote them from
+	// the response would fail as an inconsistent result.
 	state.KeyPrefix = types.StringValue(apiKey.KeyPrefix)
 	state.UserID = types.StringValue(apiKey.UserID)
-	state.CreatedAt = types.StringValue(apiKey.CreatedAt)
 	state.IsBootstrap = types.BoolValue(apiKey.IsBootstrap)
 	state.IsStatic = types.BoolValue(apiKey.IsStatic)
 	// Preserve the key from previous state (not returned on update)

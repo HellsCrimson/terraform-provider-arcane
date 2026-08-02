@@ -7,6 +7,7 @@ import (
 
 	"terraform-provider-arcane/internal/sdkclient"
 
+	"github.com/hashicorp/terraform-plugin-framework-validators/stringvalidator"
 	"github.com/hashicorp/terraform-plugin-framework/path"
 	"github.com/hashicorp/terraform-plugin-framework/resource"
 	resourceschema "github.com/hashicorp/terraform-plugin-framework/resource/schema"
@@ -14,6 +15,7 @@ import (
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema/boolplanmodifier"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema/planmodifier"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema/stringplanmodifier"
+	"github.com/hashicorp/terraform-plugin-framework/schema/validator"
 	"github.com/hashicorp/terraform-plugin-framework/types"
 )
 
@@ -37,14 +39,32 @@ func (r *ProjectResource) Schema(_ context.Context, _ resource.SchemaRequest, re
 				Description:   "Project ID",
 				PlanModifiers: []planmodifier.String{stringplanmodifier.UseStateForUnknown()},
 			},
-			"environment_id":      resourceschema.StringAttribute{Required: true, Description: "Environment ID", PlanModifiers: []planmodifier.String{stringplanmodifier.RequiresReplace()}},
-			"name":                resourceschema.StringAttribute{Required: true, Description: "Project name"},
-			"compose_content":     resourceschema.StringAttribute{Required: true, Description: "docker-compose.yml content"},
-			"env_content":         resourceschema.StringAttribute{Optional: true, Description: ".env content"},
-			"running":             resourceschema.BoolAttribute{Optional: true, Description: "If true, ensure project is running (compose up); if false, compose down. If unset, no lifecycle management."},
-			"archived":            resourceschema.BoolAttribute{Optional: true, Computed: true, Description: "Whether the project is archived.", PlanModifiers: []planmodifier.Bool{boolplanmodifier.UseStateForUnknown()}},
-			"redeploy_on_update":  resourceschema.BoolAttribute{Optional: true, Computed: true, Description: "Redeploy the project after updating compose/env content.", Default: booldefault.StaticBool(true)},
-			"pull_on_update":      resourceschema.BoolAttribute{Optional: true, Computed: true, Description: "Pull images before redeploy when compose/env changes.", Default: booldefault.StaticBool(false)},
+			"environment_id":  resourceschema.StringAttribute{Required: true, Description: "Environment ID", PlanModifiers: []planmodifier.String{stringplanmodifier.RequiresReplace()}},
+			"name":            resourceschema.StringAttribute{Required: true, Description: "Project name"},
+			"compose_content": resourceschema.StringAttribute{Required: true, Description: "docker-compose.yml content"},
+			"env_content":     resourceschema.StringAttribute{Optional: true, Description: ".env content"},
+			"running":         resourceschema.BoolAttribute{Optional: true, Description: "If true, ensure project is running (compose up); if false, compose down. If unset, no lifecycle management."},
+			"archived":        resourceschema.BoolAttribute{Optional: true, Computed: true, Description: "Whether the project is archived.", PlanModifiers: []planmodifier.Bool{boolplanmodifier.UseStateForUnknown()}},
+			// No Default here: the value is derived from redeploy_trigger in
+			// planRedeploy when the practitioner did not set it. A static default
+			// would fight that mirror on every plan (the default is applied before
+			// ModifyPlan runs), leaving the resource with a perpetual diff.
+			"redeploy_on_update": resourceschema.BoolAttribute{
+				Optional:           true,
+				Computed:           true,
+				Description:        "Deprecated, use redeploy_trigger. Redeploy the project after updating compose/env content.",
+				DeprecationMessage: "redeploy_on_update is deprecated, use redeploy_trigger instead: true is equivalent to redeploy_trigger = \"default\", false to redeploy_trigger = \"never\".",
+			},
+			"redeploy_trigger": resourceschema.StringAttribute{
+				Optional:    true,
+				Computed:    true,
+				Description: redeployTriggerDescription,
+				Validators: []validator.String{
+					stringvalidator.OneOf(redeployTriggerValues...),
+					stringvalidator.ConflictsWith(path.MatchRoot("redeploy_on_update")),
+				},
+			},
+			"pull_on_update":      resourceschema.BoolAttribute{Optional: true, Computed: true, Description: "Pull images before redeploy.", Default: booldefault.StaticBool(false)},
 			"remove_orphans":      resourceschema.BoolAttribute{Optional: true, Description: "When deploying (compose up), remove containers for services not defined in the compose file."},
 			"fail_if_name_exists": resourceschema.BoolAttribute{Optional: true, Description: "If true, fail during the plan phase when a project with the same name already exists in the environment (including folders Arcane has discovered on disk), instead of letting Arcane auto-rename the new project with a numeric suffix. Defaults to false."},
 
@@ -58,6 +78,11 @@ func (r *ProjectResource) Schema(_ context.Context, _ resource.SchemaRequest, re
 			"archived_at":       resourceschema.StringAttribute{Computed: true},
 			"is_discovered":     resourceschema.BoolAttribute{Computed: true},
 			"redeploy_disabled": resourceschema.BoolAttribute{Computed: true},
+			"last_redeploy": resourceschema.StringAttribute{
+				Computed:      true,
+				Description:   lastRedeployDescription,
+				PlanModifiers: []planmodifier.String{stringplanmodifier.UseStateForUnknown()},
+			},
 
 			// Delete options
 			"remove_files":   resourceschema.BoolAttribute{Optional: true, Description: "Remove files on destroy"},
@@ -74,16 +99,112 @@ func (r *ProjectResource) Configure(_ context.Context, req resource.ConfigureReq
 	}
 }
 
-// ModifyPlan enforces the optional fail_if_name_exists check during the plan
-// phase. When enabled, creating a project whose name already exists in the
+// projectServerComputed lists the attributes Update rewrites from the API
+// response. Keep it in sync with the assignments at the end of Update; see
+// planServerComputedUnknown for what goes wrong when an attribute is missing.
+var projectServerComputed = []serverComputedAttr{
+	{"path", types.StringUnknown()},
+	{"status", types.StringUnknown()},
+	{"service_count", types.Int64Unknown()},
+	{"running_count", types.Int64Unknown()},
+	{"archived_at", types.StringUnknown()},
+	{"is_discovered", types.BoolUnknown()},
+	{"redeploy_disabled", types.BoolUnknown()},
+}
+
+// ModifyPlan resolves the effective redeploy_trigger and enforces the optional
+// fail_if_name_exists check during the plan phase.
+func (r *ProjectResource) ModifyPlan(ctx context.Context, req resource.ModifyPlanRequest, resp *resource.ModifyPlanResponse) {
+	if req.Plan.Raw.IsNull() {
+		// Destroy plan: nothing to modify.
+		return
+	}
+
+	r.planRedeploy(ctx, req, resp)
+	if resp.Diagnostics.HasError() {
+		return
+	}
+
+	r.planFailIfNameExists(ctx, req, resp)
+	if resp.Diagnostics.HasError() {
+		return
+	}
+
+	// Last: it keys off the plan the steps above produced.
+	planServerComputedUnknown(ctx, req, resp, projectServerComputed)
+}
+
+// planRedeploy writes the effective redeploy trigger into the plan and, when
+// that trigger means the next apply will redeploy, marks last_redeploy unknown.
+//
+// Marking last_redeploy unknown is what makes redeploy_trigger = "always" work:
+// Terraform only calls Update when the plan differs from state, so without an
+// attribute that changes there is nothing to hang a redeploy on. The unknown is
+// only injected when a redeploy is actually expected, so the other triggers keep
+// producing empty plans when nothing changed.
+func (r *ProjectResource) planRedeploy(ctx context.Context, req resource.ModifyPlanRequest, resp *resource.ModifyPlanResponse) {
+	var configured types.String
+	resp.Diagnostics.Append(req.Config.GetAttribute(ctx, path.Root("redeploy_trigger"), &configured)...)
+	if resp.Diagnostics.HasError() {
+		return
+	}
+	if configured.IsUnknown() {
+		// The configured value only becomes known at apply time, and a planned
+		// value may not contradict the configuration. Update resolves it then.
+		return
+	}
+
+	trigger, diags := resolveRedeployTrigger(ctx, req.Config, "redeploy_on_update")
+	resp.Diagnostics.Append(diags...)
+	if resp.Diagnostics.HasError() {
+		return
+	}
+
+	resp.Diagnostics.Append(resp.Plan.SetAttribute(ctx, path.Root("redeploy_trigger"), types.StringValue(trigger))...)
+
+	// Keep the deprecated mirror in sync when the practitioner did not set it, so
+	// state never claims redeploy_on_update = true while the trigger says never.
+	var legacy types.Bool
+	resp.Diagnostics.Append(req.Config.GetAttribute(ctx, path.Root("redeploy_on_update"), &legacy)...)
+	if resp.Diagnostics.HasError() {
+		return
+	}
+	if legacy.IsNull() {
+		resp.Diagnostics.Append(resp.Plan.SetAttribute(ctx, path.Root("redeploy_on_update"), types.BoolValue(trigger != redeployTriggerNever))...)
+	}
+
+	if req.State.Raw.IsNull() {
+		// Create: Create() seeds last_redeploy itself.
+		return
+	}
+
+	var plan, state projectModel
+	resp.Diagnostics.Append(req.Plan.Get(ctx, &plan)...)
+	resp.Diagnostics.Append(req.State.Get(ctx, &state)...)
+	if resp.Diagnostics.HasError() {
+		return
+	}
+
+	contentChanged := !plan.Compose.Equal(state.Compose) || !plan.Env.Equal(state.Env)
+	if !redeployPlanned(trigger, contentChanged, !req.Plan.Raw.Equal(req.State.Raw)) {
+		return
+	}
+	if !projectRedeployAllowed(plan) {
+		return
+	}
+	resp.Diagnostics.Append(resp.Plan.SetAttribute(ctx, path.Root("last_redeploy"), types.StringUnknown())...)
+}
+
+// planFailIfNameExists enforces the optional fail_if_name_exists check during the
+// plan phase. When enabled, creating a project whose name already exists in the
 // environment (a registered project or a folder Arcane has discovered on disk)
 // fails the plan instead of letting Arcane silently auto-rename the project with
 // a numeric suffix, which would make the resource non-deterministic.
-func (r *ProjectResource) ModifyPlan(ctx context.Context, req resource.ModifyPlanRequest, resp *resource.ModifyPlanResponse) {
+func (r *ProjectResource) planFailIfNameExists(ctx context.Context, req resource.ModifyPlanRequest, resp *resource.ModifyPlanResponse) {
 	if r.client == nil {
 		return
 	}
-	if !req.State.Raw.IsNull() || req.Plan.Raw.IsNull() {
+	if !req.State.Raw.IsNull() {
 		return
 	}
 
@@ -127,6 +248,8 @@ type projectModel struct {
 	Running          types.Bool   `tfsdk:"running"`
 	Archived         types.Bool   `tfsdk:"archived"`
 	RedeployOnUpdate types.Bool   `tfsdk:"redeploy_on_update"`
+	RedeployTrigger  types.String `tfsdk:"redeploy_trigger"`
+	LastRedeploy     types.String `tfsdk:"last_redeploy"`
 	PullOnUpdate     types.Bool   `tfsdk:"pull_on_update"`
 	RemoveOrphans    types.Bool   `tfsdk:"remove_orphans"`
 	FailIfNameExists types.Bool   `tfsdk:"fail_if_name_exists"`
@@ -151,6 +274,12 @@ func (r *ProjectResource) Create(ctx context.Context, req resource.CreateRequest
 	}
 	if boolValue(plan.Archived) && boolValue(plan.Running) {
 		resp.Diagnostics.AddError("invalid project lifecycle", "archived cannot be true when running is true")
+		return
+	}
+
+	redeployTrigger, redeployOnUpdate, diags := resolvedRedeployAttrs(ctx, req.Config, "redeploy_on_update", plan.RedeployTrigger, plan.RedeployOnUpdate)
+	resp.Diagnostics.Append(diags...)
+	if resp.Diagnostics.HasError() {
 		return
 	}
 
@@ -224,7 +353,11 @@ func (r *ProjectResource) Create(ctx context.Context, req resource.CreateRequest
 		RemoveFiles:      plan.RemoveFiles,
 		RemoveVolumes:    plan.RemoveVolumes,
 		Running:          plan.Running,
-		RedeployOnUpdate: plan.RedeployOnUpdate,
+		RedeployOnUpdate: redeployOnUpdate,
+		RedeployTrigger:  redeployTrigger,
+		// Create deploys through "up", not "redeploy": nothing has been
+		// redeployed yet.
+		LastRedeploy:     types.StringNull(),
 		PullOnUpdate:     plan.PullOnUpdate,
 		RemoveOrphans:    plan.RemoveOrphans,
 		FailIfNameExists: plan.FailIfNameExists,
@@ -286,8 +419,18 @@ func (r *ProjectResource) Update(ctx context.Context, req resource.UpdateRequest
 		return
 	}
 
+	redeployTrigger, redeployOnUpdate, diags := resolvedRedeployAttrs(ctx, req.Config, "redeploy_on_update", plan.RedeployTrigger, plan.RedeployOnUpdate)
+	resp.Diagnostics.Append(diags...)
+	if resp.Diagnostics.HasError() {
+		return
+	}
+
 	envID := state.EnvironmentID.ValueString()
 	projID := state.ID.ValueString()
+	// Compare against the prior state before it gets overwritten below: the
+	// request body always carries the compose/env content, so it cannot tell us
+	// whether the content actually changed.
+	contentChanged := !plan.Compose.Equal(state.Compose) || !plan.Env.Equal(state.Env)
 	body := sdkclient.ProjectUpdateRequest{}
 	if !plan.Compose.IsNull() && !plan.Compose.IsUnknown() {
 		v := plan.Compose.ValueString()
@@ -308,37 +451,26 @@ func (r *ProjectResource) Update(ctx context.Context, req resource.UpdateRequest
 		return
 	}
 
-	// Redeploy if compose/env changed and enabled (default true) and desired running true/unspecified
-	changedContent := (body.ComposeContent != nil) || (body.EnvContent != nil)
-	if changedContent {
+	// Redeploy according to redeploy_trigger, as long as the project is meant to
+	// be up. The trigger is resolved during plan (see planRedeploy), so the plan
+	// value is authoritative here.
+	redeployed := false
+	if shouldRedeploy(redeployTrigger.ValueString(), contentChanged) && projectRedeployAllowed(plan) {
 		// Optionally pull first
-		pull := false
-		if !plan.PullOnUpdate.IsNull() && !plan.PullOnUpdate.IsUnknown() {
-			pull = plan.PullOnUpdate.ValueBool()
-		}
-		if pull {
+		if boolValue(plan.PullOnUpdate) {
 			if err := r.client.PullProjectImages(ctx, envID, projID); err != nil {
 				resp.Diagnostics.AddError("project image pull failed", err.Error())
 				return
 			}
 		}
 
-		redeploy := true
-		if !plan.RedeployOnUpdate.IsNull() && !plan.RedeployOnUpdate.IsUnknown() {
-			redeploy = plan.RedeployOnUpdate.ValueBool()
+		if err := r.client.RedeployProject(ctx, envID, projID); err != nil {
+			resp.Diagnostics.AddError("project redeploy failed", err.Error())
+			return
 		}
-		runningDesired := true
-		if !plan.Running.IsNull() && !plan.Running.IsUnknown() {
-			runningDesired = plan.Running.ValueBool()
-		}
-		if redeploy && runningDesired {
-			if err := r.client.RedeployProject(ctx, envID, projID); err != nil {
-				resp.Diagnostics.AddError("project redeploy failed", err.Error())
-				return
-			}
-			if det, derr := r.client.GetProject(ctx, envID, projID); derr == nil {
-				out.Status = det.Status
-			}
+		redeployed = true
+		if det, derr := r.client.GetProject(ctx, envID, projID); derr == nil {
+			out.Status = det.Status
 		}
 	}
 
@@ -416,7 +548,19 @@ func (r *ProjectResource) Update(ctx context.Context, req resource.UpdateRequest
 	state.Compose = plan.Compose
 	state.Env = plan.Env
 	state.PullOnUpdate = plan.PullOnUpdate
-	state.RedeployOnUpdate = plan.RedeployOnUpdate
+	state.RedeployOnUpdate = redeployOnUpdate
+	state.RedeployTrigger = redeployTrigger
+	// last_redeploy only moves when the plan left it unknown (planRedeploy marks
+	// it whenever a redeploy is expected); otherwise the planned value, which
+	// UseStateForUnknown pinned to the prior state, has to be written back
+	// verbatim or the apply is inconsistent with the plan.
+	if plan.LastRedeploy.IsUnknown() {
+		if redeployed {
+			state.LastRedeploy = types.StringValue(redeployTimestamp())
+		}
+	} else {
+		state.LastRedeploy = plan.LastRedeploy
+	}
 	state.RemoveOrphans = plan.RemoveOrphans
 	state.FailIfNameExists = plan.FailIfNameExists
 	state.RemoveFiles = plan.RemoveFiles
@@ -443,6 +587,19 @@ func (r *ProjectResource) Delete(ctx context.Context, req resource.DeleteRequest
 		}
 		resp.Diagnostics.AddError("destroy project failed", err.Error())
 	}
+}
+
+// projectRedeployAllowed reports whether redeploying matches the desired state.
+// Redeploying brings a project up, so it must not run against a project that is
+// archived or explicitly configured as not running.
+func projectRedeployAllowed(m projectModel) bool {
+	if boolValue(m.Archived) {
+		return false
+	}
+	if !m.Running.IsNull() && !m.Running.IsUnknown() {
+		return m.Running.ValueBool()
+	}
+	return true
 }
 
 // projectDeployOpts builds the optional deploy body for the "up" endpoint from

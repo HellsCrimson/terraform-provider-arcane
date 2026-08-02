@@ -166,15 +166,16 @@ func (r *TemplateRegistryResource) Update(ctx context.Context, req resource.Upda
 		Enabled:     plan.Enabled.ValueBool(),
 	}
 
-	registry, err := r.client.UpdateTemplateRegistry(ctx, state.ID.ValueString(), body)
-	if err != nil {
+	// The response is not read back: id is the only attribute it carries, and it
+	// keeps its planned value because UseStateForUnknown makes the plan promise
+	// the prior one — rewriting it here would fail the apply as an inconsistent
+	// result.
+	if _, err := r.client.UpdateTemplateRegistry(ctx, state.ID.ValueString(), body); err != nil {
 		resp.Diagnostics.AddError("update template registry failed", err.Error())
 		return
 	}
 
 	state = plan
-	state.ID = types.StringValue(registry.ID)
-
 	resp.Diagnostics.Append(resp.State.Set(ctx, &state)...)
 }
 

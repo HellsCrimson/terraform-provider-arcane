@@ -25,6 +25,30 @@
 // ("immutable") while settable attributes lack RequiresReplace, so editing them
 // routes to the erroring Update instead of forcing a clean replace.
 //
+// The third check covers the mirror-image bug on the Computed side. Terraform
+// fills computed attributes in the plan from the prior state, and the framework
+// turns them into "known after apply" only when the *configuration* already
+// changed something. So a Computed attribute that Update rewrites from the API
+// response is safe in a plain config-driven update, but not when the plan can
+// exist without a config change:
+//
+//   - the resource writes to the plan itself (a ModifyPlan that calls
+//     Plan.SetAttribute can produce a diff Terraform never derived from config),
+//     or
+//   - the attribute carries UseStateForUnknown, which puts the prior value back
+//     even after the framework marked it unknown.
+//
+// Either way the plan promises the prior value and the update lands a different
+// one:
+//
+//	Error: Provider produced inconsistent result after apply
+//	... produced an unexpected new value: .status: was cty.StringVal("stopped"),
+//	but now cty.StringVal("running").
+//
+// The fix is to plan a value for the attribute — normally an unknown, through
+// planServerComputedUnknown — so an attribute that is planned anywhere in its
+// file is treated as handled.
+//
 // Usage:
 //
 //	go run ./tools/statelint [dir-or-file ...]   # defaults to ./internal/provider
@@ -47,10 +71,18 @@ import (
 
 // attrInfo captures the schema properties of a single top-level attribute.
 type attrInfo struct {
-	optional        bool
-	computed        bool
-	required        bool
-	requiresReplace bool
+	optional           bool
+	computed           bool
+	required           bool
+	requiresReplace    bool
+	useStateForUnknown bool
+}
+
+// serverDerived reports whether this attribute is one Terraform expects the
+// provider to plan: purely Computed, so it never has a configuration value the
+// plan could be built from.
+func (a attrInfo) serverDerived() bool {
+	return a.computed && !a.optional && !a.required
 }
 
 // settable reports whether a change to this attribute routes through Update in
@@ -71,16 +103,19 @@ type updateInfo struct {
 	immutable bool            // no State.Set + an AddError (network/volume shape)
 	topFields map[string]bool // Go fields assigned on every path
 	anyFields map[string]bool // Go fields assigned on some path
+	apiFields map[string]bool // Go fields assigned from something other than the plan
 	pos       token.Position
 }
 
 // resourceInfo bundles everything the analysis needs for one receiver type.
 type resourceInfo struct {
-	recv   string
-	schema map[string]attrInfo // tfsdk name -> info
-	update updateInfo
-	models map[string]map[string]string // modelType -> (goField -> tfsdk name)
-	file   string
+	recv         string
+	schema       map[string]attrInfo // tfsdk name -> info
+	update       updateInfo
+	models       map[string]map[string]string // modelType -> (goField -> tfsdk name)
+	file         string
+	planWrites   bool            // some method on this receiver writes to the plan
+	plannedAttrs map[string]bool // tfsdk names this file plans a value for
 }
 
 type finding struct {
@@ -153,6 +188,8 @@ func analyzeFile(fset *token.FileSet, path string) ([]finding, error) {
 	models := map[string]map[string]string{} // modelType -> goField -> tfsdk
 	schemas := map[string]map[string]attrInfo{}
 	updates := map[string]updateInfo{}
+	planWrites := map[string]bool{} // receiver -> writes to the plan somewhere
+	planned := plannedAttrs(file)   // tfsdk names this file plans a value for
 
 	for _, decl := range file.Decls {
 		switch d := decl.(type) {
@@ -174,6 +211,9 @@ func analyzeFile(fset *token.FileSet, path string) ([]finding, error) {
 			recv := receiverType(d)
 			if recv == "" {
 				continue
+			}
+			if writesPlan(d) {
+				planWrites[recv] = true
 			}
 			switch d.Name.Name {
 			case "Schema":
@@ -197,7 +237,10 @@ func analyzeFile(fset *token.FileSet, path string) ([]finding, error) {
 		if upd.modelType == "" {
 			upd.modelType = resolveModel(schema, models)
 		}
-		ri := resourceInfo{recv: recv, schema: schema, update: upd, models: models, file: path}
+		ri := resourceInfo{
+			recv: recv, schema: schema, update: upd, models: models, file: path,
+			planWrites: planWrites[recv], plannedAttrs: planned,
+		}
 		findings = append(findings, ri.analyze()...)
 	}
 	return findings, nil
@@ -321,19 +364,121 @@ func parseAttr(v ast.Expr) attrInfo {
 			info.required = isTrue(kv.Value)
 		}
 	}
-	// RequiresReplace may appear nested inside PlanModifiers.
+	// Plan modifiers appear nested inside PlanModifiers.
 	ast.Inspect(v, func(n ast.Node) bool {
-		if sel, ok := n.(*ast.SelectorExpr); ok && sel.Sel.Name == "RequiresReplace" {
+		sel, ok := n.(*ast.SelectorExpr)
+		if !ok {
+			return true
+		}
+		switch sel.Sel.Name {
+		case "RequiresReplace":
 			info.requiresReplace = true
+		case "UseStateForUnknown":
+			info.useStateForUnknown = true
 		}
 		return true
 	})
 	return info
 }
 
+// writesPlan reports whether fn assigns anything into the plan (`*.Plan.Set*`),
+// i.e. whether it can produce a diff Terraform did not derive from the config.
+func writesPlan(fn *ast.FuncDecl) bool {
+	found := false
+	ast.Inspect(fn, func(n ast.Node) bool {
+		call, ok := n.(*ast.CallExpr)
+		if !ok {
+			return true
+		}
+		sel, ok := call.Fun.(*ast.SelectorExpr)
+		if !ok || !strings.HasPrefix(sel.Sel.Name, "Set") {
+			return true
+		}
+		if inner, ok := sel.X.(*ast.SelectorExpr); ok && inner.Sel.Name == "Plan" {
+			found = true
+		}
+		return true
+	})
+	return found
+}
+
+// plannedAttrs collects the attributes this file plans a value for, in either
+// of the two idioms used here: a direct `Plan.SetAttribute(ctx, path.Root("x"),
+// v)` call, or a table entry pairing the name with a typed unknown, as in
+// `{"status", types.StringUnknown()}`.
+func plannedAttrs(file *ast.File) map[string]bool {
+	out := map[string]bool{}
+
+	ast.Inspect(file, func(n ast.Node) bool {
+		switch node := n.(type) {
+		case *ast.CallExpr:
+			sel, ok := node.Fun.(*ast.SelectorExpr)
+			if !ok || sel.Sel.Name != "SetAttribute" {
+				return true
+			}
+			if inner, ok := sel.X.(*ast.SelectorExpr); !ok || inner.Sel.Name != "Plan" {
+				return true
+			}
+			for _, arg := range node.Args {
+				if name, ok := pathRootArg(arg); ok {
+					out[name] = true
+				}
+			}
+		case *ast.CompositeLit:
+			for _, elt := range node.Elts {
+				if name, ok := unknownEntry(elt); ok {
+					out[name] = true
+				}
+			}
+		}
+		return true
+	})
+	return out
+}
+
+// pathRootArg returns the attribute name from a `path.Root("x")` expression.
+func pathRootArg(e ast.Expr) (string, bool) {
+	call, ok := e.(*ast.CallExpr)
+	if !ok {
+		return "", false
+	}
+	sel, ok := call.Fun.(*ast.SelectorExpr)
+	if !ok || sel.Sel.Name != "Root" || len(call.Args) != 1 {
+		return "", false
+	}
+	return stringLit(call.Args[0])
+}
+
+// unknownEntry returns the attribute name from a table entry that pairs a name
+// with an unknown value, e.g. `{"status", types.StringUnknown()}`.
+func unknownEntry(e ast.Expr) (string, bool) {
+	cl, ok := e.(*ast.CompositeLit)
+	if !ok {
+		return "", false
+	}
+	name, hasName := "", false
+	hasUnknown := false
+	for _, sub := range cl.Elts {
+		if s, ok := stringLit(sub); ok {
+			name, hasName = s, true
+			continue
+		}
+		ast.Inspect(sub, func(n ast.Node) bool {
+			if sel, ok := n.(*ast.SelectorExpr); ok && strings.HasSuffix(sel.Sel.Name, "Unknown") {
+				hasUnknown = true
+			}
+			return true
+		})
+	}
+	return name, hasName && hasUnknown
+}
+
 // parseUpdate walks an Update handler and records how it treats its state var.
 func parseUpdate(fset *token.FileSet, d *ast.FuncDecl) updateInfo {
-	info := updateInfo{found: true, pos: fset.Position(d.Pos()), topFields: map[string]bool{}, anyFields: map[string]bool{}}
+	info := updateInfo{
+		found: true, pos: fset.Position(d.Pos()),
+		topFields: map[string]bool{}, anyFields: map[string]bool{}, apiFields: map[string]bool{},
+	}
 	if d.Body == nil {
 		return info
 	}
@@ -364,6 +509,7 @@ func parseUpdate(fset *token.FileSet, d *ast.FuncDecl) updateInfo {
 	hasStateSet := false
 	hasAddError := false
 	priorStateVar := ""
+	planVar := ""
 	ast.Inspect(d.Body, func(n ast.Node) bool {
 		call, ok := n.(*ast.CallExpr)
 		if !ok {
@@ -375,6 +521,9 @@ func parseUpdate(fset *token.FileSet, d *ast.FuncDecl) updateInfo {
 		}
 		if sel.Sel.Name == "AddError" {
 			hasAddError = true
+		}
+		if v, ok := stateAddrArg(sel, call, "Get"); ok && isPlanSelector(sel.X) {
+			planVar = v
 		}
 		if v, ok := stateAddrArg(sel, call, "Set"); ok && isStateSelector(sel.X) {
 			hasStateSet = true
@@ -402,7 +551,158 @@ func parseUpdate(fset *token.FileSet, d *ast.FuncDecl) updateInfo {
 	// Field assignment coverage.
 	info.topFields = assignedAllPaths(d.Body, info.stateVar)
 	info.anyFields = assignedAny(d.Body, info.stateVar)
+	info.apiFields = assignedFromAPI(d.Body, info.stateVar, planVar, priorStateVar)
 	return info
+}
+
+// isPlanSelector reports whether expr denotes `req.Plan`.
+func isPlanSelector(expr ast.Expr) bool {
+	sel, ok := expr.(*ast.SelectorExpr)
+	return ok && sel.Sel.Name == "Plan"
+}
+
+// assignedFromAPI returns the state fields assigned a value that comes from
+// neither the plan nor the prior state — in practice the API response, a freshly
+// computed hash or a timestamp. Those are the values the plan has to predict (or
+// leave unknown), since Terraform compares the applied state against the planned
+// one.
+func assignedFromAPI(body *ast.BlockStmt, stateVar, planVar, priorStateVar string) map[string]bool {
+	out := map[string]bool{}
+	known := plannedSources(body, stateVar, planVar, priorStateVar)
+	record := func(field string, rhs ast.Expr) {
+		if field == "" || referencesAny(rhs, known) {
+			return
+		}
+		out[field] = true
+	}
+
+	ast.Inspect(body, func(n ast.Node) bool {
+		as, ok := n.(*ast.AssignStmt)
+		if !ok {
+			return true
+		}
+		for i, lhs := range as.Lhs {
+			var rhs ast.Expr
+			if i < len(as.Rhs) {
+				rhs = as.Rhs[i]
+			}
+			if f := stateField(lhs, stateVar); f != "" {
+				record(f, rhs)
+				continue
+			}
+			// Wholesale rebuild: `state := model{Field: value, ...}`.
+			id, ok := lhs.(*ast.Ident)
+			if !ok || id.Name != stateVar {
+				continue
+			}
+			cl, ok := rhs.(*ast.CompositeLit)
+			if !ok {
+				continue
+			}
+			for _, elt := range cl.Elts {
+				kv, ok := elt.(*ast.KeyValueExpr)
+				if !ok {
+					continue
+				}
+				key, ok := kv.Key.(*ast.Ident)
+				if !ok {
+					continue
+				}
+				record(key.Name, kv.Value)
+			}
+		}
+		return true
+	})
+	return out
+}
+
+// plannedSources returns the variables whose value the plan already knows: the
+// plan and prior-state variables themselves, plus locals assigned exactly once
+// from one of them (`envID := state.EnvironmentID.ValueString()`). Locals
+// assigned more than once are left out — a second assignment may well be the one
+// that pulls in an API value.
+func plannedSources(body *ast.BlockStmt, stateVar, planVar, priorStateVar string) map[string]bool {
+	known := map[string]bool{}
+	for _, v := range []string{planVar, priorStateVar} {
+		if v != "" {
+			known[v] = true
+		}
+	}
+
+	assigns := map[string][]ast.Expr{}
+	collect := func(name string, rhs ast.Expr) {
+		if name == "" || name == "_" || name == stateVar || rhs == nil {
+			return
+		}
+		assigns[name] = append(assigns[name], rhs)
+	}
+	ast.Inspect(body, func(n ast.Node) bool {
+		switch node := n.(type) {
+		case *ast.AssignStmt:
+			for i, lhs := range node.Lhs {
+				id, ok := lhs.(*ast.Ident)
+				if !ok || i >= len(node.Rhs) {
+					continue
+				}
+				collect(id.Name, node.Rhs[i])
+			}
+		case *ast.ValueSpec:
+			for i, name := range node.Names {
+				if i < len(node.Values) {
+					collect(name.Name, node.Values[i])
+				}
+			}
+		}
+		return true
+	})
+
+	// Locals can be derived through other locals, so iterate to a fixpoint.
+	for changed := true; changed; {
+		changed = false
+		for name, rhs := range assigns {
+			if known[name] || len(rhs) != 1 {
+				continue
+			}
+			if referencesAny(rhs[0], known) && !callsAPI(rhs[0]) {
+				known[name] = true
+				changed = true
+			}
+		}
+	}
+	return known
+}
+
+// callsAPI reports whether expr calls the Arcane client. Such a value is not
+// predictable from the plan even when the *arguments* come from it, so it must
+// not turn its variable into a planned source.
+func callsAPI(expr ast.Expr) bool {
+	found := false
+	ast.Inspect(expr, func(n ast.Node) bool {
+		sel, ok := n.(*ast.SelectorExpr)
+		if !ok {
+			return true
+		}
+		if inner, ok := sel.X.(*ast.SelectorExpr); ok && inner.Sel.Name == "client" {
+			found = true
+		}
+		return true
+	})
+	return found
+}
+
+// referencesAny reports whether expr mentions any of the given variables.
+func referencesAny(expr ast.Expr, names map[string]bool) bool {
+	if expr == nil || len(names) == 0 {
+		return false
+	}
+	found := false
+	ast.Inspect(expr, func(n ast.Node) bool {
+		if id, ok := n.(*ast.Ident); ok && names[id.Name] {
+			found = true
+		}
+		return true
+	})
+	return found
 }
 
 // stateAddrArg returns the identifier X from a call `<recv>.<method>(_, &X)`
@@ -530,6 +830,12 @@ func (ri resourceInfo) analyze() []finding {
 
 	for _, attr := range names {
 		info := ri.schema[attr]
+		if info.serverDerived() {
+			if f, ok := ri.serverDerivedFinding(attr, info, tfsdkToField); ok {
+				findings = append(findings, f)
+			}
+			continue
+		}
 		if !info.settable() {
 			continue
 		}
@@ -578,6 +884,36 @@ func (ri resourceInfo) analyze() []finding {
 	// Stable order within a file.
 	sort.Slice(findings, func(i, j int) bool { return findings[i].attr < findings[j].attr })
 	return findings
+}
+
+// serverDerivedFinding reports a Computed attribute that Update rewrites from
+// the API response while the plan still promises the prior value.
+func (ri resourceInfo) serverDerivedFinding(attr string, info attrInfo, tfsdkToField map[string]string) (finding, bool) {
+	goField, ok := tfsdkToField[attr]
+	if !ok {
+		return finding{}, false
+	}
+	if !ri.update.apiFields[goField] {
+		return finding{}, false // Update leaves it alone, so the planned value holds
+	}
+	if ri.plannedAttrs[attr] {
+		return finding{}, false // the provider plans a value for it
+	}
+	if !ri.planWrites && !info.useStateForUnknown {
+		// Every plan for this attribute comes from a configuration change, and
+		// the framework already marked it unknown.
+		return finding{}, false
+	}
+
+	reason := "the resource writes to the plan itself, so an update can be planned without a configuration change"
+	if info.useStateForUnknown {
+		reason = "UseStateForUnknown pins it to the prior value even when the framework marked it unknown"
+	}
+	return finding{
+		file: ri.file, attr: attr, goField: goField, schema: "Computed",
+		kind: "computed-not-planned",
+		fix:  fmt.Sprintf("%s; plan it as unknown in ModifyPlan (planServerComputedUnknown) or stop assigning state.%s from the API response", reason, goField),
+	}, true
 }
 
 func schemaKind(info attrInfo) string {

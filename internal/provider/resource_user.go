@@ -304,7 +304,9 @@ func (r *UserResource) Update(ctx context.Context, req resource.UpdateRequest, r
 	}
 
 	state.Username = types.StringValue(u.Username)
-	state.CreatedAt = stringOrNull(u.CreatedAt)
+	// created_at keeps its planned value: UseStateForUnknown makes the plan
+	// promise the prior one, so rewriting it here would fail the apply as an
+	// inconsistent result.
 	state.UpdatedAt = stringOrNull(u.UpdatedAt)
 	if !plan.DisplayName.IsNull() && !plan.DisplayName.IsUnknown() && u.Display != nil {
 		state.DisplayName = types.StringValue(*u.Display)
