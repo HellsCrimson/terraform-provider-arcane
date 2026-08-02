@@ -99,6 +99,19 @@ func (r *ProjectResource) Configure(_ context.Context, req resource.ConfigureReq
 	}
 }
 
+// projectServerComputed lists the attributes Update rewrites from the API
+// response. Keep it in sync with the assignments at the end of Update; see
+// planServerComputedUnknown for what goes wrong when an attribute is missing.
+var projectServerComputed = []serverComputedAttr{
+	{"path", types.StringUnknown()},
+	{"status", types.StringUnknown()},
+	{"service_count", types.Int64Unknown()},
+	{"running_count", types.Int64Unknown()},
+	{"archived_at", types.StringUnknown()},
+	{"is_discovered", types.BoolUnknown()},
+	{"redeploy_disabled", types.BoolUnknown()},
+}
+
 // ModifyPlan resolves the effective redeploy_trigger and enforces the optional
 // fail_if_name_exists check during the plan phase.
 func (r *ProjectResource) ModifyPlan(ctx context.Context, req resource.ModifyPlanRequest, resp *resource.ModifyPlanResponse) {
@@ -113,6 +126,12 @@ func (r *ProjectResource) ModifyPlan(ctx context.Context, req resource.ModifyPla
 	}
 
 	r.planFailIfNameExists(ctx, req, resp)
+	if resp.Diagnostics.HasError() {
+		return
+	}
+
+	// Last: it keys off the plan the steps above produced.
+	planServerComputedUnknown(ctx, req, resp, projectServerComputed)
 }
 
 // planRedeploy writes the effective redeploy trigger into the plan and, when

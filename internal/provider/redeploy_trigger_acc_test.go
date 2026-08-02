@@ -451,30 +451,6 @@ func TestAccArcaneProject_redeployTriggerUpgradeKeepsLegacyOptOut(t *testing.T) 
 	})
 }
 
-// writeProjectPathUpgradeFixtures writes the project_path fixtures with a
-// long-lived container command. The shared fixtures exit after a second, which
-// lets the project status reported by Arcane drift between the pre-feature apply
-// and the upgrade apply; the test framework applies with -refresh=false, so that
-// drift surfaces as an inconsistent-result error on status/running_count, which
-// has nothing to do with the trigger under test here.
-func writeProjectPathUpgradeFixtures(t *testing.T, suffix string) {
-	t.Helper()
-
-	dir := testAccFixtureDir(t)
-	compose := fmt.Sprintf(`services:
-  app:
-    image: alpine:latest
-    command: ["sh", "-c", "echo project-path-upgrade-%s && sleep 300"]
-`, suffix)
-
-	if err := os.WriteFile(filepath.Join(dir, "docker-compose.yml"), []byte(compose), 0o600); err != nil {
-		t.Fatalf("writing compose fixture: %s", err)
-	}
-	if err := os.WriteFile(filepath.Join(dir, ".env"), []byte(fmt.Sprintf("TFACC_SUFFIX=%s\n", suffix)), 0o600); err != nil {
-		t.Fatalf("writing env fixture: %s", err)
-	}
-}
-
 // TestAccArcaneProjectPath_redeployTriggerUpgradeFromPreFeatureState is the same
 // upgrade for arcane_project_path, which never had the deprecated boolean: the
 // resolved "default" has to reproduce the old unconditional behaviour, so
@@ -488,7 +464,7 @@ func TestAccArcaneProjectPath_redeployTriggerUpgradeFromPreFeatureState(t *testi
 		PreCheck: func() { testAccPreCheck(t) },
 		Steps: []resource.TestStep{
 			{
-				PreConfig:         func() { writeProjectPathUpgradeFixtures(t, "1") },
+				PreConfig:         func() { writeProjectPathFixtures(t, "1") },
 				ExternalProviders: redeployTriggerPreFeatureProvider(),
 				Config:            testAccProjectPathRedeployTriggerConfig(name, ""),
 				Check: resource.ComposeAggregateTestCheckFunc(
@@ -498,7 +474,7 @@ func TestAccArcaneProjectPath_redeployTriggerUpgradeFromPreFeatureState(t *testi
 			},
 			{
 				// Files untouched: the upgrade alone must not redeploy.
-				PreConfig:                func() { writeProjectPathUpgradeFixtures(t, "1") },
+				PreConfig:                func() { writeProjectPathFixtures(t, "1") },
 				ProtoV6ProviderFactories: testAccProtoV6ProviderFactories,
 				Config:                   testAccProjectPathRedeployTriggerConfig(name, ""),
 				Check: resource.ComposeAggregateTestCheckFunc(
@@ -508,7 +484,7 @@ func TestAccArcaneProjectPath_redeployTriggerUpgradeFromPreFeatureState(t *testi
 			},
 			{
 				// And the pre-upgrade behaviour is intact afterwards.
-				PreConfig:                func() { writeProjectPathUpgradeFixtures(t, "2") },
+				PreConfig:                func() { writeProjectPathFixtures(t, "2") },
 				ProtoV6ProviderFactories: testAccProtoV6ProviderFactories,
 				Config:                   testAccProjectPathRedeployTriggerConfig(name, ""),
 				Check: resource.ComposeAggregateTestCheckFunc(

@@ -265,7 +265,9 @@ func (r *RegistryResource) Update(ctx context.Context, req resource.UpdateReques
 	} else {
 		state.AWSRegion = plan.AWSRegion
 	}
-	state.CreatedAt = types.StringValue(reg.CreatedAt)
+	// created_at keeps its planned value: UseStateForUnknown makes the plan
+	// promise the prior one, so rewriting it here would fail the apply as an
+	// inconsistent result.
 	state.UpdatedAt = types.StringValue(reg.UpdatedAt)
 	// Keep token in state if provided
 	if !plan.Token.IsNull() && !plan.Token.IsUnknown() && plan.Token.ValueString() != "" {

@@ -113,14 +113,37 @@ type projectPathModel struct {
 	RemoveVolumes   types.Bool   `tfsdk:"remove_volumes"`
 }
 
-// ModifyPlan loads compose/env file contents into computed attributes so file
-// changes are detected during planning, and resolves the redeploy trigger.
+// projectPathServerComputed lists the attributes Update rewrites from the API
+// response. Keep it in sync with the assignments in Update; see
+// planServerComputedUnknown for what goes wrong when an attribute is missing.
+var projectPathServerComputed = []serverComputedAttr{
+	{"path", types.StringUnknown()},
+	{"status", types.StringUnknown()},
+	{"service_count", types.Int64Unknown()},
+	{"running_count", types.Int64Unknown()},
+}
+
+// ModifyPlan plans the content and redeploy attributes, then the attributes the
+// resulting update would rewrite from the API response.
 func (r *ProjectPathResource) ModifyPlan(ctx context.Context, req resource.ModifyPlanRequest, resp *resource.ModifyPlanResponse) {
 	if req.Plan.Raw.IsNull() {
 		// Destroy plan: nothing to modify.
 		return
 	}
 
+	r.planContentAndRedeploy(ctx, req, resp)
+	if resp.Diagnostics.HasError() {
+		return
+	}
+
+	// Last: it keys off the plan the step above produced.
+	planServerComputedUnknown(ctx, req, resp, projectPathServerComputed)
+}
+
+// planContentAndRedeploy loads compose/env file contents into computed
+// attributes so file changes are detected during planning, and resolves the
+// redeploy trigger.
+func (r *ProjectPathResource) planContentAndRedeploy(ctx context.Context, req resource.ModifyPlanRequest, resp *resource.ModifyPlanResponse) {
 	var configured types.String
 	resp.Diagnostics.Append(req.Config.GetAttribute(ctx, path.Root("redeploy_trigger"), &configured)...)
 	if resp.Diagnostics.HasError() {

@@ -194,7 +194,9 @@ func (r *TemplateResource) Update(ctx context.Context, req resource.UpdateReques
 	}
 
 	state = plan
-	state.ID = types.StringValue(template.ID)
+	// id keeps its planned value: UseStateForUnknown makes the plan promise the
+	// prior one, so rewriting it here would fail the apply as an inconsistent
+	// result.
 	state.IsCustom = types.BoolValue(template.IsCustom)
 	state.IsRemote = types.BoolValue(template.IsRemote)
 
