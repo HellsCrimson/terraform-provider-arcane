@@ -25,6 +25,7 @@ resource "arcane_project" "demo" {
 - `pull_on_update` (Bool, Optional) — when true, pulls images before each redeploy (default false).
 - `remove_orphans` (Bool, Optional) — when deploying (compose up), remove containers for services not defined in the compose file.
 - `running` (Bool, Optional) — when true, ensures the project is running (compose up); when false, brings it down. If unset, lifecycle is not managed.
+- `stop_before_rename` (Bool, Optional) — when true, a rename stops the project, renames it and starts it again in the same apply (default false). See [Renaming a project](#renaming-a-project).
 - `fail_if_name_exists` (Bool, Optional) — when true, the plan fails if a project with the same `name` already exists in the environment (including folders Arcane has discovered on disk), instead of letting Arcane auto-rename the new project with a numeric suffix (default false). The check runs during the plan phase, so the collision is reported before any change is applied.
 - `remove_files` (Bool, Optional) — remove files on destroy.
 - `remove_volumes` (Bool, Optional) — remove volumes on destroy.
@@ -69,6 +70,41 @@ a change on every plan**, even a plan that would otherwise be empty:
 
 That is inherent to "redeploy unconditionally"; the other trigger values keep
 producing empty plans when nothing changed.
+
+## Renaming a project
+
+Arcane only renames a project that is stopped; renaming a running one is
+rejected by the API:
+
+```
+project must be stopped before renaming (current status: running)
+```
+
+The provider checks the project's current status during the **plan**, so a
+rename that would be rejected fails before anything is applied:
+
+```
+Error: rename requires a stopped project
+
+  with arcane_project.demo,
+  on main.tf line 3, in resource "arcane_project" "demo":
+   3:   name = "demo-renamed"
+
+Renaming "demo" to "demo-renamed" would fail during apply: Arcane only renames
+a project that is stopped, and this one is running.
+```
+
+There are two ways to get the rename applied:
+
+- Set `stop_before_rename = true`. The provider stops the project, renames it
+  and starts it again within the same apply. The project is down for the
+  duration of the rename.
+- Set `running = false` in the same change. The provider stops the project
+  before it renames it, and the project stays down (start it again with a
+  later `running = true`).
+
+Both also apply when the same change archives the project (`archived = true`):
+archiving brings the project down, so the rename happens on a stopped project.
 
 ## Attributes Reference
 
