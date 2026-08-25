@@ -113,6 +113,10 @@ func (r *GitOpsSyncResource) Schema(_ context.Context, _ resource.SchemaRequest,
 				Optional:    true,
 				Description: "If true, fail during the plan phase when a GitOps sync with the same name already exists in the environment, instead of creating a duplicate. Defaults to false.",
 			},
+			"stop_before_rename": resourceschema.BoolAttribute{
+				Optional:    true,
+				Description: stopBeforeRenameDescription + " Applies to a project_name change, which renames the project this sync is bound to.",
+			},
 
 			// Computed fields
 			"project_id": resourceschema.StringAttribute{
@@ -161,18 +165,24 @@ func (r *GitOpsSyncResource) Configure(_ context.Context, req resource.Configure
 	}
 }
 
-// ModifyPlan enforces the optional fail_if_name_exists check during the plan
-// phase. When enabled, creating a GitOps sync whose name already exists in the
-// environment fails the plan instead of silently creating a duplicate.
+// ModifyPlan enforces the checks that belong in the plan phase: the optional
+// fail_if_name_exists guard on create, and the stop-before-rename requirement
+// a project_name change runs into.
 func (r *GitOpsSyncResource) ModifyPlan(ctx context.Context, req resource.ModifyPlanRequest, resp *resource.ModifyPlanResponse) {
-	if r.client == nil {
+	if r.client == nil || req.Plan.Raw.IsNull() {
 		return
 	}
-	// Only run on create (no prior state, non-null plan).
-	if !req.State.Raw.IsNull() || req.Plan.Raw.IsNull() {
+	if req.State.Raw.IsNull() {
+		r.planFailIfNameExists(ctx, req, resp)
 		return
 	}
+	r.planRenameRequiresStop(ctx, req, resp)
+}
 
+// planFailIfNameExists fails the plan when fail_if_name_exists is set and a
+// GitOps sync with the same name already exists in the environment, instead of
+// silently creating a duplicate.
+func (r *GitOpsSyncResource) planFailIfNameExists(ctx context.Context, req resource.ModifyPlanRequest, resp *resource.ModifyPlanResponse) {
 	var plan gitOpsSyncModel
 	resp.Diagnostics.Append(req.Plan.Get(ctx, &plan)...)
 	if resp.Diagnostics.HasError() {
@@ -204,6 +214,39 @@ func (r *GitOpsSyncResource) ModifyPlan(ctx context.Context, req resource.Modify
 	}
 }
 
+// planRenameRequiresStop fails the plan when a project_name change renames a
+// project that Arcane would refuse to rename because it is not stopped. The
+// rename is the provider's own doing: Arcane stores project_name on the sync
+// record and never renames the bound project itself, so Update does it (see
+// renameProject in project_rename.go).
+func (r *GitOpsSyncResource) planRenameRequiresStop(ctx context.Context, req resource.ModifyPlanRequest, resp *resource.ModifyPlanResponse) {
+	var plan, state gitOpsSyncModel
+	resp.Diagnostics.Append(req.Plan.Get(ctx, &plan)...)
+	resp.Diagnostics.Append(req.State.Get(ctx, &state)...)
+	if resp.Diagnostics.HasError() {
+		return
+	}
+	if plan.ID.IsUnknown() {
+		// The resource is being replaced, so the sync is recreated and its
+		// project comes from a fresh sync rather than from a rename.
+		return
+	}
+
+	planRenameRequiresStop(ctx, r.client, resp, renameCheck{
+		envID: state.EnvironmentID.ValueString(),
+		// Empty until the first sync created the project; there is nothing to
+		// rename before that, and the project is created under the new name.
+		projID: state.ProjectID.ValueString(),
+		// state.project_name holds the configured value, which is null when the
+		// user never set one: leave it empty so the API answers for the name.
+		oldName:          state.ProjectName.ValueString(),
+		newName:          plan.ProjectName,
+		stopBeforeRename: boolValue(plan.StopBeforeRename),
+		nameAttr:         "project_name",
+		remedy:           renameRemedyStopOnly,
+	})
+}
+
 type gitOpsSyncModel struct {
 	ID                   types.String `tfsdk:"id"`
 	EnvironmentID        types.String `tfsdk:"environment_id"`
@@ -223,6 +266,7 @@ type gitOpsSyncModel struct {
 	EnvironmentVariables types.Map    `tfsdk:"environment_variables"`
 	StartProject         types.Bool   `tfsdk:"start_project"`
 	FailIfNameExists     types.Bool   `tfsdk:"fail_if_name_exists"`
+	StopBeforeRename     types.Bool   `tfsdk:"stop_before_rename"`
 	ProjectID            types.String `tfsdk:"project_id"`
 	LastSyncAt           types.String `tfsdk:"last_sync_at"`
 	LastSyncCommit       types.String `tfsdk:"last_sync_commit"`
@@ -377,6 +421,7 @@ func (r *GitOpsSyncResource) Create(ctx context.Context, req resource.CreateRequ
 		EnvironmentVariables: plan.EnvironmentVariables,
 		StartProject:         plan.StartProject,     // Preserve the user's preference
 		FailIfNameExists:     plan.FailIfNameExists, // Plan-time-only guard, preserve as configured
+		StopBeforeRename:     plan.StopBeforeRename, // Rename behavior, preserve as configured
 		CreatedAt:            types.StringValue(sync.CreatedAt),
 		UpdatedAt:            types.StringValue(sync.UpdatedAt),
 	}
@@ -590,6 +635,22 @@ func (r *GitOpsSyncResource) Update(ctx context.Context, req resource.UpdateRequ
 		return
 	}
 
+	// Arcane never renames the project a sync is bound to: UpdateSync only
+	// writes project_name onto the sync record, and a sync run looks the project
+	// up by ID. So a project_name change only reaches the project because the
+	// provider renames it here, under the stopped-project rule Arcane enforces
+	// (see project_rename.go; ModifyPlan rejects renames this cannot satisfy).
+	//
+	// Only a changed project_name renames: that keeps the apply doing exactly
+	// what the plan checked, and leaves a project whose name drifted from the
+	// sync record alone until the practitioner asks for it.
+	if sync.ProjectID != nil && !plan.ProjectName.IsNull() && !plan.ProjectName.IsUnknown() && !plan.ProjectName.Equal(state.ProjectName) {
+		if err := renameProject(ctx, r.client, state.EnvironmentID.ValueString(), *sync.ProjectID, plan.ProjectName.ValueString(), boolValue(plan.StopBeforeRename)); err != nil {
+			resp.Diagnostics.AddError("rename gitops sync project failed", err.Error())
+			return
+		}
+	}
+
 	// If environment variables changed and a project exists, update the project with env content
 	if sync.ProjectID != nil && !plan.EnvironmentVariables.Equal(state.EnvironmentVariables) {
 		projectUpdateBody := sdkclient.ProjectUpdateRequest{}
@@ -662,6 +723,7 @@ func (r *GitOpsSyncResource) Update(ctx context.Context, req resource.UpdateRequ
 	state.EnvironmentVariables = plan.EnvironmentVariables
 	state.StartProject = plan.StartProject         // Preserve the user's preference
 	state.FailIfNameExists = plan.FailIfNameExists // Plan-time-only guard, preserve as configured
+	state.StopBeforeRename = plan.StopBeforeRename // Rename behavior, preserve as configured
 
 	if sync.ProjectID != nil {
 		state.ProjectID = types.StringValue(*sync.ProjectID)

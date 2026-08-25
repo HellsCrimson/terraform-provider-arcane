@@ -67,6 +67,7 @@ func (r *ProjectResource) Schema(_ context.Context, _ resource.SchemaRequest, re
 			"pull_on_update":      resourceschema.BoolAttribute{Optional: true, Computed: true, Description: "Pull images before redeploy.", Default: booldefault.StaticBool(false)},
 			"remove_orphans":      resourceschema.BoolAttribute{Optional: true, Description: "When deploying (compose up), remove containers for services not defined in the compose file."},
 			"fail_if_name_exists": resourceschema.BoolAttribute{Optional: true, Description: "If true, fail during the plan phase when a project with the same name already exists in the environment (including folders Arcane has discovered on disk), instead of letting Arcane auto-rename the new project with a numeric suffix. Defaults to false."},
+			"stop_before_rename":  resourceschema.BoolAttribute{Optional: true, Description: stopBeforeRenameDescription},
 
 			// Computed fields
 			"path":              resourceschema.StringAttribute{Computed: true},
@@ -112,8 +113,9 @@ var projectServerComputed = []serverComputedAttr{
 	{"redeploy_disabled", types.BoolUnknown()},
 }
 
-// ModifyPlan resolves the effective redeploy_trigger and enforces the optional
-// fail_if_name_exists check during the plan phase.
+// ModifyPlan resolves the effective redeploy_trigger and enforces the checks
+// that belong in the plan phase: the optional fail_if_name_exists guard and the
+// stop-before-rename requirement.
 func (r *ProjectResource) ModifyPlan(ctx context.Context, req resource.ModifyPlanRequest, resp *resource.ModifyPlanResponse) {
 	if req.Plan.Raw.IsNull() {
 		// Destroy plan: nothing to modify.
@@ -126,6 +128,11 @@ func (r *ProjectResource) ModifyPlan(ctx context.Context, req resource.ModifyPla
 	}
 
 	r.planFailIfNameExists(ctx, req, resp)
+	if resp.Diagnostics.HasError() {
+		return
+	}
+
+	r.planRenameRequiresStop(ctx, req, resp)
 	if resp.Diagnostics.HasError() {
 		return
 	}
@@ -239,6 +246,34 @@ func (r *ProjectResource) planFailIfNameExists(ctx context.Context, req resource
 	}
 }
 
+// planRenameRequiresStop fails the plan when it renames a project that Arcane
+// would refuse to rename because it is not stopped. See project_rename.go.
+func (r *ProjectResource) planRenameRequiresStop(ctx context.Context, req resource.ModifyPlanRequest, resp *resource.ModifyPlanResponse) {
+	if r.client == nil || req.State.Raw.IsNull() {
+		return
+	}
+
+	var plan, state projectModel
+	resp.Diagnostics.Append(req.Plan.Get(ctx, &plan)...)
+	resp.Diagnostics.Append(req.State.Get(ctx, &state)...)
+	if resp.Diagnostics.HasError() {
+		return
+	}
+	if plan.ID.IsUnknown() {
+		// The resource is being replaced, so the new name goes to Create.
+		return
+	}
+
+	planRenameRequiresStop(ctx, r.client, resp, renameCheck{
+		envID:            state.EnvironmentID.ValueString(),
+		projID:           state.ID.ValueString(),
+		oldName:          state.Name.ValueString(),
+		newName:          plan.Name,
+		stopBeforeRename: boolValue(plan.StopBeforeRename),
+		planStops:        projectPlanStops(plan.Running, plan.Archived),
+	})
+}
+
 type projectModel struct {
 	ID               types.String `tfsdk:"id"`
 	EnvironmentID    types.String `tfsdk:"environment_id"`
@@ -253,6 +288,7 @@ type projectModel struct {
 	PullOnUpdate     types.Bool   `tfsdk:"pull_on_update"`
 	RemoveOrphans    types.Bool   `tfsdk:"remove_orphans"`
 	FailIfNameExists types.Bool   `tfsdk:"fail_if_name_exists"`
+	StopBeforeRename types.Bool   `tfsdk:"stop_before_rename"`
 	Path             types.String `tfsdk:"path"`
 	Status           types.String `tfsdk:"status"`
 	ServiceCount     types.Int64  `tfsdk:"service_count"`
@@ -361,6 +397,7 @@ func (r *ProjectResource) Create(ctx context.Context, req resource.CreateRequest
 		PullOnUpdate:     plan.PullOnUpdate,
 		RemoveOrphans:    plan.RemoveOrphans,
 		FailIfNameExists: plan.FailIfNameExists,
+		StopBeforeRename: plan.StopBeforeRename,
 	}
 	resp.Diagnostics.Append(resp.State.Set(ctx, &state)...)
 }
@@ -445,17 +482,54 @@ func (r *ProjectResource) Update(ctx context.Context, req resource.UpdateRequest
 		body.Name = &v
 	}
 
+	// Whether this update redeploys is decided up front: a rename that stopped
+	// the project can leave the restart to the redeploy instead of starting the
+	// project twice. The trigger is resolved during plan (see planRedeploy), so
+	// the plan value is authoritative here.
+	redeployNow := shouldRedeploy(redeployTrigger.ValueString(), contentChanged) && projectRedeployAllowed(plan)
+
+	// Arcane only renames a stopped project, so a stop the plan asks for has to
+	// happen before the update call rather than after it (see project_rename.go;
+	// ModifyPlan rejects renames this branch cannot satisfy).
+	renaming := body.Name != nil && *body.Name != state.Name.ValueString()
+	planStops := projectPlanStops(plan.Running, plan.Archived)
+	stoppedForRename := false
+	if renaming && (planStops || boolValue(plan.StopBeforeRename)) {
+		stopped, serr := stopProjectForRename(ctx, r.client, envID, projID)
+		if serr != nil {
+			resp.Diagnostics.AddError("project down before rename failed", serr.Error())
+			return
+		}
+		if stopped {
+			stoppedForRename = true
+			// Keep the lifecycle handling below from stopping it a second time.
+			state.Running = types.BoolValue(false)
+		}
+	}
+
 	out, err := r.client.UpdateProject(ctx, envID, projID, body)
 	if err != nil {
 		resp.Diagnostics.AddError("update project failed", err.Error())
 		return
 	}
 
-	// Redeploy according to redeploy_trigger, as long as the project is meant to
-	// be up. The trigger is resolved during plan (see planRedeploy), so the plan
-	// value is authoritative here.
+	// stop_before_rename promises the project comes back up after the rename,
+	// unless the plan wants it stopped anyway or the redeploy below starts it.
+	if stoppedForRename && !planStops && !redeployNow {
+		if err := r.client.UpProject(ctx, envID, projID, projectDeployOpts(plan)); err != nil {
+			resp.Diagnostics.AddError("project up after rename failed", err.Error())
+			return
+		}
+		state.Running = types.BoolValue(true)
+		if det, derr := r.client.GetProject(ctx, envID, projID); derr == nil {
+			out.Status = det.Status
+			out.ServiceCount = det.ServiceCount
+			out.RunningCount = det.RunningCount
+		}
+	}
+
 	redeployed := false
-	if shouldRedeploy(redeployTrigger.ValueString(), contentChanged) && projectRedeployAllowed(plan) {
+	if redeployNow {
 		// Optionally pull first
 		if boolValue(plan.PullOnUpdate) {
 			if err := r.client.PullProjectImages(ctx, envID, projID); err != nil {
@@ -469,8 +543,14 @@ func (r *ProjectResource) Update(ctx context.Context, req resource.UpdateRequest
 			return
 		}
 		redeployed = true
+		if stoppedForRename {
+			// The redeploy brought the renamed project back up.
+			state.Running = types.BoolValue(true)
+		}
 		if det, derr := r.client.GetProject(ctx, envID, projID); derr == nil {
 			out.Status = det.Status
+			out.ServiceCount = det.ServiceCount
+			out.RunningCount = det.RunningCount
 		}
 	}
 
@@ -563,6 +643,7 @@ func (r *ProjectResource) Update(ctx context.Context, req resource.UpdateRequest
 	}
 	state.RemoveOrphans = plan.RemoveOrphans
 	state.FailIfNameExists = plan.FailIfNameExists
+	state.StopBeforeRename = plan.StopBeforeRename
 	state.RemoveFiles = plan.RemoveFiles
 	state.RemoveVolumes = plan.RemoveVolumes
 	// Persist running unconditionally: the lifecycle block above only assigns it

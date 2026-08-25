@@ -51,8 +51,9 @@ func (r *ProjectPathResource) Schema(_ context.Context, _ resource.SchemaRequest
 			"env_content_hash":     resourceschema.StringAttribute{Computed: true, Sensitive: true},
 
 			// Lifecycle (optional)
-			"running":        resourceschema.BoolAttribute{Optional: true, Description: "If true, ensure project is running (compose up); if false, compose down. If unset, no lifecycle management."},
-			"pull_on_update": resourceschema.BoolAttribute{Optional: true, Computed: true, Description: "Pull images before redeploy.", Default: booldefault.StaticBool(false)},
+			"running":            resourceschema.BoolAttribute{Optional: true, Description: "If true, ensure project is running (compose up); if false, compose down. If unset, no lifecycle management."},
+			"stop_before_rename": resourceschema.BoolAttribute{Optional: true, Description: stopBeforeRenameDescription},
+			"pull_on_update":     resourceschema.BoolAttribute{Optional: true, Computed: true, Description: "Pull images before redeploy.", Default: booldefault.StaticBool(false)},
 			"redeploy_trigger": resourceschema.StringAttribute{
 				Optional:    true,
 				Computed:    true,
@@ -89,28 +90,29 @@ func (r *ProjectPathResource) Configure(_ context.Context, req resource.Configur
 }
 
 type projectPathModel struct {
-	ID              types.String `tfsdk:"id"`
-	EnvironmentID   types.String `tfsdk:"environment_id"`
-	Name            types.String `tfsdk:"name"`
-	ComposePath     types.String `tfsdk:"compose_path"`
-	EnvPath         types.String `tfsdk:"env_path"`
-	ContentHashMode types.Bool   `tfsdk:"content_hash_mode"`
-	Compose         types.String `tfsdk:"compose_content"`
-	Env             types.String `tfsdk:"env_content"`
-	ComposeHash     types.String `tfsdk:"compose_content_hash"`
-	EnvHash         types.String `tfsdk:"env_content_hash"`
-	Running         types.Bool   `tfsdk:"running"`
-	PullOnUpdate    types.Bool   `tfsdk:"pull_on_update"`
-	RedeployTrigger types.String `tfsdk:"redeploy_trigger"`
-	LastRedeploy    types.String `tfsdk:"last_redeploy"`
-	Path            types.String `tfsdk:"path"`
-	Status          types.String `tfsdk:"status"`
-	ServiceCount    types.Int64  `tfsdk:"service_count"`
-	RunningCount    types.Int64  `tfsdk:"running_count"`
-	CreatedAt       types.String `tfsdk:"created_at"`
-	UpdatedAt       types.String `tfsdk:"updated_at"`
-	RemoveFiles     types.Bool   `tfsdk:"remove_files"`
-	RemoveVolumes   types.Bool   `tfsdk:"remove_volumes"`
+	ID               types.String `tfsdk:"id"`
+	EnvironmentID    types.String `tfsdk:"environment_id"`
+	Name             types.String `tfsdk:"name"`
+	ComposePath      types.String `tfsdk:"compose_path"`
+	EnvPath          types.String `tfsdk:"env_path"`
+	ContentHashMode  types.Bool   `tfsdk:"content_hash_mode"`
+	Compose          types.String `tfsdk:"compose_content"`
+	Env              types.String `tfsdk:"env_content"`
+	ComposeHash      types.String `tfsdk:"compose_content_hash"`
+	EnvHash          types.String `tfsdk:"env_content_hash"`
+	Running          types.Bool   `tfsdk:"running"`
+	StopBeforeRename types.Bool   `tfsdk:"stop_before_rename"`
+	PullOnUpdate     types.Bool   `tfsdk:"pull_on_update"`
+	RedeployTrigger  types.String `tfsdk:"redeploy_trigger"`
+	LastRedeploy     types.String `tfsdk:"last_redeploy"`
+	Path             types.String `tfsdk:"path"`
+	Status           types.String `tfsdk:"status"`
+	ServiceCount     types.Int64  `tfsdk:"service_count"`
+	RunningCount     types.Int64  `tfsdk:"running_count"`
+	CreatedAt        types.String `tfsdk:"created_at"`
+	UpdatedAt        types.String `tfsdk:"updated_at"`
+	RemoveFiles      types.Bool   `tfsdk:"remove_files"`
+	RemoveVolumes    types.Bool   `tfsdk:"remove_volumes"`
 }
 
 // projectPathServerComputed lists the attributes Update rewrites from the API
@@ -123,8 +125,9 @@ var projectPathServerComputed = []serverComputedAttr{
 	{"running_count", types.Int64Unknown()},
 }
 
-// ModifyPlan plans the content and redeploy attributes, then the attributes the
-// resulting update would rewrite from the API response.
+// ModifyPlan plans the content and redeploy attributes, enforces the
+// stop-before-rename requirement, then plans the attributes the resulting
+// update would rewrite from the API response.
 func (r *ProjectPathResource) ModifyPlan(ctx context.Context, req resource.ModifyPlanRequest, resp *resource.ModifyPlanResponse) {
 	if req.Plan.Raw.IsNull() {
 		// Destroy plan: nothing to modify.
@@ -132,6 +135,11 @@ func (r *ProjectPathResource) ModifyPlan(ctx context.Context, req resource.Modif
 	}
 
 	r.planContentAndRedeploy(ctx, req, resp)
+	if resp.Diagnostics.HasError() {
+		return
+	}
+
+	r.planRenameRequiresStop(ctx, req, resp)
 	if resp.Diagnostics.HasError() {
 		return
 	}
@@ -267,6 +275,34 @@ func fileContentChanged(hashMode bool, content *string, stateContent, stateHash 
 		return stateHash.IsNull() || stateHash.ValueString() != hex.EncodeToString(h[:])
 	}
 	return stateContent.IsNull() || stateContent.ValueString() != *content
+}
+
+// planRenameRequiresStop fails the plan when it renames a project that Arcane
+// would refuse to rename because it is not stopped. See project_rename.go.
+func (r *ProjectPathResource) planRenameRequiresStop(ctx context.Context, req resource.ModifyPlanRequest, resp *resource.ModifyPlanResponse) {
+	if r.client == nil || req.State.Raw.IsNull() || !req.Plan.Raw.IsKnown() {
+		return
+	}
+
+	var plan, state projectPathModel
+	resp.Diagnostics.Append(req.Plan.Get(ctx, &plan)...)
+	resp.Diagnostics.Append(req.State.Get(ctx, &state)...)
+	if resp.Diagnostics.HasError() {
+		return
+	}
+	if plan.ID.IsUnknown() {
+		// The resource is being replaced, so the new name goes to Create.
+		return
+	}
+
+	planRenameRequiresStop(ctx, r.client, resp, renameCheck{
+		envID:            state.EnvironmentID.ValueString(),
+		projID:           state.ID.ValueString(),
+		oldName:          state.Name.ValueString(),
+		newName:          plan.Name,
+		stopBeforeRename: boolValue(plan.StopBeforeRename),
+		planStops:        projectPlanStops(plan.Running, types.BoolNull()),
+	})
 }
 
 func (r *ProjectPathResource) Create(ctx context.Context, req resource.CreateRequest, resp *resource.CreateResponse) {
@@ -447,15 +483,11 @@ func (r *ProjectPathResource) Update(ctx context.Context, req resource.UpdateReq
 		body.Name = &n
 	}
 
-	out, err := r.client.UpdateProject(ctx, envID, projID, body)
-	if err != nil {
-		resp.Diagnostics.AddError("update project failed", err.Error())
-		return
-	}
-
 	// Redeploy according to redeploy_trigger, as long as the project is meant to
 	// be up. The trigger is resolved during plan (see ModifyPlan), so the plan
-	// value is authoritative here.
+	// value is authoritative here. Whether the redeploy happens is decided
+	// before the update call: a rename that stopped the project can leave the
+	// restart to the redeploy instead of starting the project twice.
 	redeployTrigger, _, tdiags := resolvedRedeployAttrs(ctx, req.Config, "", plan.RedeployTrigger, types.BoolNull())
 	resp.Diagnostics.Append(tdiags...)
 	if resp.Diagnostics.HasError() {
@@ -463,8 +495,50 @@ func (r *ProjectPathResource) Update(ctx context.Context, req resource.UpdateReq
 	}
 	contentChanged := fileContentChanged(plan.ContentHashMode.ValueBool(), &compose, state.Compose, state.ComposeHash) ||
 		fileContentChanged(plan.ContentHashMode.ValueBool(), envStr, state.Env, state.EnvHash)
+	redeployNow := shouldRedeploy(redeployTrigger.ValueString(), contentChanged) && projectPathRedeployAllowed(plan)
+
+	// Arcane only renames a stopped project, so a stop the plan asks for has to
+	// happen before the update call rather than after it (see project_rename.go;
+	// ModifyPlan rejects renames this branch cannot satisfy).
+	renaming := body.Name != nil && *body.Name != state.Name.ValueString()
+	planStops := projectPlanStops(plan.Running, types.BoolNull())
+	stoppedForRename := false
+	if renaming && (planStops || boolValue(plan.StopBeforeRename)) {
+		stopped, serr := stopProjectForRename(ctx, r.client, envID, projID)
+		if serr != nil {
+			resp.Diagnostics.AddError("project down before rename failed", serr.Error())
+			return
+		}
+		if stopped {
+			stoppedForRename = true
+			// Keep the lifecycle handling below from stopping it a second time.
+			state.Running = types.BoolValue(false)
+		}
+	}
+
+	out, err := r.client.UpdateProject(ctx, envID, projID, body)
+	if err != nil {
+		resp.Diagnostics.AddError("update project failed", err.Error())
+		return
+	}
+
+	// stop_before_rename promises the project comes back up after the rename,
+	// unless the plan wants it stopped anyway or the redeploy below starts it.
+	if stoppedForRename && !planStops && !redeployNow {
+		if err := r.client.UpProject(ctx, envID, projID, nil); err != nil {
+			resp.Diagnostics.AddError("project up after rename failed", err.Error())
+			return
+		}
+		state.Running = types.BoolValue(true)
+		if det, derr := r.client.GetProject(ctx, envID, projID); derr == nil {
+			out.Status = det.Status
+			out.ServiceCount = det.ServiceCount
+			out.RunningCount = det.RunningCount
+		}
+	}
+
 	redeployed := false
-	if shouldRedeploy(redeployTrigger.ValueString(), contentChanged) && projectPathRedeployAllowed(plan) {
+	if redeployNow {
 		// Optional pull before redeploy
 		if boolValue(plan.PullOnUpdate) {
 			if err := r.client.PullProjectImages(ctx, envID, projID); err != nil {
@@ -482,9 +556,15 @@ func (r *ProjectPathResource) Update(ctx context.Context, req resource.UpdateReq
 			}
 		}
 		redeployed = true
+		if stoppedForRename {
+			// The redeploy brought the renamed project back up.
+			state.Running = types.BoolValue(true)
+		}
 		// Refresh through out: state.Status is overwritten from it below.
 		if det, derr := r.client.GetProject(ctx, envID, projID); derr == nil {
 			out.Status = det.Status
+			out.ServiceCount = det.ServiceCount
+			out.RunningCount = det.RunningCount
 		}
 	}
 
@@ -550,6 +630,7 @@ func (r *ProjectPathResource) Update(ctx context.Context, req resource.UpdateReq
 	state.EnvPath = plan.EnvPath
 	state.ContentHashMode = plan.ContentHashMode
 	state.Running = plan.Running
+	state.StopBeforeRename = plan.StopBeforeRename
 	state.RemoveFiles = plan.RemoveFiles
 	state.RemoveVolumes = plan.RemoveVolumes
 	state.RedeployTrigger = redeployTrigger
