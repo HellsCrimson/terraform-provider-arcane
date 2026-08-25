@@ -44,7 +44,17 @@ func (f *fakeArcaneProject) writeDetails(w http.ResponseWriter) {
 func (f *fakeArcaneProject) server(t *testing.T) *httptest.Server {
 	t.Helper()
 
-	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	srv := httptest.NewServer(f.handler(t))
+	t.Cleanup(srv.Close)
+	return srv
+}
+
+// handler serves the project endpoints, so a fake that also serves other
+// endpoints (see fakeArcaneGitOpsSync) can delegate to it.
+func (f *fakeArcaneProject) handler(t *testing.T) http.HandlerFunc {
+	t.Helper()
+
+	return func(w http.ResponseWriter, r *http.Request) {
 		f.mu.Lock()
 		defer f.mu.Unlock()
 		f.calls = append(f.calls, r.Method+" "+strings.TrimPrefix(r.URL.Path, "/environments/env-1/projects/p1"))
@@ -75,9 +85,7 @@ func (f *fakeArcaneProject) server(t *testing.T) *httptest.Server {
 		default:
 			f.writeDetails(w)
 		}
-	}))
-	t.Cleanup(srv.Close)
-	return srv
+	}
 }
 
 func (f *fakeArcaneProject) recorded() []string {

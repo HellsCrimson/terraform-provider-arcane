@@ -29,6 +29,13 @@ const stopBeforeRenameDescription = "When a rename is planned, stop the project 
 
 const renameRequiresStopSummary = "rename requires a stopped project"
 
+// The way out of a rejected rename depends on the resource: the ones that
+// manage the project lifecycle can also be told to leave the project down.
+const (
+	renameRemedyLifecycle = "Either set stop_before_rename = true, which stops the project, renames it and starts it again in a single apply, or set running = false in the same change so the project is stopped before the rename."
+	renameRemedyStopOnly  = "Either set stop_before_rename = true, which stops the project, renames it and starts it again in a single apply, or stop the project before applying this change."
+)
+
 // projectStopped reports whether a project in this status can be renamed.
 func projectStopped(status string) bool {
 	return strings.EqualFold(strings.TrimSpace(status), projectStatusStopped)
@@ -50,13 +57,21 @@ func projectPlanStops(running, archived types.Bool) bool {
 type renameCheck struct {
 	envID  string
 	projID string
-	// oldName comes from state, newName from the plan (and may be unknown).
+	// oldName comes from state, newName from the plan (and may be unknown). An
+	// empty oldName means state does not track the name (the GitOps sync only
+	// stores a configured project_name), so the API answers for it.
 	oldName string
 	newName types.String
 	// stopBeforeRename and planStops are the two ways the apply ends up
 	// renaming a stopped project; either one makes the check moot.
 	stopBeforeRename bool
 	planStops        bool
+	// nameAttr is the attribute the rename is configured through, so the error
+	// points at it. Defaults to "name".
+	nameAttr string
+	// remedy tells the practitioner how to get the rename applied. Defaults to
+	// renameRemedyLifecycle.
+	remedy string
 }
 
 // planRenameRequiresStop fails the plan when it renames a project Arcane would
@@ -73,7 +88,7 @@ func planRenameRequiresStop(ctx context.Context, client *sdkclient.Client, resp 
 		return
 	}
 	newName := check.newName.ValueString()
-	if newName == check.oldName {
+	if check.oldName != "" && newName == check.oldName {
 		return
 	}
 	if check.stopBeforeRename || check.planStops {
@@ -90,16 +105,30 @@ func planRenameRequiresStop(ctx context.Context, client *sdkclient.Client, resp 
 		resp.Diagnostics.AddError("failed to check the project status before renaming", err.Error())
 		return
 	}
+	oldName := check.oldName
+	if oldName == "" {
+		oldName = out.Name
+	}
+	if newName == oldName {
+		return
+	}
 	if projectStopped(out.Status) {
 		return
 	}
 
+	nameAttr := check.nameAttr
+	if nameAttr == "" {
+		nameAttr = "name"
+	}
+	remedy := check.remedy
+	if remedy == "" {
+		remedy = renameRemedyLifecycle
+	}
 	resp.Diagnostics.AddAttributeError(
-		path.Root("name"),
+		path.Root(nameAttr),
 		renameRequiresStopSummary,
-		fmt.Sprintf("Renaming %q to %q would fail during apply: Arcane only renames a project that is stopped, and this one is %s.\n\n"+
-			"Either set stop_before_rename = true, which stops the project, renames it and starts it again in a single apply, or set running = false in the same change so the project is stopped before the rename.",
-			check.oldName, newName, out.Status),
+		fmt.Sprintf("Renaming %q to %q would fail during apply: Arcane only renames a project that is stopped, and this one is %s.\n\n%s",
+			oldName, newName, out.Status, remedy),
 	)
 }
 
@@ -118,4 +147,50 @@ func stopProjectForRename(ctx context.Context, client *sdkclient.Client, envID, 
 		return false, err
 	}
 	return true, nil
+}
+
+// renameProject renames a project on behalf of a resource that does not manage
+// the project lifecycle itself: it stops the project when the configuration
+// allows it, renames it, and starts it again afterwards. A rename that would be
+// rejected returns the same explanation the plan phase gives, because state
+// that was never refreshed can carry a stale status into the apply.
+//
+// It is a no-op when the project already carries the wanted name, so callers
+// can hand it the configured name on every update.
+func renameProject(ctx context.Context, client *sdkclient.Client, envID, projID, newName string, stopBeforeRename bool) error {
+	out, err := client.GetProject(ctx, envID, projID)
+	if err != nil {
+		return err
+	}
+	if out.Name == newName {
+		return nil
+	}
+
+	restart := false
+	if !projectStopped(out.Status) {
+		if !stopBeforeRename {
+			return fmt.Errorf("%s: renaming %q to %q needs a stopped project, and this one is %s.\n\n%s",
+				renameRequiresStopSummary, out.Name, newName, out.Status, renameRemedyStopOnly)
+		}
+		if err := client.DownProject(ctx, envID, projID); err != nil {
+			return fmt.Errorf("stopping the project before renaming it failed: %w", err)
+		}
+		restart = true
+	}
+
+	if _, err := client.UpdateProject(ctx, envID, projID, sdkclient.ProjectUpdateRequest{Name: &newName}); err != nil {
+		if restart {
+			// Say so: the project is down and the rename it was stopped for
+			// never happened, so a retry is what brings it back up.
+			return fmt.Errorf("renaming the project failed, and it is left stopped: %w", err)
+		}
+		return err
+	}
+
+	if restart {
+		if err := client.UpProject(ctx, envID, projID, nil); err != nil {
+			return fmt.Errorf("starting the project again after renaming it failed: %w", err)
+		}
+	}
+	return nil
 }

@@ -106,6 +106,12 @@ There are two ways to get the rename applied:
 Both also apply when the same change archives the project (`archived = true`):
 archiving brings the project down, so the rename happens on a stopped project.
 
+The same requirement, and the same `stop_before_rename` attribute, apply to the
+other resources that rename a project:
+[`arcane_project_path`](arcane_project_path.md) and
+[`arcane_gitops_sync`](arcane_gitops_sync.md#renaming-the-project), whose
+`project_name` renames the project the sync is bound to.
+
 ## Attributes Reference
 
 - `id`, `path`, `status`, `service_count`, `running_count`, `created_at`, `updated_at`
