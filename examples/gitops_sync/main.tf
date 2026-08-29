@@ -68,6 +68,30 @@ resource "arcane_gitops_sync" "production_sync" {
   }
 }
 
+# Create a GitOps sync with a pre-deploy lifecycle hook that decrypts
+# sops/age-encrypted secrets before every deploy
+resource "arcane_gitops_sync" "encrypted_sync" {
+  environment_id = arcane_environment.production.id
+  name           = "Encrypted App Deployment"
+  repository_id  = arcane_git_repository.app_repo.id
+  branch         = "main"
+  compose_path   = "docker-compose.yml"
+  project_name   = "my-encrypted-app"
+
+  auto_sync     = true
+  sync_interval = 300
+
+  # Run pre-deploy.sh from the synced repo in a sops container before each
+  # deploy. The age key is mounted read-only from the host; the runner gets
+  # no network access ("none" is also the server default) and 120 seconds.
+  pre_deploy_script_path  = "pre-deploy.sh"
+  pre_deploy_runner_image = "ghcr.io/getsops/sops:v3.11.0"
+  pre_deploy_env          = "SOPS_AGE_KEY_FILE=/run/secrets/age.key"
+  pre_deploy_extra_mounts = "/opt/arcane/secrets/age.key:/run/secrets/age.key:ro"
+  pre_deploy_network_mode = "none"
+  pre_deploy_timeout_sec  = 120
+}
+
 # Create a GitOps sync for a specific feature (don't start automatically)
 resource "arcane_gitops_sync" "feature_sync" {
   environment_id = arcane_environment.production.id

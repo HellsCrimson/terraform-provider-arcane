@@ -1040,6 +1040,97 @@ resource "arcane_gitops_sync" "second" {
 	return cfg
 }
 
+// TestAccArcaneGitOpsSync_preDeployHook covers the pre-deploy lifecycle hook
+// attributes end to end: a sync is created with a hook configured, then the
+// hook is tuned (timeout, network mode) in place. The second step also guards
+// the null-vs-server-default handling: attributes that stay unset must not pick
+// up the server defaults ("none", 60) between steps.
+func TestAccArcaneGitOpsSync_preDeployHook(t *testing.T) {
+	name := testAccName("pre-deploy-gitops")
+
+	resource.Test(t, resource.TestCase{
+		ProtoV6ProviderFactories: testAccProtoV6ProviderFactories,
+		PreCheck:                 func() { testAccPreCheck(t) },
+		Steps: []resource.TestStep{
+			{
+				Config: testAccGitOpsSyncPreDeployConfig(name, 120, "none"),
+				Check: resource.ComposeAggregateTestCheckFunc(
+					resource.TestCheckResourceAttrSet("arcane_gitops_sync.pre_deploy", "id"),
+					resource.TestCheckResourceAttr("arcane_gitops_sync.pre_deploy", "pre_deploy_script_path", "pre-deploy.sh"),
+					resource.TestCheckResourceAttr("arcane_gitops_sync.pre_deploy", "pre_deploy_runner_image", "ghcr.io/getsops/sops:v3.11.0"),
+					resource.TestCheckResourceAttr("arcane_gitops_sync.pre_deploy", "pre_deploy_env", "SOPS_AGE_KEY_FILE=/run/secrets/age.key"),
+					resource.TestCheckResourceAttr("arcane_gitops_sync.pre_deploy", "pre_deploy_extra_mounts", "/opt/arcane/secrets/age.key:/run/secrets/age.key:ro"),
+					resource.TestCheckResourceAttr("arcane_gitops_sync.pre_deploy", "pre_deploy_timeout_sec", "120"),
+					resource.TestCheckResourceAttr("arcane_gitops_sync.pre_deploy", "pre_deploy_network_mode", "none"),
+					// Never configured: must stay null instead of drifting to
+					// the server defaults.
+					resource.TestCheckNoResourceAttr("arcane_gitops_sync.no_hook", "pre_deploy_script_path"),
+					resource.TestCheckNoResourceAttr("arcane_gitops_sync.no_hook", "pre_deploy_timeout_sec"),
+					resource.TestCheckNoResourceAttr("arcane_gitops_sync.no_hook", "pre_deploy_network_mode"),
+				),
+			},
+			{
+				Config: testAccGitOpsSyncPreDeployConfig(name, 180, "bridge"),
+				Check: resource.ComposeAggregateTestCheckFunc(
+					resource.TestCheckResourceAttr("arcane_gitops_sync.pre_deploy", "pre_deploy_timeout_sec", "180"),
+					resource.TestCheckResourceAttr("arcane_gitops_sync.pre_deploy", "pre_deploy_network_mode", "bridge"),
+					resource.TestCheckNoResourceAttr("arcane_gitops_sync.no_hook", "pre_deploy_network_mode"),
+				),
+			},
+		},
+	})
+}
+
+func testAccGitOpsSyncPreDeployConfig(name string, timeoutSec int, networkMode string) string {
+	return fmt.Sprintf(`
+provider "arcane" {
+  endpoint     = %q
+  api_key      = %q
+  http_timeout = "180s"
+}
+
+resource "arcane_git_repository" "pre_deploy" {
+  name      = %q
+  url       = "https://github.com/docker/awesome-compose.git"
+  auth_type = "none"
+  enabled   = true
+}
+
+resource "arcane_gitops_sync" "pre_deploy" {
+  environment_id = %q
+  name           = %q
+  repository_id  = arcane_git_repository.pre_deploy.id
+  branch         = "master"
+  compose_path   = "nginx-flask-mysql/compose.yaml"
+  project_name   = "%s-hook"
+  auto_sync      = false
+  sync_directory = true
+  target_type    = "project"
+  start_project  = false
+
+  pre_deploy_script_path  = "pre-deploy.sh"
+  pre_deploy_runner_image = "ghcr.io/getsops/sops:v3.11.0"
+  pre_deploy_env          = "SOPS_AGE_KEY_FILE=/run/secrets/age.key"
+  pre_deploy_extra_mounts = "/opt/arcane/secrets/age.key:/run/secrets/age.key:ro"
+  pre_deploy_timeout_sec  = %d
+  pre_deploy_network_mode = %q
+}
+
+resource "arcane_gitops_sync" "no_hook" {
+  environment_id = %q
+  name           = "%s-no-hook"
+  repository_id  = arcane_git_repository.pre_deploy.id
+  branch         = "master"
+  compose_path   = "nginx-flask-mysql/compose.yaml"
+  project_name   = "%s-no-hook"
+  auto_sync      = false
+  sync_directory = false
+  target_type    = "project"
+  start_project  = false
+}
+`, testAccEndpoint(), testAccAPIKey(), testAccName("pre-deploy-repo"), testAccEnvironmentID(), name, name, timeoutSec, networkMode, testAccEnvironmentID(), name, name)
+}
+
 // TestAccArcaneEnvironmentID_forcesReplace verifies that changing environment_id
 // on a per-environment resource is planned as a replacement (destroy + create)
 // rather than an in-place update. environment_id is part of each resource's

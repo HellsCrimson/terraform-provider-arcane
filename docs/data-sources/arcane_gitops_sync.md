@@ -34,6 +34,12 @@ output "project_id" {
 - `auto_sync` (Bool) — auto sync enabled.
 - `sync_interval` (Number) — sync interval in seconds.
 - `enabled` (Bool) — whether sync is enabled.
+- `pre_deploy_script_path` (String) — path inside the synced repository to the pre-deploy hook script.
+- `pre_deploy_runner_image` (String) — container image used to run the pre-deploy script.
+- `pre_deploy_env` (String, Sensitive) — environment variables exposed to the pre-deploy script (`.env` file format).
+- `pre_deploy_extra_mounts` (String, Sensitive) — extra bind mounts for the pre-deploy runner container, one per line.
+- `pre_deploy_timeout_sec` (Number) — timeout in seconds for the pre-deploy script.
+- `pre_deploy_network_mode` (String) — Docker network mode for the pre-deploy runner container.
 - `environment_variables` (Map of String) — environment variables from the associated project.
 - `project_id` (String) — associated project ID.
 - `last_sync_at` (String) — last sync timestamp.

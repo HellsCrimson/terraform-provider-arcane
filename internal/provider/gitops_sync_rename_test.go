@@ -52,7 +52,10 @@ func (f *fakeArcaneGitOpsSync) server(t *testing.T) *httptest.Server {
 				f.projectName = *body.ProjectName
 			}
 		}
-		fmt.Fprintf(w, `{"success":true,"data":{"id":"s1","name":"sync","environmentId":"env-1","repositoryId":"repo-1","branch":"main","composePath":"docker-compose.yml","projectName":%q,"projectId":"p1","autoSync":false,"syncInterval":300,"maxSyncBinarySize":0,"maxSyncFiles":0,"maxSyncTotalSize":0,"syncDirectory":false,"targetType":"","enabled":true,"createdAt":"2026-01-01T00:00:00Z","updatedAt":"2026-01-01T00:00:00Z"}}`,
+		// preDeployNetworkMode and preDeployTimeoutSec always carry server-side
+		// defaults, exactly like the real API, so the tests cover the
+		// null-config-vs-server-default drift handling.
+		fmt.Fprintf(w, `{"success":true,"data":{"id":"s1","name":"sync","environmentId":"env-1","repositoryId":"repo-1","branch":"main","composePath":"docker-compose.yml","projectName":%q,"projectId":"p1","autoSync":false,"syncInterval":300,"maxSyncBinarySize":0,"maxSyncFiles":0,"maxSyncTotalSize":0,"syncDirectory":false,"targetType":"","enabled":true,"preDeployNetworkMode":"none","preDeployTimeoutSec":60,"createdAt":"2026-01-01T00:00:00Z","updatedAt":"2026-01-01T00:00:00Z"}}`,
 			f.projectName)
 	}))
 	t.Cleanup(srv.Close)
@@ -77,6 +80,12 @@ func renameGitOpsSyncModel(projectName string) gitOpsSyncModel {
 		MaxSyncTotalSize:     types.Int64Null(),
 		SyncDirectory:        types.BoolNull(),
 		TargetType:           types.StringNull(),
+		PreDeployScriptPath:  types.StringNull(),
+		PreDeployRunnerImage: types.StringNull(),
+		PreDeployEnv:         types.StringNull(),
+		PreDeployExtraMounts: types.StringNull(),
+		PreDeployTimeoutSec:  types.Int64Null(),
+		PreDeployNetworkMode: types.StringNull(),
 		Enabled:              types.BoolValue(true),
 		EnvironmentVariables: types.MapNull(types.StringType),
 		StartProject:         types.BoolNull(),

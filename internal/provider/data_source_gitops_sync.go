@@ -69,6 +69,32 @@ func (d *GitOpsSyncDataSource) Schema(ctx context.Context, req datasource.Schema
 				Computed:    true,
 				Description: "Whether sync is enabled",
 			},
+			"pre_deploy_script_path": schema.StringAttribute{
+				Computed:    true,
+				Description: "Path inside the synced repository to the pre-deploy hook script",
+			},
+			"pre_deploy_runner_image": schema.StringAttribute{
+				Computed:    true,
+				Description: "Container image used to run the pre-deploy script",
+			},
+			"pre_deploy_env": schema.StringAttribute{
+				Computed:    true,
+				Sensitive:   true,
+				Description: "Environment variables exposed to the pre-deploy script (.env file format)",
+			},
+			"pre_deploy_extra_mounts": schema.StringAttribute{
+				Computed:    true,
+				Sensitive:   true,
+				Description: "Extra bind mounts for the pre-deploy runner container, one per line",
+			},
+			"pre_deploy_timeout_sec": schema.Int64Attribute{
+				Computed:    true,
+				Description: "Timeout in seconds for the pre-deploy script",
+			},
+			"pre_deploy_network_mode": schema.StringAttribute{
+				Computed:    true,
+				Description: "Docker network mode for the pre-deploy runner container",
+			},
 			"environment_variables": schema.MapAttribute{
 				Computed:    true,
 				ElementType: types.StringType,
@@ -117,6 +143,12 @@ type gitOpsSyncDataSourceModel struct {
 	AutoSync             types.Bool   `tfsdk:"auto_sync"`
 	SyncInterval         types.Int64  `tfsdk:"sync_interval"`
 	Enabled              types.Bool   `tfsdk:"enabled"`
+	PreDeployScriptPath  types.String `tfsdk:"pre_deploy_script_path"`
+	PreDeployRunnerImage types.String `tfsdk:"pre_deploy_runner_image"`
+	PreDeployEnv         types.String `tfsdk:"pre_deploy_env"`
+	PreDeployExtraMounts types.String `tfsdk:"pre_deploy_extra_mounts"`
+	PreDeployTimeoutSec  types.Int64  `tfsdk:"pre_deploy_timeout_sec"`
+	PreDeployNetworkMode types.String `tfsdk:"pre_deploy_network_mode"`
 	EnvironmentVariables types.Map    `tfsdk:"environment_variables"`
 	ProjectID            types.String `tfsdk:"project_id"`
 	LastSyncAt           types.String `tfsdk:"last_sync_at"`
@@ -164,6 +196,30 @@ func (d *GitOpsSyncDataSource) Read(ctx context.Context, req datasource.ReadRequ
 	} else {
 		state.SyncInterval = types.Int64Null()
 	}
+	if sync.PreDeployScriptPath != nil && *sync.PreDeployScriptPath != "" {
+		state.PreDeployScriptPath = types.StringValue(*sync.PreDeployScriptPath)
+	} else {
+		state.PreDeployScriptPath = types.StringNull()
+	}
+	if sync.PreDeployRunnerImage != nil && *sync.PreDeployRunnerImage != "" {
+		state.PreDeployRunnerImage = types.StringValue(*sync.PreDeployRunnerImage)
+	} else {
+		state.PreDeployRunnerImage = types.StringNull()
+	}
+	if sync.PreDeployEnv != nil && *sync.PreDeployEnv != "" {
+		state.PreDeployEnv = types.StringValue(*sync.PreDeployEnv)
+	} else {
+		state.PreDeployEnv = types.StringNull()
+	}
+	if sync.PreDeployExtraMounts != nil && *sync.PreDeployExtraMounts != "" {
+		state.PreDeployExtraMounts = types.StringValue(*sync.PreDeployExtraMounts)
+	} else {
+		state.PreDeployExtraMounts = types.StringNull()
+	}
+	// These two always carry server-side defaults (60, "none"); report them
+	// as-is since a data source only reflects what the API returns.
+	state.PreDeployTimeoutSec = types.Int64Value(sync.PreDeployTimeoutSec)
+	state.PreDeployNetworkMode = nullableString(sync.PreDeployNetworkMode)
 	if sync.ProjectID != nil && *sync.ProjectID != "" {
 		state.ProjectID = types.StringValue(*sync.ProjectID)
 	} else {

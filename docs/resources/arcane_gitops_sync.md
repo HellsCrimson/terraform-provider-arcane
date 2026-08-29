@@ -52,6 +52,31 @@ resource "arcane_gitops_sync" "staging_sync" {
 }
 ```
 
+## Example with a Pre-Deploy Lifecycle Hook
+
+A pre-deploy hook runs a script from the synced repository in a throwaway
+container before each deploy — for example to decrypt sops/age-encrypted
+secrets:
+
+```hcl
+resource "arcane_gitops_sync" "sops_sync" {
+  environment_id = arcane_environment.prod.id
+  name           = "Encrypted App Sync"
+  repository_id  = arcane_git_repository.app_repo.id
+  branch         = "main"
+  compose_path   = "docker-compose.yml"
+  project_name   = "my-encrypted-app"
+
+  # Decrypt sops/age secrets before every deploy.
+  pre_deploy_script_path  = "pre-deploy.sh"
+  pre_deploy_runner_image = "ghcr.io/getsops/sops:v3.11.0"
+  pre_deploy_env          = "SOPS_AGE_KEY_FILE=/run/secrets/age.key"
+  pre_deploy_extra_mounts = "/opt/arcane/secrets/age.key:/run/secrets/age.key:ro"
+  pre_deploy_network_mode = "none" # server default; no network access
+  pre_deploy_timeout_sec  = 120
+}
+```
+
 ## Argument Reference
 
 - `environment_id` (String, Required) — Environment ID (changing forces new resource)
@@ -71,6 +96,12 @@ resource "arcane_gitops_sync" "staging_sync" {
 - `start_project` (Bool, Optional) — Whether to start the project after creation (default: `true`). Controls lifecycle behavior only; not sent to the API.
 - `fail_if_name_exists` (Bool, Optional) — If true, fail during the plan phase when a GitOps sync with the same name already exists in the environment, instead of creating a duplicate. Defaults to `false`.
 - `stop_before_rename` (Bool, Optional) — when true, a `project_name` change stops the project, renames it and starts it again in the same apply (default `false`). Arcane only renames stopped projects; without this, the plan fails when the rename targets a running project. See [Renaming the project](#renaming-the-project).
+- `pre_deploy_script_path` (String, Optional) — Path inside the synced repository to a script executed in a throwaway container before each deploy
+- `pre_deploy_runner_image` (String, Optional) — Container image used to run the pre-deploy script. Required by the API whenever `pre_deploy_script_path` is set
+- `pre_deploy_env` (String, Optional, Sensitive) — Environment variables exposed to the pre-deploy script, one `KEY=VALUE` entry per line (`.env` file format). Marked sensitive because it commonly carries key material such as `SOPS_AGE_KEY`
+- `pre_deploy_extra_mounts` (String, Optional, Sensitive) — Extra bind mounts for the pre-deploy runner container, one entry per line in docker `src:tgt[:ro|:rw]` form
+- `pre_deploy_timeout_sec` (Int, Optional) — Timeout in seconds for the pre-deploy script (server default 60, capped by the server-side maximum)
+- `pre_deploy_network_mode` (String, Optional) — Docker network mode for the pre-deploy runner container: `"none"` (server default), `"bridge"`, `"host"`, or a Docker network name
 - `enabled` (Bool, Optional) — Whether the sync is enabled
 
 ## Renaming the project

@@ -866,11 +866,11 @@ type DockerSwarmSecretSpec struct {
 }
 
 type SwarmSecretSummary struct {
-	ID        string               `json:"id"`
+	ID        string                `json:"id"`
 	Spec      DockerSwarmSecretSpec `json:"spec"`
-	Version   DockerSwarmVersion   `json:"version"`
-	CreatedAt string               `json:"createdAt"`
-	UpdatedAt string               `json:"updatedAt"`
+	Version   DockerSwarmVersion    `json:"version"`
+	CreatedAt string                `json:"createdAt"`
+	UpdatedAt string                `json:"updatedAt"`
 }
 
 type SwarmSecretCreateRequest struct {
@@ -879,7 +879,7 @@ type SwarmSecretCreateRequest struct {
 
 type SwarmSecretUpdateRequest struct {
 	Spec    DockerSwarmSecretSpec `json:"spec"`
-	Version *int64               `json:"version,omitempty"`
+	Version *int64                `json:"version,omitempty"`
 }
 
 type swarmStackDeployEnvelope struct {
@@ -2179,34 +2179,46 @@ func (c *Client) GetJobSchedules(ctx context.Context, envID string) (*JobSchedul
 
 // -------- GitOps Syncs --------
 type GitOpsSyncCreateRequest struct {
-	Name              string  `json:"name"`
-	RepositoryID      string  `json:"repositoryId"`
-	Branch            string  `json:"branch"`
-	ComposePath       string  `json:"composePath"`
-	ProjectName       *string `json:"projectName,omitempty"`
-	AutoSync          *bool   `json:"autoSync,omitempty"`
-	SyncInterval      *int64  `json:"syncInterval,omitempty"`
-	MaxSyncBinarySize *int64  `json:"maxSyncBinarySize,omitempty"`
-	MaxSyncFiles      *int64  `json:"maxSyncFiles,omitempty"`
-	MaxSyncTotalSize  *int64  `json:"maxSyncTotalSize,omitempty"`
-	SyncDirectory     *bool   `json:"syncDirectory,omitempty"`
-	TargetType        *string `json:"targetType,omitempty"`
+	Name                 string  `json:"name"`
+	RepositoryID         string  `json:"repositoryId"`
+	Branch               string  `json:"branch"`
+	ComposePath          string  `json:"composePath"`
+	ProjectName          *string `json:"projectName,omitempty"`
+	AutoSync             *bool   `json:"autoSync,omitempty"`
+	SyncInterval         *int64  `json:"syncInterval,omitempty"`
+	MaxSyncBinarySize    *int64  `json:"maxSyncBinarySize,omitempty"`
+	MaxSyncFiles         *int64  `json:"maxSyncFiles,omitempty"`
+	MaxSyncTotalSize     *int64  `json:"maxSyncTotalSize,omitempty"`
+	SyncDirectory        *bool   `json:"syncDirectory,omitempty"`
+	TargetType           *string `json:"targetType,omitempty"`
+	PreDeployScriptPath  *string `json:"preDeployScriptPath,omitempty"`
+	PreDeployRunnerImage *string `json:"preDeployRunnerImage,omitempty"`
+	PreDeployEnv         *string `json:"preDeployEnv,omitempty"`
+	PreDeployExtraMounts *string `json:"preDeployExtraMounts,omitempty"`
+	PreDeployTimeoutSec  *int64  `json:"preDeployTimeoutSec,omitempty"`
+	PreDeployNetworkMode *string `json:"preDeployNetworkMode,omitempty"`
 	// Note: 'enabled' is read-only and not included in create requests
 }
 
 type GitOpsSyncUpdateRequest struct {
-	Name              *string `json:"name,omitempty"`
-	RepositoryID      *string `json:"repositoryId,omitempty"`
-	Branch            *string `json:"branch,omitempty"`
-	ComposePath       *string `json:"composePath,omitempty"`
-	ProjectName       *string `json:"projectName,omitempty"`
-	AutoSync          *bool   `json:"autoSync,omitempty"`
-	SyncInterval      *int64  `json:"syncInterval,omitempty"`
-	MaxSyncBinarySize *int64  `json:"maxSyncBinarySize,omitempty"`
-	MaxSyncFiles      *int64  `json:"maxSyncFiles,omitempty"`
-	MaxSyncTotalSize  *int64  `json:"maxSyncTotalSize,omitempty"`
-	SyncDirectory     *bool   `json:"syncDirectory,omitempty"`
-	TargetType        *string `json:"targetType,omitempty"`
+	Name                 *string `json:"name,omitempty"`
+	RepositoryID         *string `json:"repositoryId,omitempty"`
+	Branch               *string `json:"branch,omitempty"`
+	ComposePath          *string `json:"composePath,omitempty"`
+	ProjectName          *string `json:"projectName,omitempty"`
+	AutoSync             *bool   `json:"autoSync,omitempty"`
+	SyncInterval         *int64  `json:"syncInterval,omitempty"`
+	MaxSyncBinarySize    *int64  `json:"maxSyncBinarySize,omitempty"`
+	MaxSyncFiles         *int64  `json:"maxSyncFiles,omitempty"`
+	MaxSyncTotalSize     *int64  `json:"maxSyncTotalSize,omitempty"`
+	SyncDirectory        *bool   `json:"syncDirectory,omitempty"`
+	TargetType           *string `json:"targetType,omitempty"`
+	PreDeployScriptPath  *string `json:"preDeployScriptPath,omitempty"`
+	PreDeployRunnerImage *string `json:"preDeployRunnerImage,omitempty"`
+	PreDeployEnv         *string `json:"preDeployEnv,omitempty"`
+	PreDeployExtraMounts *string `json:"preDeployExtraMounts,omitempty"`
+	PreDeployTimeoutSec  *int64  `json:"preDeployTimeoutSec,omitempty"`
+	PreDeployNetworkMode *string `json:"preDeployNetworkMode,omitempty"`
 	// Note: 'enabled' is read-only and not included in update requests
 }
 
@@ -2231,8 +2243,21 @@ type GitOpsSync struct {
 	LastSyncCommit    *string `json:"lastSyncCommit,omitempty"`
 	LastSyncStatus    *string `json:"lastSyncStatus,omitempty"`
 	LastSyncError     *string `json:"lastSyncError,omitempty"`
-	CreatedAt         string  `json:"createdAt"`
-	UpdatedAt         string  `json:"updatedAt"`
+	// Pre-deploy lifecycle hook configuration. NetworkMode and TimeoutSec
+	// always carry server-side defaults ("none", 60) even when never
+	// configured; the rest are absent until set.
+	PreDeployScriptPath  *string `json:"preDeployScriptPath,omitempty"`
+	PreDeployRunnerImage *string `json:"preDeployRunnerImage,omitempty"`
+	PreDeployEnv         *string `json:"preDeployEnv,omitempty"`
+	PreDeployExtraMounts *string `json:"preDeployExtraMounts,omitempty"`
+	PreDeployTimeoutSec  int64   `json:"preDeployTimeoutSec"`
+	PreDeployNetworkMode string  `json:"preDeployNetworkMode"`
+	// Read-only status of the most recent pre-deploy hook run.
+	PreDeployLastRunStatus *string `json:"preDeployLastRunStatus,omitempty"`
+	PreDeployLastRunAt     *string `json:"preDeployLastRunAt,omitempty"`
+	PreDeployLastRunOutput *string `json:"preDeployLastRunOutput,omitempty"`
+	CreatedAt              string  `json:"createdAt"`
+	UpdatedAt              string  `json:"updatedAt"`
 }
 
 type gitOpsSyncEnvelope struct {
