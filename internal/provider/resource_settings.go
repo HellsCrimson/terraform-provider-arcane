@@ -82,6 +82,9 @@ func (r *SettingsResource) Schema(_ context.Context, _ resource.SchemaRequest, r
 			"http_client_timeout":                  resourceschema.StringAttribute{Optional: true, Description: "httpClientTimeout"},
 			"icon_catalog":                         resourceschema.StringAttribute{Optional: true, Description: "iconCatalog"},
 			"keyboard_shortcuts_enabled":           resourceschema.StringAttribute{Optional: true, Description: "keyboardShortcutsEnabled"},
+			"lifecycle_enabled":                    resourceschema.StringAttribute{Optional: true, Description: "lifecycleEnabled"},
+			"lifecycle_default_runner_image":       resourceschema.StringAttribute{Optional: true, Description: "lifecycleDefaultRunnerImage"},
+			"lifecycle_max_timeout_sec":            resourceschema.StringAttribute{Optional: true, Description: "lifecycleMaxTimeoutSec"},
 			"max_image_upload_size":                resourceschema.StringAttribute{Optional: true, Description: "maxImageUploadSize"},
 			"mobile_navigation_mode":               resourceschema.StringAttribute{Optional: true, Description: "mobileNavigationMode"},
 			"mobile_navigation_show_labels":        resourceschema.StringAttribute{Optional: true, Description: "mobileNavigationShowLabels"},
@@ -190,6 +193,9 @@ type settingsModel struct {
 	HttpClientTimeout               types.String `tfsdk:"http_client_timeout"`
 	IconCatalog                     types.String `tfsdk:"icon_catalog"`
 	KeyboardShortcutsEnabled        types.String `tfsdk:"keyboard_shortcuts_enabled"`
+	LifecycleEnabled                types.String `tfsdk:"lifecycle_enabled"`
+	LifecycleDefaultRunnerImage     types.String `tfsdk:"lifecycle_default_runner_image"`
+	LifecycleMaxTimeoutSec          types.String `tfsdk:"lifecycle_max_timeout_sec"`
 	MaxImageUploadSize              types.String `tfsdk:"max_image_upload_size"`
 	MobileNavigationMode            types.String `tfsdk:"mobile_navigation_mode"`
 	MobileNavigationShowLabels      types.String `tfsdk:"mobile_navigation_show_labels"`
@@ -377,6 +383,9 @@ func buildSettingsMapFromModel(s settingsModel) map[string]string {
 	addIfSet(out, "httpClientTimeout", s.HttpClientTimeout)
 	addIfSet(out, "iconCatalog", s.IconCatalog)
 	addIfSet(out, "keyboardShortcutsEnabled", s.KeyboardShortcutsEnabled)
+	addIfSet(out, "lifecycleEnabled", s.LifecycleEnabled)
+	addIfSet(out, "lifecycleDefaultRunnerImage", s.LifecycleDefaultRunnerImage)
+	addIfSet(out, "lifecycleMaxTimeoutSec", s.LifecycleMaxTimeoutSec)
 	addIfSet(out, "maxImageUploadSize", s.MaxImageUploadSize)
 	addIfSet(out, "mobileNavigationMode", s.MobileNavigationMode)
 	addIfSet(out, "mobileNavigationShowLabels", s.MobileNavigationShowLabels)

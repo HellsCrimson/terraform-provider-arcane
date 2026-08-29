@@ -1131,6 +1131,56 @@ resource "arcane_gitops_sync" "no_hook" {
 `, testAccEndpoint(), testAccAPIKey(), testAccName("pre-deploy-repo"), testAccEnvironmentID(), name, name, timeoutSec, networkMode, testAccEnvironmentID(), name, name)
 }
 
+// TestAccArcaneSettings_lifecycle covers the global lifecycle hook settings on
+// arcane_settings: they are set and updated in place.
+//
+// The applied map is deliberately not asserted: Arcane's settings GET is
+// visibility-filtered (non-admin visibility unless the principal is a global
+// admin), API-key principals do not get admin visibility, and the lifecycle*
+// settings are admin-visibility — so applied never echoes them here even after
+// a successful write.
+func TestAccArcaneSettings_lifecycle(t *testing.T) {
+	resource.Test(t, resource.TestCase{
+		ProtoV6ProviderFactories: testAccProtoV6ProviderFactories,
+		PreCheck:                 func() { testAccPreCheck(t) },
+		Steps: []resource.TestStep{
+			{
+				Config: testAccSettingsLifecycleConfig("true", "ghcr.io/getsops/sops:v3.11.0", "300"),
+				Check: resource.ComposeAggregateTestCheckFunc(
+					resource.TestCheckResourceAttr("arcane_settings.lifecycle", "lifecycle_enabled", "true"),
+					resource.TestCheckResourceAttr("arcane_settings.lifecycle", "lifecycle_default_runner_image", "ghcr.io/getsops/sops:v3.11.0"),
+					resource.TestCheckResourceAttr("arcane_settings.lifecycle", "lifecycle_max_timeout_sec", "300"),
+				),
+			},
+			{
+				Config: testAccSettingsLifecycleConfig("false", "alpine:3", "120"),
+				Check: resource.ComposeAggregateTestCheckFunc(
+					resource.TestCheckResourceAttr("arcane_settings.lifecycle", "lifecycle_enabled", "false"),
+					resource.TestCheckResourceAttr("arcane_settings.lifecycle", "lifecycle_default_runner_image", "alpine:3"),
+					resource.TestCheckResourceAttr("arcane_settings.lifecycle", "lifecycle_max_timeout_sec", "120"),
+				),
+			},
+		},
+	})
+}
+
+func testAccSettingsLifecycleConfig(enabled, runnerImage, maxTimeoutSec string) string {
+	return fmt.Sprintf(`
+provider "arcane" {
+  endpoint     = %q
+  api_key      = %q
+  http_timeout = "180s"
+}
+
+resource "arcane_settings" "lifecycle" {
+  environment_id                 = %q
+  lifecycle_enabled              = %q
+  lifecycle_default_runner_image = %q
+  lifecycle_max_timeout_sec      = %q
+}
+`, testAccEndpoint(), testAccAPIKey(), testAccEnvironmentID(), enabled, runnerImage, maxTimeoutSec)
+}
+
 // TestAccArcaneEnvironmentID_forcesReplace verifies that changing environment_id
 // on a per-environment resource is planned as a replacement (destroy + create)
 // rather than an in-place update. environment_id is part of each resource's
