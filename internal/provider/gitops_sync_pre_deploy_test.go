@@ -27,6 +27,10 @@ import (
 // received, on top of the server defaults the real API always reports.
 type fakeGitOpsSyncPreDeploy struct {
 	lastPut map[string]any
+	// maxTimeoutSec, when non-zero, makes the fake clamp preDeployTimeoutSec
+	// the way a server bounded by lifecycle_max_timeout_sec does: the request
+	// is accepted, but the response reports the capped value.
+	maxTimeoutSec int64
 }
 
 func (f *fakeGitOpsSyncPreDeploy) server(t *testing.T) *httptest.Server {
@@ -56,6 +60,9 @@ func (f *fakeGitOpsSyncPreDeploy) server(t *testing.T) *httptest.Server {
 			}
 			if v, ok := f.lastPut["preDeployTimeoutSec"].(float64); ok {
 				timeoutSec = int64(v)
+			}
+			if f.maxTimeoutSec > 0 && timeoutSec > f.maxTimeoutSec {
+				timeoutSec = f.maxTimeoutSec
 			}
 		}
 		fmt.Fprintf(w, `{"success":true,"data":{"id":"s1","name":"sync","environmentId":"env-1","repositoryId":"repo-1","branch":"main","composePath":"docker-compose.yml","projectName":"old","projectId":"p1","autoSync":false,"syncInterval":300,"maxSyncBinarySize":0,"maxSyncFiles":0,"maxSyncTotalSize":0,"syncDirectory":false,"targetType":"","enabled":true,%s"preDeployNetworkMode":%q,"preDeployTimeoutSec":%d,"createdAt":"2026-01-01T00:00:00Z","updatedAt":"2026-01-01T00:00:00Z"}}`,
@@ -261,5 +268,100 @@ func TestGitOpsSyncRead_PreDeployConfiguredValuesRefresh(t *testing.T) {
 	}
 	if got.PreDeployTimeoutSec.ValueInt64() != 300 {
 		t.Errorf("pre_deploy_timeout_sec after refresh: got %d, want 300", got.PreDeployTimeoutSec.ValueInt64())
+	}
+}
+
+// TestGitOpsSyncUpdate_PreDeployTimeoutRemovalClears is the timeout half of
+// TestGitOpsSyncUpdate_PreDeployRemovalClears. Every other pre-deploy attribute
+// sends its zero value to reset the server when it leaves the configuration;
+// pre_deploy_timeout_sec has to do the same, or the server silently keeps the
+// old timeout while state says null and no later plan ever shows the gap
+// (Read skips attributes that are null in state).
+func TestGitOpsSyncUpdate_PreDeployTimeoutRemovalClears(t *testing.T) {
+	state := renameGitOpsSyncModel("old")
+	state.PreDeployScriptPath = types.StringValue("pre-deploy.sh")
+	state.PreDeployRunnerImage = types.StringValue("alpine:3")
+	state.PreDeployTimeoutSec = types.Int64Value(300)
+
+	fake := &fakeGitOpsSyncPreDeploy{}
+	resp := updateGitOpsSyncPreDeploy(t, fake, renameGitOpsSyncModel("old"), state)
+
+	// The body field is *int64 with omitempty, so a pointer to 0 is still
+	// encoded: 0 is the reset signal, matching "" for the string attributes.
+	v, ok := fake.lastPut["preDeployTimeoutSec"]
+	if !ok {
+		t.Error("update body omits preDeployTimeoutSec, which leaves the old timeout on the server")
+	} else if v != float64(0) {
+		t.Errorf("update body preDeployTimeoutSec: got %v, want 0 (reset to the server default)", v)
+	}
+
+	var got gitOpsSyncModel
+	if diags := resp.State.Get(context.Background(), &got); diags.HasError() {
+		t.Fatalf("get state: %v", diags)
+	}
+	if !got.PreDeployTimeoutSec.IsNull() {
+		t.Errorf("pre_deploy_timeout_sec after removal: got %v, want null", got.PreDeployTimeoutSec)
+	}
+}
+
+// TestGitOpsSyncUpdate_PreDeployUnknownIsNotRemoval separates "unknown" from
+// "removed". The clear branches hang off an `else` on a guard that rejects both
+// null and unknown, so an attribute whose value is not yet known — e.g.
+// pre_deploy_runner_image = arcane_something.x.image — takes the reset path and
+// wipes a hook the practitioner still wants. Unknown means "no instruction
+// yet", never "clear it".
+func TestGitOpsSyncUpdate_PreDeployUnknownIsNotRemoval(t *testing.T) {
+	state := renameGitOpsSyncModel("old")
+	state.PreDeployScriptPath = types.StringValue("pre-deploy.sh")
+	state.PreDeployRunnerImage = types.StringValue("alpine:3")
+	state.PreDeployEnv = types.StringValue("A=b")
+	state.PreDeployNetworkMode = types.StringValue("bridge")
+
+	plan := state
+	plan.PreDeployRunnerImage = types.StringUnknown()
+
+	fake := &fakeGitOpsSyncPreDeploy{}
+	resp := updateGitOpsSyncPreDeploy(t, fake, plan, state)
+
+	if v, ok := fake.lastPut["preDeployRunnerImage"]; ok && v == "" {
+		t.Error("update body clears preDeployRunnerImage for an unknown plan value; the configured hook is destroyed")
+	}
+
+	var got gitOpsSyncModel
+	if diags := resp.State.Get(context.Background(), &got); diags.HasError() {
+		t.Fatalf("get state: %v", diags)
+	}
+	// An unknown left in state fails the apply with "Provider returned invalid
+	// result object after apply", after the destructive write already landed.
+	if got.PreDeployRunnerImage.IsUnknown() {
+		t.Error("pre_deploy_runner_image is still unknown in the post-apply state")
+	}
+}
+
+// TestGitOpsSyncUpdate_PreDeployTimeoutKeepsPlanValue covers a server that
+// clamps: pre_deploy_timeout_sec is Optional and not Computed, so Terraform
+// requires the post-apply state to equal the configuration exactly. Writing the
+// clamped response value instead aborts the apply with "Provider produced
+// inconsistent result after apply"; keeping the plan value lets the cap show up
+// as ordinary drift on the next refresh instead.
+func TestGitOpsSyncUpdate_PreDeployTimeoutKeepsPlanValue(t *testing.T) {
+	plan := renameGitOpsSyncModel("old")
+	plan.PreDeployScriptPath = types.StringValue("pre-deploy.sh")
+	plan.PreDeployRunnerImage = types.StringValue("alpine:3")
+	plan.PreDeployTimeoutSec = types.Int64Value(600)
+
+	fake := &fakeGitOpsSyncPreDeploy{maxTimeoutSec: 300}
+	resp := updateGitOpsSyncPreDeploy(t, fake, plan, renameGitOpsSyncModel("old"))
+
+	if got := fake.lastPut["preDeployTimeoutSec"]; got != float64(600) {
+		t.Errorf("update body preDeployTimeoutSec: got %v, want 600", got)
+	}
+
+	var got gitOpsSyncModel
+	if diags := resp.State.Get(context.Background(), &got); diags.HasError() {
+		t.Fatalf("get state: %v", diags)
+	}
+	if got.PreDeployTimeoutSec.ValueInt64() != 600 {
+		t.Errorf("pre_deploy_timeout_sec in state: got %d, want 600 (the planned value, not the server's clamp)", got.PreDeployTimeoutSec.ValueInt64())
 	}
 }
