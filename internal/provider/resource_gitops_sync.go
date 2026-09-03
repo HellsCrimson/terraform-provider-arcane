@@ -117,6 +117,32 @@ func (r *GitOpsSyncResource) Schema(_ context.Context, _ resource.SchemaRequest,
 				Optional:    true,
 				Description: stopBeforeRenameDescription + " Applies to a project_name change, which renames the project this sync is bound to.",
 			},
+			"pre_deploy_script_path": resourceschema.StringAttribute{
+				Optional:    true,
+				Description: "Path inside the synced repository to a script executed in a throwaway container before each deploy",
+			},
+			"pre_deploy_runner_image": resourceschema.StringAttribute{
+				Optional:    true,
+				Description: "Container image used to run the pre-deploy script. Required by the API whenever pre_deploy_script_path is set",
+			},
+			"pre_deploy_env": resourceschema.StringAttribute{
+				Optional:    true,
+				Sensitive:   true,
+				Description: "Environment variables exposed to the pre-deploy script, one KEY=VALUE entry per line (.env file format). Marked sensitive because it commonly carries key material (e.g. SOPS_AGE_KEY)",
+			},
+			"pre_deploy_extra_mounts": resourceschema.StringAttribute{
+				Optional:    true,
+				Sensitive:   true,
+				Description: "Extra bind mounts for the pre-deploy runner container, one entry per line in docker 'src:tgt[:ro|:rw]' form",
+			},
+			"pre_deploy_timeout_sec": resourceschema.Int64Attribute{
+				Optional:    true,
+				Description: "Timeout in seconds for the pre-deploy script (server default 60, capped by the server-side maximum)",
+			},
+			"pre_deploy_network_mode": resourceschema.StringAttribute{
+				Optional:    true,
+				Description: "Docker network mode for the pre-deploy runner container: \"none\" (server default), \"bridge\", \"host\", or a Docker network name",
+			},
 
 			// Computed fields
 			"project_id": resourceschema.StringAttribute{
@@ -155,6 +181,22 @@ func (r *GitOpsSyncResource) Schema(_ context.Context, _ resource.SchemaRequest,
 			},
 		},
 	}
+}
+
+// preDeployString resolves the post-apply value of an optional pre-deploy
+// string attribute. The planned value wins, because Terraform requires the
+// state of an Optional, non-Computed attribute to match the configuration
+// exactly. The exception is a value that was not resolvable at plan time: an
+// unknown left in state fails the apply outright, so the server's answer is
+// the only value available there.
+func preDeployString(planned types.String, server *string) types.String {
+	if !planned.IsUnknown() {
+		return planned
+	}
+	if server == nil {
+		return types.StringNull()
+	}
+	return nullableString(*server)
 }
 
 func (r *GitOpsSyncResource) Configure(_ context.Context, req resource.ConfigureRequest, _ *resource.ConfigureResponse) {
@@ -262,6 +304,12 @@ type gitOpsSyncModel struct {
 	MaxSyncTotalSize     types.Int64  `tfsdk:"max_sync_total_size"`
 	SyncDirectory        types.Bool   `tfsdk:"sync_directory"`
 	TargetType           types.String `tfsdk:"target_type"`
+	PreDeployScriptPath  types.String `tfsdk:"pre_deploy_script_path"`
+	PreDeployRunnerImage types.String `tfsdk:"pre_deploy_runner_image"`
+	PreDeployEnv         types.String `tfsdk:"pre_deploy_env"`
+	PreDeployExtraMounts types.String `tfsdk:"pre_deploy_extra_mounts"`
+	PreDeployTimeoutSec  types.Int64  `tfsdk:"pre_deploy_timeout_sec"`
+	PreDeployNetworkMode types.String `tfsdk:"pre_deploy_network_mode"`
 	Enabled              types.Bool   `tfsdk:"enabled"`
 	EnvironmentVariables types.Map    `tfsdk:"environment_variables"`
 	StartProject         types.Bool   `tfsdk:"start_project"`
@@ -371,6 +419,30 @@ func (r *GitOpsSyncResource) Create(ctx context.Context, req resource.CreateRequ
 		v := plan.TargetType.ValueString()
 		body.TargetType = &v
 	}
+	if !plan.PreDeployScriptPath.IsNull() && !plan.PreDeployScriptPath.IsUnknown() {
+		v := plan.PreDeployScriptPath.ValueString()
+		body.PreDeployScriptPath = &v
+	}
+	if !plan.PreDeployRunnerImage.IsNull() && !plan.PreDeployRunnerImage.IsUnknown() {
+		v := plan.PreDeployRunnerImage.ValueString()
+		body.PreDeployRunnerImage = &v
+	}
+	if !plan.PreDeployEnv.IsNull() && !plan.PreDeployEnv.IsUnknown() {
+		v := plan.PreDeployEnv.ValueString()
+		body.PreDeployEnv = &v
+	}
+	if !plan.PreDeployExtraMounts.IsNull() && !plan.PreDeployExtraMounts.IsUnknown() {
+		v := plan.PreDeployExtraMounts.ValueString()
+		body.PreDeployExtraMounts = &v
+	}
+	if !plan.PreDeployTimeoutSec.IsNull() && !plan.PreDeployTimeoutSec.IsUnknown() {
+		v := plan.PreDeployTimeoutSec.ValueInt64()
+		body.PreDeployTimeoutSec = &v
+	}
+	if !plan.PreDeployNetworkMode.IsNull() && !plan.PreDeployNetworkMode.IsUnknown() {
+		v := plan.PreDeployNetworkMode.ValueString()
+		body.PreDeployNetworkMode = &v
+	}
 	// Note: 'enabled' is read-only and not part of the create request
 
 	sync, err := r.client.CreateGitOpsSync(ctx, plan.EnvironmentID.ValueString(), body)
@@ -468,6 +540,21 @@ func (r *GitOpsSyncResource) Create(ctx context.Context, req resource.CreateRequ
 	} else {
 		state.TargetType = plan.TargetType
 	}
+	// pre_deploy_* are Optional and not Computed, so the post-apply state has to
+	// equal the configuration exactly. Keep the planned value rather than the
+	// server's answer: that answer carries defaults (60, "none") for attributes
+	// nobody configured, and may clamp or normalise the ones that were set.
+	// Read surfaces any server-side divergence as ordinary drift instead.
+	state.PreDeployScriptPath = preDeployString(plan.PreDeployScriptPath, sync.PreDeployScriptPath)
+	state.PreDeployRunnerImage = preDeployString(plan.PreDeployRunnerImage, sync.PreDeployRunnerImage)
+	state.PreDeployEnv = preDeployString(plan.PreDeployEnv, sync.PreDeployEnv)
+	state.PreDeployExtraMounts = preDeployString(plan.PreDeployExtraMounts, sync.PreDeployExtraMounts)
+	if plan.PreDeployTimeoutSec.IsUnknown() {
+		state.PreDeployTimeoutSec = types.Int64Value(sync.PreDeployTimeoutSec)
+	} else {
+		state.PreDeployTimeoutSec = plan.PreDeployTimeoutSec
+	}
+	state.PreDeployNetworkMode = preDeployString(plan.PreDeployNetworkMode, &sync.PreDeployNetworkMode)
 
 	if sync.ProjectID != nil {
 		state.ProjectID = types.StringValue(*sync.ProjectID)
@@ -534,6 +621,26 @@ func (r *GitOpsSyncResource) Read(ctx context.Context, req resource.ReadRequest,
 	}
 	if !state.TargetType.IsNull() && !state.TargetType.IsUnknown() {
 		state.TargetType = types.StringValue(sync.TargetType)
+	}
+	if !state.PreDeployScriptPath.IsNull() && !state.PreDeployScriptPath.IsUnknown() {
+		state.PreDeployScriptPath = types.StringPointerValue(sync.PreDeployScriptPath)
+	}
+	if !state.PreDeployRunnerImage.IsNull() && !state.PreDeployRunnerImage.IsUnknown() {
+		state.PreDeployRunnerImage = types.StringPointerValue(sync.PreDeployRunnerImage)
+	}
+	if !state.PreDeployEnv.IsNull() && !state.PreDeployEnv.IsUnknown() {
+		state.PreDeployEnv = types.StringPointerValue(sync.PreDeployEnv)
+	}
+	if !state.PreDeployExtraMounts.IsNull() && !state.PreDeployExtraMounts.IsUnknown() {
+		state.PreDeployExtraMounts = types.StringPointerValue(sync.PreDeployExtraMounts)
+	}
+	// The API always reports server defaults for these two; only reflect them
+	// when the practitioner configured a value, so null stays null.
+	if !state.PreDeployTimeoutSec.IsNull() && !state.PreDeployTimeoutSec.IsUnknown() {
+		state.PreDeployTimeoutSec = types.Int64Value(sync.PreDeployTimeoutSec)
+	}
+	if !state.PreDeployNetworkMode.IsNull() && !state.PreDeployNetworkMode.IsUnknown() {
+		state.PreDeployNetworkMode = types.StringValue(sync.PreDeployNetworkMode)
 	}
 	state.Enabled = types.BoolValue(sync.Enabled)
 	// Leave updated_at and created_at unchanged to avoid plan inconsistency on server-side timestamp changes
@@ -627,6 +734,54 @@ func (r *GitOpsSyncResource) Update(ctx context.Context, req resource.UpdateRequ
 		v := plan.TargetType.ValueString()
 		body.TargetType = &v
 	}
+	if !plan.PreDeployScriptPath.IsNull() && !plan.PreDeployScriptPath.IsUnknown() {
+		v := plan.PreDeployScriptPath.ValueString()
+		body.PreDeployScriptPath = &v
+	} else if plan.PreDeployScriptPath.IsNull() && !state.PreDeployScriptPath.IsNull() {
+		// The attribute was removed from the configuration: an empty string
+		// clears the hook on the server (omitting the field would keep it).
+		v := ""
+		body.PreDeployScriptPath = &v
+	}
+	if !plan.PreDeployRunnerImage.IsNull() && !plan.PreDeployRunnerImage.IsUnknown() {
+		v := plan.PreDeployRunnerImage.ValueString()
+		body.PreDeployRunnerImage = &v
+	} else if plan.PreDeployRunnerImage.IsNull() && !state.PreDeployRunnerImage.IsNull() {
+		v := ""
+		body.PreDeployRunnerImage = &v
+	}
+	if !plan.PreDeployEnv.IsNull() && !plan.PreDeployEnv.IsUnknown() {
+		v := plan.PreDeployEnv.ValueString()
+		body.PreDeployEnv = &v
+	} else if plan.PreDeployEnv.IsNull() && !state.PreDeployEnv.IsNull() {
+		v := ""
+		body.PreDeployEnv = &v
+	}
+	if !plan.PreDeployExtraMounts.IsNull() && !plan.PreDeployExtraMounts.IsUnknown() {
+		v := plan.PreDeployExtraMounts.ValueString()
+		body.PreDeployExtraMounts = &v
+	} else if plan.PreDeployExtraMounts.IsNull() && !state.PreDeployExtraMounts.IsNull() {
+		v := ""
+		body.PreDeployExtraMounts = &v
+	}
+	if !plan.PreDeployTimeoutSec.IsNull() && !plan.PreDeployTimeoutSec.IsUnknown() {
+		v := plan.PreDeployTimeoutSec.ValueInt64()
+		body.PreDeployTimeoutSec = &v
+	} else if plan.PreDeployTimeoutSec.IsNull() && !state.PreDeployTimeoutSec.IsNull() {
+		// Zero resets the server to its default (60), the same way an empty
+		// string resets the pre-deploy strings. The field is a *int64, so a
+		// pointer to zero is still encoded rather than dropped by omitempty.
+		v := int64(0)
+		body.PreDeployTimeoutSec = &v
+	}
+	if !plan.PreDeployNetworkMode.IsNull() && !plan.PreDeployNetworkMode.IsUnknown() {
+		v := plan.PreDeployNetworkMode.ValueString()
+		body.PreDeployNetworkMode = &v
+	} else if plan.PreDeployNetworkMode.IsNull() && !state.PreDeployNetworkMode.IsNull() {
+		// Empty string resets the server to its default ("none").
+		v := ""
+		body.PreDeployNetworkMode = &v
+	}
 	// Note: 'enabled' is read-only and not part of the update request
 
 	sync, err := r.client.UpdateGitOpsSync(ctx, state.EnvironmentID.ValueString(), state.ID.ValueString(), body)
@@ -718,6 +873,21 @@ func (r *GitOpsSyncResource) Update(ctx context.Context, req resource.UpdateRequ
 	} else {
 		state.TargetType = plan.TargetType
 	}
+	// pre_deploy_* are Optional and not Computed, so the post-apply state has to
+	// equal the configuration exactly. Keep the planned value rather than the
+	// server's answer: that answer carries defaults (60, "none") for attributes
+	// nobody configured, and may clamp or normalise the ones that were set.
+	// Read surfaces any server-side divergence as ordinary drift instead.
+	state.PreDeployScriptPath = preDeployString(plan.PreDeployScriptPath, sync.PreDeployScriptPath)
+	state.PreDeployRunnerImage = preDeployString(plan.PreDeployRunnerImage, sync.PreDeployRunnerImage)
+	state.PreDeployEnv = preDeployString(plan.PreDeployEnv, sync.PreDeployEnv)
+	state.PreDeployExtraMounts = preDeployString(plan.PreDeployExtraMounts, sync.PreDeployExtraMounts)
+	if plan.PreDeployTimeoutSec.IsUnknown() {
+		state.PreDeployTimeoutSec = types.Int64Value(sync.PreDeployTimeoutSec)
+	} else {
+		state.PreDeployTimeoutSec = plan.PreDeployTimeoutSec
+	}
+	state.PreDeployNetworkMode = preDeployString(plan.PreDeployNetworkMode, &sync.PreDeployNetworkMode)
 	state.Enabled = types.BoolValue(sync.Enabled)
 	// Leave updated_at unchanged to avoid plan inconsistency on server-side timestamp changes
 	state.EnvironmentVariables = plan.EnvironmentVariables

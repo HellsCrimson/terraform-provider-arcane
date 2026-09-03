@@ -46,6 +46,13 @@ All optional attributes are strings:
 - `git_sync_max_binary_size_mb` - Maximum binary file size to sync, in MB.
 - `git_sync_max_total_size_mb` - Maximum total sync size, in MB.
 
+**Lifecycle Hook Settings**
+- `lifecycle_enabled` - Gates whether GitOps syncs may configure pre-deploy lifecycle scripts (`"true"`/`"false"`, disabled by default since scripts are repo-trusted code that runs on every deploy).
+- `lifecycle_default_runner_image` - Default container image used to run pre-deploy lifecycle scripts when a sync does not set `pre_deploy_runner_image`.
+- `lifecycle_max_timeout_sec` - Caps the per-sync `pre_deploy_timeout_sec` admins can configure. `"0"` disables the cap.
+
+**Note:** writing these settings works with API-key authentication, but they will not be echoed back in the `applied` map (or in the `arcane_settings` data source). Arcane filters the settings GET by visibility, API-key principals do not get admin visibility, and the lifecycle settings are admin-visibility.
+
 **Docker Settings**
 - `docker_host` - Docker host socket/URL.
 - `docker_api_timeout` - Docker API timeout.

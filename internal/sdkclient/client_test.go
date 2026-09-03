@@ -1,6 +1,7 @@
 package sdkclient
 
 import (
+	"encoding/json"
 	"errors"
 	"testing"
 )
@@ -49,5 +50,73 @@ func TestIsResourceGone(t *testing.T) {
 				t.Fatalf("IsResourceGone(%v) with ForgetMissingEnvironments=%v = %v, want %v", tc.err, tc.forget, got, tc.want)
 			}
 		})
+	}
+}
+
+// TestGitOpsSyncRequestPreDeployMarshaling locks in the wire format of the
+// pre-deploy lifecycle hook fields: nil pointers stay out of the JSON entirely
+// (the API keeps whatever is configured for an absent field), while a set
+// pointer is encoded under the exact camelCase key the API expects — including
+// an explicit empty string, which is how an existing hook is cleared.
+func TestGitOpsSyncRequestPreDeployMarshaling(t *testing.T) {
+	preDeployKeys := []string{
+		"preDeployScriptPath", "preDeployRunnerImage", "preDeployEnv",
+		"preDeployExtraMounts", "preDeployTimeoutSec", "preDeployNetworkMode",
+	}
+
+	marshal := func(v any) map[string]json.RawMessage {
+		t.Helper()
+		raw, err := json.Marshal(v)
+		if err != nil {
+			t.Fatalf("marshal %T: %s", v, err)
+		}
+		var m map[string]json.RawMessage
+		if err := json.Unmarshal(raw, &m); err != nil {
+			t.Fatalf("unmarshal %T: %s", v, err)
+		}
+		return m
+	}
+
+	// Unset fields are omitted, on both request types.
+	for _, m := range []map[string]json.RawMessage{
+		marshal(GitOpsSyncCreateRequest{Name: "s"}),
+		marshal(GitOpsSyncUpdateRequest{}),
+	} {
+		for _, k := range preDeployKeys {
+			if v, ok := m[k]; ok {
+				t.Errorf("unset %s was encoded as %s", k, v)
+			}
+		}
+	}
+
+	scriptPath := "pre-deploy.sh"
+	runnerImage := "ghcr.io/getsops/sops:v3.11.0"
+	env := "SOPS_AGE_KEY_FILE=/run/secrets/age.key"
+	mounts := "/opt/arcane/secrets/age.key:/run/secrets/age.key:ro"
+	timeout := int64(120)
+	networkMode := "" // empty string clears / resets to the server default
+
+	m := marshal(GitOpsSyncUpdateRequest{
+		PreDeployScriptPath:  &scriptPath,
+		PreDeployRunnerImage: &runnerImage,
+		PreDeployEnv:         &env,
+		PreDeployExtraMounts: &mounts,
+		PreDeployTimeoutSec:  &timeout,
+		PreDeployNetworkMode: &networkMode,
+	})
+	want := map[string]string{
+		"preDeployScriptPath":  `"pre-deploy.sh"`,
+		"preDeployRunnerImage": `"ghcr.io/getsops/sops:v3.11.0"`,
+		"preDeployEnv":         `"SOPS_AGE_KEY_FILE=/run/secrets/age.key"`,
+		"preDeployExtraMounts": `"/opt/arcane/secrets/age.key:/run/secrets/age.key:ro"`,
+		"preDeployTimeoutSec":  `120`,
+		"preDeployNetworkMode": `""`,
+	}
+	for k, w := range want {
+		if got, ok := m[k]; !ok {
+			t.Errorf("%s missing from encoded update request", k)
+		} else if string(got) != w {
+			t.Errorf("%s: got %s, want %s", k, got, w)
+		}
 	}
 }
