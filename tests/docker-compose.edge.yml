@@ -8,7 +8,7 @@ services:
       - DOCKER_TLS_CERTDIR=
 
   arcane-edge-agent:
-    image: ghcr.io/getarcaneapp/agent:v2.0.1
+    image: ghcr.io/getarcaneapp/agent:v2.11.0
     container_name: arcane-test-edge-agent
     restart: unless-stopped
     depends_on:

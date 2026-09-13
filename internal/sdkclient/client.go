@@ -8,6 +8,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"mime/multipart"
 	"net/http"
 	"net/url"
 	"path"
@@ -73,9 +74,51 @@ func NewClientWithOptions(endpoint, apiKey string, timeout time.Duration, insecu
 	}
 }
 
-func (c *Client) newRequest(ctx context.Context, method, p string, body any) (*http.Request, error) {
+func (c *Client) endpoint(p string) string {
 	rel := &url.URL{Path: path.Join(c.BaseURL.Path, p)}
-	u := c.BaseURL.ResolveReference(rel)
+	return c.BaseURL.ResolveReference(rel).String()
+}
+
+// multipartJSONPart is one JSON-encoded form field of a multipart request.
+type multipartJSONPart struct {
+	Name  string
+	Value any
+}
+
+// newMultipartJSONRequest builds a multipart/form-data request whose parts are
+// each a JSON document. Arcane models a few endpoints this way (project
+// creation, workspace updates) so that file uploads can ride along with the
+// JSON configuration; a plain JSON body is rejected with "cannot read multipart
+// form: request Content-Type isn't multipart/form-data".
+func (c *Client) newMultipartJSONRequest(ctx context.Context, method, p string, parts ...multipartJSONPart) (*http.Request, error) {
+	var buf bytes.Buffer
+	mw := multipart.NewWriter(&buf)
+	for _, part := range parts {
+		w, err := mw.CreateFormField(part.Name)
+		if err != nil {
+			return nil, err
+		}
+		enc := json.NewEncoder(w)
+		enc.SetEscapeHTML(false)
+		if err := enc.Encode(part.Value); err != nil {
+			return nil, err
+		}
+	}
+	if err := mw.Close(); err != nil {
+		return nil, err
+	}
+	req, err := http.NewRequestWithContext(ctx, method, c.endpoint(p), &buf)
+	if err != nil {
+		return nil, err
+	}
+	req.Header.Set("Content-Type", mw.FormDataContentType())
+	req.Header.Set("Accept", "application/json")
+	req.Header.Set("X-API-Key", c.APIKey)
+	return req, nil
+}
+
+func (c *Client) newRequest(ctx context.Context, method, p string, body any) (*http.Request, error) {
+	u := c.endpoint(p)
 	var buf io.ReadWriter
 	if body != nil {
 		buf = new(bytes.Buffer)
@@ -85,7 +128,7 @@ func (c *Client) newRequest(ctx context.Context, method, p string, body any) (*h
 			return nil, err
 		}
 	}
-	req, err := http.NewRequestWithContext(ctx, method, u.String(), buf)
+	req, err := http.NewRequestWithContext(ctx, method, u, buf)
 	if err != nil {
 		return nil, err
 	}
@@ -650,6 +693,14 @@ type ProjectCreateRequest struct {
 	Name           string  `json:"name"`
 }
 
+// createProjectManifest is the workspace manifest part that the multipart
+// project create endpoint requires alongside the project configuration. The
+// provider manages compose/env content only and never uploads workspace files,
+// so the change set is always empty.
+type createProjectManifest struct {
+	FileChanges []any `json:"fileChanges"`
+}
+
 type ProjectCreateResponse struct {
 	ID           string `json:"id"`
 	Name         string `json:"name"`
@@ -715,7 +766,13 @@ type ProjectDeployOptions struct {
 }
 
 func (c *Client) CreateProject(ctx context.Context, envID string, body ProjectCreateRequest) (*ProjectCreateResponse, error) {
-	req, err := c.newRequest(ctx, http.MethodPost, path.Join("environments", envID, "projects"), body)
+	// Project creation is multipart/form-data: a JSON "project" part with the
+	// configuration and a JSON "manifest" part with the initial workspace file
+	// changes. Both parts are required.
+	req, err := c.newMultipartJSONRequest(ctx, http.MethodPost, path.Join("environments", envID, "projects"),
+		multipartJSONPart{Name: "project", Value: body},
+		multipartJSONPart{Name: "manifest", Value: createProjectManifest{FileChanges: []any{}}},
+	)
 	if err != nil {
 		return nil, err
 	}
@@ -877,11 +934,6 @@ type SwarmSecretCreateRequest struct {
 	Spec DockerSwarmSecretSpec `json:"spec"`
 }
 
-type SwarmSecretUpdateRequest struct {
-	Spec    DockerSwarmSecretSpec `json:"spec"`
-	Version *int64                `json:"version,omitempty"`
-}
-
 type swarmStackDeployEnvelope struct {
 	Success bool                     `json:"success"`
 	Data    SwarmStackDeployResponse `json:"data"`
@@ -986,14 +1038,6 @@ func (c *Client) GetSwarmSecret(ctx context.Context, envID, secretID string) (*S
 	return &env.Data, nil
 }
 
-func (c *Client) UpdateSwarmSecret(ctx context.Context, envID, secretID string, body SwarmSecretUpdateRequest) error {
-	req, err := c.newRequest(ctx, http.MethodPut, path.Join("environments", envID, "swarm", "secrets", secretID), body)
-	if err != nil {
-		return err
-	}
-	return c.do(req, nil)
-}
-
 func (c *Client) DeleteSwarmSecret(ctx context.Context, envID, secretID string) error {
 	req, err := c.newRequest(ctx, http.MethodDelete, path.Join("environments", envID, "swarm", "secrets", secretID), nil)
 	if err != nil {
@@ -1018,11 +1062,6 @@ type SwarmConfigSummary struct {
 
 type SwarmConfigCreateRequest struct {
 	Spec DockerSwarmConfigSpec `json:"spec"`
-}
-
-type SwarmConfigUpdateRequest struct {
-	Spec    DockerSwarmConfigSpec `json:"spec"`
-	Version *int64                `json:"version,omitempty"`
 }
 
 type swarmConfigEnvelope struct {
@@ -1069,15 +1108,6 @@ func (c *Client) GetSwarmConfig(ctx context.Context, envID, configID string) (*S
 		return nil, err
 	}
 	return &env.Data, nil
-}
-
-// UpdateSwarmConfig PUT /environments/{id}/swarm/configs/{configId}
-func (c *Client) UpdateSwarmConfig(ctx context.Context, envID, configID string, body SwarmConfigUpdateRequest) error {
-	req, err := c.newRequest(ctx, http.MethodPut, path.Join("environments", envID, "swarm", "configs", configID), body)
-	if err != nil {
-		return err
-	}
-	return c.do(req, nil)
 }
 
 // DeleteSwarmConfig DELETE /environments/{id}/swarm/configs/{configId}
@@ -1305,44 +1335,47 @@ func (c *Client) ListContainers(ctx context.Context, envID string) ([]ContainerS
 
 // -------- Container Registries --------
 type CreateContainerRegistryRequest struct {
-	URL                string  `json:"url"`
-	Username           string  `json:"username"`
-	Token              string  `json:"token"`
-	Description        *string `json:"description"`
-	Insecure           *bool   `json:"insecure"`
-	Enabled            *bool   `json:"enabled"`
-	RegistryType       string  `json:"registryType"`
-	AWSAccessKeyID     string  `json:"awsAccessKeyId"`
-	AWSSecretAccessKey string  `json:"awsSecretAccessKey"`
-	AWSRegion          string  `json:"awsRegion"`
+	URL                string   `json:"url"`
+	Username           string   `json:"username"`
+	Token              string   `json:"token"`
+	Description        *string  `json:"description"`
+	Insecure           *bool    `json:"insecure"`
+	Enabled            *bool    `json:"enabled"`
+	RegistryType       string   `json:"registryType"`
+	RepositoryNames    []string `json:"repositoryNames"`
+	AWSAccessKeyID     string   `json:"awsAccessKeyId"`
+	AWSSecretAccessKey string   `json:"awsSecretAccessKey"`
+	AWSRegion          string   `json:"awsRegion"`
 }
 
 type UpdateContainerRegistryRequest struct {
-	URL                *string `json:"url"`
-	Username           *string `json:"username"`
-	Token              *string `json:"token"`
-	Description        *string `json:"description"`
-	Insecure           *bool   `json:"insecure"`
-	Enabled            *bool   `json:"enabled"`
-	RegistryType       *string `json:"registryType"`
-	AWSAccessKeyID     *string `json:"awsAccessKeyId"`
-	AWSSecretAccessKey *string `json:"awsSecretAccessKey"`
-	AWSRegion          *string `json:"awsRegion"`
+	URL                *string   `json:"url"`
+	Username           *string   `json:"username"`
+	Token              *string   `json:"token"`
+	Description        *string   `json:"description"`
+	Insecure           *bool     `json:"insecure"`
+	Enabled            *bool     `json:"enabled"`
+	RegistryType       *string   `json:"registryType"`
+	RepositoryNames    *[]string `json:"repositoryNames"`
+	AWSAccessKeyID     *string   `json:"awsAccessKeyId"`
+	AWSSecretAccessKey *string   `json:"awsSecretAccessKey"`
+	AWSRegion          *string   `json:"awsRegion"`
 }
 
 type ContainerRegistry struct {
-	ID                 string `json:"id"`
-	URL                string `json:"url"`
-	Username           string `json:"username"`
-	Description        string `json:"description"`
-	Insecure           bool   `json:"insecure"`
-	Enabled            bool   `json:"enabled"`
-	RegistryType       string `json:"registryType"`
-	AWSAccessKeyID     string `json:"awsAccessKeyId"`
-	AWSSecretAccessKey string `json:"awsSecretAccessKey"`
-	AWSRegion          string `json:"awsRegion"`
-	CreatedAt          string `json:"createdAt"`
-	UpdatedAt          string `json:"updatedAt"`
+	ID                 string   `json:"id"`
+	URL                string   `json:"url"`
+	Username           string   `json:"username"`
+	Description        string   `json:"description"`
+	Insecure           bool     `json:"insecure"`
+	Enabled            bool     `json:"enabled"`
+	RegistryType       string   `json:"registryType"`
+	RepositoryNames    []string `json:"repositoryNames"`
+	AWSAccessKeyID     string   `json:"awsAccessKeyId"`
+	AWSSecretAccessKey string   `json:"awsSecretAccessKey"`
+	AWSRegion          string   `json:"awsRegion"`
+	CreatedAt          string   `json:"createdAt"`
+	UpdatedAt          string   `json:"updatedAt"`
 }
 
 type containerRegistryEnvelope struct {
@@ -1351,6 +1384,11 @@ type containerRegistryEnvelope struct {
 }
 
 func (c *Client) CreateContainerRegistry(ctx context.Context, body CreateContainerRegistryRequest) (*ContainerRegistry, error) {
+	// The API rejects a body without repositoryNames ("expected required
+	// property repositoryNames to be present"), so always send an array.
+	if body.RepositoryNames == nil {
+		body.RepositoryNames = []string{}
+	}
 	req, err := c.newRequest(ctx, http.MethodPost, "container-registries", body)
 	if err != nil {
 		return nil, err

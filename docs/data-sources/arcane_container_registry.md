@@ -25,6 +25,7 @@ output "registry_url" {
 - `description` (String) — registry description.
 - `insecure` (Bool) — whether the registry uses insecure connections.
 - `enabled` (Bool) — whether the registry is enabled.
+- `repository_names` (List of String) — pre-configured repository namespaces for this registry.
 - `created_at` (String) — creation timestamp.
 - `updated_at` (String) — last update timestamp.
 

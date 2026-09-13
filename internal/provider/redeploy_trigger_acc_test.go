@@ -1,11 +1,15 @@
 package provider
 
 import (
+	"encoding/json"
 	"fmt"
+	"net/http"
 	"os"
 	"path/filepath"
 	"regexp"
+	"strings"
 	"testing"
+	"time"
 
 	"github.com/hashicorp/terraform-plugin-testing/helper/resource"
 	"github.com/hashicorp/terraform-plugin-testing/terraform"
@@ -370,11 +374,79 @@ func testAccIgnoreDevOverrides(t *testing.T) {
 	t.Setenv("TF_CLI_CONFIG_FILE", cliConfig)
 }
 
+// testAccSkipIfLegacyProviderCannotCreateProjects skips an upgrade test when the
+// Arcane server under test has moved past what the pinned pre-feature provider
+// release can talk to. Those first steps run the published hellscrimson/arcane
+// binary, which posts project creation as a JSON body; Arcane later switched
+// that endpoint to multipart/form-data, so on such a server step 1 fails before
+// the upgrade under test is ever exercised, and no change in this repository can
+// fix it — every published release with the pre-feature schema also predates the
+// multipart client.
+//
+// The capability is read from the server's own OpenAPI document rather than
+// compared against a version number, so this stops skipping on its own if the
+// endpoint ever accepts JSON again.
+func testAccSkipIfLegacyProviderCannotCreateProjects(t *testing.T) {
+	t.Helper()
+
+	// Runs before resource.Test, so it has to honour the acceptance-test gate
+	// itself: without TF_ACC there is no server to ask.
+	if os.Getenv("TF_ACC") == "" {
+		return
+	}
+
+	specURL := strings.TrimSuffix(testAccEndpoint(), "/") + "/openapi.json"
+	req, err := http.NewRequest(http.MethodGet, specURL, nil)
+	if err != nil {
+		t.Fatalf("building OpenAPI request: %s", err)
+	}
+	req.Header.Set("X-API-Key", testAccAPIKey())
+
+	client := &http.Client{Timeout: 30 * time.Second}
+	res, err := client.Do(req)
+	if err != nil {
+		t.Fatalf("fetching %s: %s", specURL, err)
+	}
+	defer res.Body.Close()
+	if res.StatusCode != http.StatusOK {
+		t.Fatalf("fetching %s: unexpected status %s", specURL, res.Status)
+	}
+
+	var spec struct {
+		Paths map[string]map[string]struct {
+			RequestBody struct {
+				Content map[string]json.RawMessage `json:"content"`
+			} `json:"requestBody"`
+		} `json:"paths"`
+	}
+	if err := json.NewDecoder(res.Body).Decode(&spec); err != nil {
+		t.Fatalf("decoding %s: %s", specURL, err)
+	}
+
+	op, ok := spec.Paths["/environments/{id}/projects"]["post"]
+	if !ok {
+		t.Fatalf("%s does not describe POST /environments/{id}/projects", specURL)
+	}
+	if _, ok := op.RequestBody.Content["application/json"]; !ok {
+		t.Skipf("Arcane under test creates projects as %v, which the pinned pre-feature provider %s cannot send; step 1 would fail before the upgrade is exercised",
+			contentTypesOf(op.RequestBody.Content), redeployTriggerPreFeatureVersion)
+	}
+}
+
+func contentTypesOf(content map[string]json.RawMessage) []string {
+	out := make([]string, 0, len(content))
+	for ct := range content {
+		out = append(out, ct)
+	}
+	return out
+}
+
 // TestAccArcaneProject_redeployTriggerUpgradeFromPreFeatureState covers the
 // common upgrade: a project created without any redeploy configuration. The
 // trigger resolves to "default", the deprecated mirror keeps its value, and the
 // upgrade itself does not redeploy because the compose content did not change.
 func TestAccArcaneProject_redeployTriggerUpgradeFromPreFeatureState(t *testing.T) {
+	testAccSkipIfLegacyProviderCannotCreateProjects(t)
 	testAccIgnoreDevOverrides(t)
 
 	name := testAccName("redeploy-upgrade")
@@ -411,6 +483,7 @@ func TestAccArcaneProject_redeployTriggerUpgradeFromPreFeatureState(t *testing.T
 // other upgraded resource gets, or the upgrade would start redeploying projects
 // their owners deliberately left alone.
 func TestAccArcaneProject_redeployTriggerUpgradeKeepsLegacyOptOut(t *testing.T) {
+	testAccSkipIfLegacyProviderCannotCreateProjects(t)
 	testAccIgnoreDevOverrides(t)
 
 	name := testAccName("redeploy-upgrade-optout")
@@ -456,6 +529,7 @@ func TestAccArcaneProject_redeployTriggerUpgradeKeepsLegacyOptOut(t *testing.T) 
 // resolved "default" has to reproduce the old unconditional behaviour, so
 // untouched files must not redeploy and changed files must.
 func TestAccArcaneProjectPath_redeployTriggerUpgradeFromPreFeatureState(t *testing.T) {
+	testAccSkipIfLegacyProviderCannotCreateProjects(t)
 	testAccIgnoreDevOverrides(t)
 
 	name := testAccName("redeploy-path-upgrade")

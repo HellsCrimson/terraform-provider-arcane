@@ -2,7 +2,9 @@ Arcane Terraform Provider
 
 Manage Arcane using Terraform or OpenTofu. This provider talks to the Arcane HTTP API using an API key and implements common workflows: users, environment settings, compose projects (inline or from files), project state (up/down), notifications, and single containers.
 
-API schema version used for this version: `v2.0.1`.
+API schema version used for this version: `v2.11.0`.
+
+Requires an Arcane server on **v2.8.0 or later**, and is tested against v2.11.0. Two API changes set that floor: container registries gained a required `repositoryNames` property in v2.7.0, and project creation moved to `multipart/form-data` in v2.8.0. Arcane also dropped a number of settings keys in v2.11.0; the matching `arcane_settings` attributes are still accepted but are deprecated and no longer sent.
 
 Overview
 

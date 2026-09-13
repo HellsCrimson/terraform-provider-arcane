@@ -12,6 +12,8 @@ resource "arcane_container_registry" "example" {
   description = "GitHub Container Registry"
   insecure    = false
   enabled     = true
+
+  repository_names = ["my-org", "my-org/platform"]
 }
 ```
 
@@ -24,6 +26,7 @@ resource "arcane_container_registry" "example" {
 - `insecure` (Bool, Optional)
 - `enabled` (Bool, Optional)
 - `registry_type` (String, Optional) - Registry implementation type. Defaults to `generic`; use `ecr` for AWS ECR.
+- `repository_names` (List of String, Optional) - Pre-configured repository namespaces offered when pushing images to this registry. Terraform owns this list: leaving it out of the configuration clears any names set elsewhere (for example in the Arcane UI) on the next update. Arcane trims and de-duplicates the entries, so values that need normalizing will show up as a diff on the next plan.
 - `aws_access_key_id` (String, Optional, Sensitive)
 - `aws_secret_access_key` (String, Optional, Sensitive)
 - `aws_region` (String, Optional)
