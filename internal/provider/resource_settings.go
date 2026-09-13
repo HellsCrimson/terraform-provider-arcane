@@ -43,10 +43,11 @@ func (r *SettingsResource) Schema(_ context.Context, _ resource.SchemaRequest, r
 				},
 			},
 			// SettingsUpdate attributes (all strings per OpenAPI schema)
-			"accent_color":                         resourceschema.StringAttribute{Optional: true, Description: "accentColor"},
+			"accent_color":                         resourceschema.StringAttribute{Optional: true, Description: "accentColor", DeprecationMessage: "Arcane no longer accepts this setting (removed in v2.11.0); it is ignored. It is now a per-user preference set in the Arcane UI."},
 			"activity_history_max_entries":         resourceschema.StringAttribute{Optional: true, Description: "activityHistoryMaxEntries"},
 			"activity_history_retention_days":      resourceschema.StringAttribute{Optional: true, Description: "activityHistoryRetentionDays"},
-			"application_theme":                    resourceschema.StringAttribute{Optional: true, Description: "applicationTheme"},
+			"apns_enabled":                         resourceschema.StringAttribute{Optional: true, Description: "apnsEnabled"},
+			"application_theme":                    resourceschema.StringAttribute{Optional: true, Description: "applicationTheme", DeprecationMessage: "Arcane no longer accepts this setting (removed in v2.11.0); it is ignored. It is now a per-user preference set in the Arcane UI."},
 			"auth_local_enabled":                   resourceschema.StringAttribute{Optional: true, Description: "authLocalEnabled"},
 			"auth_password_policy":                 resourceschema.StringAttribute{Optional: true, Description: "authPasswordPolicy"},
 			"auth_session_timeout":                 resourceschema.StringAttribute{Optional: true, Description: "authSessionTimeout"},
@@ -59,12 +60,14 @@ func (r *SettingsResource) Schema(_ context.Context, _ resource.SchemaRequest, r
 			"auto_update":                          resourceschema.StringAttribute{Optional: true, Description: "autoUpdate"},
 			"auto_update_excluded_containers":      resourceschema.StringAttribute{Optional: true, Description: "autoUpdateExcludedContainers"},
 			"auto_update_interval":                 resourceschema.StringAttribute{Optional: true, Description: "autoUpdateInterval"},
+			"avatar_max_upload_size_mb":            resourceschema.StringAttribute{Optional: true, Description: "avatarMaxUploadSizeMb"},
 			"base_server_url":                      resourceschema.StringAttribute{Optional: true, Description: "baseServerUrl"},
 			"build_provider":                       resourceschema.StringAttribute{Optional: true, Description: "buildProvider"},
 			"build_timeout":                        resourceschema.StringAttribute{Optional: true, Description: "buildTimeout"},
 			"builds_directory":                     resourceschema.StringAttribute{Optional: true, Description: "buildsDirectory"},
 			"default_deploy_pull_policy":           resourceschema.StringAttribute{Optional: true, Description: "defaultDeployPullPolicy"},
 			"default_shell":                        resourceschema.StringAttribute{Optional: true, Description: "defaultShell"},
+			"deploy_wait_timeout":                  resourceschema.StringAttribute{Optional: true, Description: "deployWaitTimeout"},
 			"depot_project_id":                     resourceschema.StringAttribute{Optional: true, Description: "depotProjectId"},
 			"depot_token":                          resourceschema.StringAttribute{Optional: true, Description: "depotToken"},
 			"disk_usage_path":                      resourceschema.StringAttribute{Optional: true, Description: "diskUsagePath"},
@@ -74,20 +77,28 @@ func (r *SettingsResource) Schema(_ context.Context, _ resource.SchemaRequest, r
 			"docker_image_pull_timeout":            resourceschema.StringAttribute{Optional: true, Description: "dockerImagePullTimeout"},
 			"enable_gravatar":                      resourceschema.StringAttribute{Optional: true, Description: "enableGravatar"},
 			"environment_health_interval":          resourceschema.StringAttribute{Optional: true, Description: "environmentHealthInterval"},
+			"experimental_features_enabled":        resourceschema.StringAttribute{Optional: true, Description: "experimentalFeaturesEnabled"},
 			"follow_project_symlinks":              resourceschema.StringAttribute{Optional: true, Description: "followProjectSymlinks"},
 			"git_operation_timeout":                resourceschema.StringAttribute{Optional: true, Description: "gitOperationTimeout"},
 			"git_sync_max_binary_size_mb":          resourceschema.StringAttribute{Optional: true, Description: "gitSyncMaxBinarySizeMb"},
 			"git_sync_max_files":                   resourceschema.StringAttribute{Optional: true, Description: "gitSyncMaxFiles"},
 			"git_sync_max_total_size_mb":           resourceschema.StringAttribute{Optional: true, Description: "gitSyncMaxTotalSizeMb"},
 			"http_client_timeout":                  resourceschema.StringAttribute{Optional: true, Description: "httpClientTimeout"},
-			"icon_catalog":                         resourceschema.StringAttribute{Optional: true, Description: "iconCatalog"},
-			"keyboard_shortcuts_enabled":           resourceschema.StringAttribute{Optional: true, Description: "keyboardShortcutsEnabled"},
+			"icon_catalog":                         resourceschema.StringAttribute{Optional: true, Description: "iconCatalog", DeprecationMessage: "Arcane no longer accepts this setting (removed in v2.11.0); it is ignored. It is now a per-user preference set in the Arcane UI."},
+			"image_patch_timeout_sec":              resourceschema.StringAttribute{Optional: true, Description: "imagePatchTimeoutSec"},
+			"image_patch_suffix":                   resourceschema.StringAttribute{Optional: true, Description: "imagePatchSuffix"},
+			"image_patch_all_platforms":            resourceschema.StringAttribute{Optional: true, Description: "imagePatchAllPlatforms"},
+			"image_event_watcher_enabled":          resourceschema.StringAttribute{Optional: true, Description: "imageEventWatcherEnabled"},
+			"image_auto_patch_interval":            resourceschema.StringAttribute{Optional: true, Description: "imageAutoPatchInterval"},
+			"image_auto_patch_enabled":             resourceschema.StringAttribute{Optional: true, Description: "imageAutoPatchEnabled"},
+			"keyboard_shortcuts_enabled":           resourceschema.StringAttribute{Optional: true, Description: "keyboardShortcutsEnabled", DeprecationMessage: "Arcane no longer accepts this setting (removed in v2.11.0); it is ignored. It is now a per-user preference set in the Arcane UI."},
 			"lifecycle_enabled":                    resourceschema.StringAttribute{Optional: true, Description: "lifecycleEnabled"},
 			"lifecycle_default_runner_image":       resourceschema.StringAttribute{Optional: true, Description: "lifecycleDefaultRunnerImage"},
 			"lifecycle_max_timeout_sec":            resourceschema.StringAttribute{Optional: true, Description: "lifecycleMaxTimeoutSec"},
+			"max_concurrent_activities":            resourceschema.StringAttribute{Optional: true, Description: "maxConcurrentActivities"},
 			"max_image_upload_size":                resourceschema.StringAttribute{Optional: true, Description: "maxImageUploadSize"},
-			"mobile_navigation_mode":               resourceschema.StringAttribute{Optional: true, Description: "mobileNavigationMode"},
-			"mobile_navigation_show_labels":        resourceschema.StringAttribute{Optional: true, Description: "mobileNavigationShowLabels"},
+			"mobile_navigation_mode":               resourceschema.StringAttribute{Optional: true, Description: "mobileNavigationMode", DeprecationMessage: "Arcane no longer accepts this setting (removed in v2.11.0); it is ignored. It is now a per-user preference set in the Arcane UI."},
+			"mobile_navigation_show_labels":        resourceschema.StringAttribute{Optional: true, Description: "mobileNavigationShowLabels", DeprecationMessage: "Arcane no longer accepts this setting (removed in v2.11.0); it is ignored. It is now a per-user preference set in the Arcane UI."},
 			"oidc_auto_redirect_to_provider":       resourceschema.StringAttribute{Optional: true, Description: "oidcAutoRedirectToProvider"},
 			"oidc_client_id":                       resourceschema.StringAttribute{Optional: true, Description: "oidcClientId"},
 			"oidc_client_secret":                   resourceschema.StringAttribute{Optional: true, Description: "oidcClientSecret"},
@@ -99,7 +110,7 @@ func (r *SettingsResource) Schema(_ context.Context, _ resource.SchemaRequest, r
 			"oidc_provider_name":                   resourceschema.StringAttribute{Optional: true, Description: "oidcProviderName"},
 			"oidc_scopes":                          resourceschema.StringAttribute{Optional: true, Description: "oidcScopes"},
 			"oidc_skip_tls_verify":                 resourceschema.StringAttribute{Optional: true, Description: "oidcSkipTlsVerify"},
-			"oled_mode":                            resourceschema.StringAttribute{Optional: true, Description: "oledMode"},
+			"oled_mode":                            resourceschema.StringAttribute{Optional: true, Description: "oledMode", DeprecationMessage: "Arcane no longer accepts this setting (removed in v2.11.0); it is ignored. It is now a per-user preference set in the Arcane UI."},
 			"polling_enabled":                      resourceschema.StringAttribute{Optional: true, Description: "pollingEnabled"},
 			"polling_interval":                     resourceschema.StringAttribute{Optional: true, Description: "pollingInterval"},
 			"projects_directory":                   resourceschema.StringAttribute{Optional: true, Description: "projectsDirectory"},
@@ -116,20 +127,28 @@ func (r *SettingsResource) Schema(_ context.Context, _ resource.SchemaRequest, r
 			"registry_timeout":                     resourceschema.StringAttribute{Optional: true, Description: "registryTimeout"},
 			"scheduled_prune_enabled":              resourceschema.StringAttribute{Optional: true, Description: "scheduledPruneEnabled"},
 			"scheduled_prune_interval":             resourceschema.StringAttribute{Optional: true, Description: "scheduledPruneInterval"},
-			"sidebar_hover_expansion":              resourceschema.StringAttribute{Optional: true, Description: "sidebarHoverExpansion"},
+			"sidebar_hover_expansion":              resourceschema.StringAttribute{Optional: true, Description: "sidebarHoverExpansion", DeprecationMessage: "Arcane no longer accepts this setting (removed in v2.11.0); it is ignored. It is now a per-user preference set in the Arcane UI."},
 			"swarm_stack_sources_directory":        resourceschema.StringAttribute{Optional: true, Description: "swarmStackSourcesDirectory"},
 			"templates_directory":                  resourceschema.StringAttribute{Optional: true, Description: "templatesDirectory"},
+			"tools_image_registry":                 resourceschema.StringAttribute{Optional: true, Description: "toolsImageRegistry"},
 			"trivy_concurrent_scan_containers":     resourceschema.StringAttribute{Optional: true, Description: "trivyConcurrentScanContainers"},
 			"trivy_cpu_limit":                      resourceschema.StringAttribute{Optional: true, Description: "trivyCpuLimit"},
-			"trivy_image":                          resourceschema.StringAttribute{Optional: true, Description: "trivyImage"},
+			"trivy_ignore_unfixed":                 resourceschema.StringAttribute{Optional: true, Description: "trivyIgnoreUnfixed"},
+			"trivy_db_registry":                    resourceschema.StringAttribute{Optional: true, Description: "trivyDbRegistry"},
+			"trivy_image":                          resourceschema.StringAttribute{Optional: true, Description: "trivyImage", DeprecationMessage: "Arcane no longer accepts this setting (removed in v2.11.0); it is ignored. It has no replacement."},
 			"trivy_memory_limit_mb":                resourceschema.StringAttribute{Optional: true, Description: "trivyMemoryLimitMb"},
 			"trivy_network":                        resourceschema.StringAttribute{Optional: true, Description: "trivyNetwork"},
-			"trivy_preserve_cache_on_volume_prune": resourceschema.StringAttribute{Optional: true, Description: "trivyPreserveCacheOnVolumePrune"},
+			"trivy_preserve_cache_on_volume_prune": resourceschema.StringAttribute{Optional: true, Description: "trivyPreserveCacheOnVolumePrune", DeprecationMessage: "Arcane no longer accepts this setting (removed in v2.11.0); it is ignored. It has no replacement."},
 			"trivy_privileged":                     resourceschema.StringAttribute{Optional: true, Description: "trivyPrivileged"},
 			"trivy_resource_limits_enabled":        resourceschema.StringAttribute{Optional: true, Description: "trivyResourceLimitsEnabled"},
 			"trivy_scan_timeout":                   resourceschema.StringAttribute{Optional: true, Description: "trivyScanTimeout"},
 			"trivy_security_opts":                  resourceschema.StringAttribute{Optional: true, Description: "trivySecurityOpts"},
-			"volume_browser_helper_idle_timeout":   resourceschema.StringAttribute{Optional: true, Description: "volumeBrowserHelperIdleTimeout"},
+			"update_check_registry":                resourceschema.StringAttribute{Optional: true, Description: "updateCheckRegistry"},
+			"trivy_server_url":                     resourceschema.StringAttribute{Optional: true, Description: "trivyServerUrl"},
+			"trivy_server_token":                   resourceschema.StringAttribute{Optional: true, Sensitive: true, Description: "trivyServerToken"},
+			"trivy_server_enabled":                 resourceschema.StringAttribute{Optional: true, Description: "trivyServerEnabled"},
+			"volume_browser_helper_idle_timeout":   resourceschema.StringAttribute{Optional: true, Description: "volumeBrowserHelperIdleTimeout", DeprecationMessage: "Arcane no longer accepts this setting (removed in v2.11.0); it is ignored. Use volume_helper_idle_timeout instead."},
+			"volume_helper_idle_timeout":           resourceschema.StringAttribute{Optional: true, Description: "volumeHelperIdleTimeout"},
 			"vulnerability_scan_enabled":           resourceschema.StringAttribute{Optional: true, Description: "vulnerabilityScanEnabled"},
 			"vulnerability_scan_interval":          resourceschema.StringAttribute{Optional: true, Description: "vulnerabilityScanInterval"},
 
@@ -152,6 +171,10 @@ func (r *SettingsResource) Configure(_ context.Context, req resource.ConfigureRe
 }
 
 type settingsModel struct {
+	ExperimentalFeaturesEnabled     types.String `tfsdk:"experimental_features_enabled"`
+	DeployWaitTimeout               types.String `tfsdk:"deploy_wait_timeout"`
+	AvatarMaxUploadSizeMb           types.String `tfsdk:"avatar_max_upload_size_mb"`
+	ApnsEnabled                     types.String `tfsdk:"apns_enabled"`
 	ID                              types.String `tfsdk:"id"`
 	EnvironmentID                   types.String `tfsdk:"environment_id"`
 	AccentColor                     types.String `tfsdk:"accent_color"`
@@ -192,10 +215,17 @@ type settingsModel struct {
 	GitSyncMaxTotalSizeMb           types.String `tfsdk:"git_sync_max_total_size_mb"`
 	HttpClientTimeout               types.String `tfsdk:"http_client_timeout"`
 	IconCatalog                     types.String `tfsdk:"icon_catalog"`
+	ImagePatchTimeoutSec            types.String `tfsdk:"image_patch_timeout_sec"`
+	ImagePatchSuffix                types.String `tfsdk:"image_patch_suffix"`
+	ImagePatchAllPlatforms          types.String `tfsdk:"image_patch_all_platforms"`
+	ImageEventWatcherEnabled        types.String `tfsdk:"image_event_watcher_enabled"`
+	ImageAutoPatchInterval          types.String `tfsdk:"image_auto_patch_interval"`
+	ImageAutoPatchEnabled           types.String `tfsdk:"image_auto_patch_enabled"`
 	KeyboardShortcutsEnabled        types.String `tfsdk:"keyboard_shortcuts_enabled"`
 	LifecycleEnabled                types.String `tfsdk:"lifecycle_enabled"`
 	LifecycleDefaultRunnerImage     types.String `tfsdk:"lifecycle_default_runner_image"`
 	LifecycleMaxTimeoutSec          types.String `tfsdk:"lifecycle_max_timeout_sec"`
+	MaxConcurrentActivities         types.String `tfsdk:"max_concurrent_activities"`
 	MaxImageUploadSize              types.String `tfsdk:"max_image_upload_size"`
 	MobileNavigationMode            types.String `tfsdk:"mobile_navigation_mode"`
 	MobileNavigationShowLabels      types.String `tfsdk:"mobile_navigation_show_labels"`
@@ -230,8 +260,11 @@ type settingsModel struct {
 	SidebarHoverExpansion           types.String `tfsdk:"sidebar_hover_expansion"`
 	SwarmStackSourcesDirectory      types.String `tfsdk:"swarm_stack_sources_directory"`
 	TemplatesDirectory              types.String `tfsdk:"templates_directory"`
+	ToolsImageRegistry              types.String `tfsdk:"tools_image_registry"`
 	TrivyConcurrentScanContainers   types.String `tfsdk:"trivy_concurrent_scan_containers"`
 	TrivyCpuLimit                   types.String `tfsdk:"trivy_cpu_limit"`
+	TrivyIgnoreUnfixed              types.String `tfsdk:"trivy_ignore_unfixed"`
+	TrivyDbRegistry                 types.String `tfsdk:"trivy_db_registry"`
 	TrivyImage                      types.String `tfsdk:"trivy_image"`
 	TrivyMemoryLimitMb              types.String `tfsdk:"trivy_memory_limit_mb"`
 	TrivyNetwork                    types.String `tfsdk:"trivy_network"`
@@ -240,7 +273,12 @@ type settingsModel struct {
 	TrivyResourceLimitsEnabled      types.String `tfsdk:"trivy_resource_limits_enabled"`
 	TrivyScanTimeout                types.String `tfsdk:"trivy_scan_timeout"`
 	TrivySecurityOpts               types.String `tfsdk:"trivy_security_opts"`
+	UpdateCheckRegistry             types.String `tfsdk:"update_check_registry"`
+	TrivyServerUrl                  types.String `tfsdk:"trivy_server_url"`
+	TrivyServerToken                types.String `tfsdk:"trivy_server_token"`
+	TrivyServerEnabled              types.String `tfsdk:"trivy_server_enabled"`
 	VolumeBrowserHelperIdleTimeout  types.String `tfsdk:"volume_browser_helper_idle_timeout"`
+	VolumeHelperIdleTimeout         types.String `tfsdk:"volume_helper_idle_timeout"`
 	VulnerabilityScanEnabled        types.String `tfsdk:"vulnerability_scan_enabled"`
 	VulnerabilityScanInterval       types.String `tfsdk:"vulnerability_scan_interval"`
 	Applied                         types.Map    `tfsdk:"applied"`
@@ -344,10 +382,9 @@ func addIfSet(m map[string]string, key string, v types.String) {
 
 func buildSettingsMapFromModel(s settingsModel) map[string]string {
 	out := map[string]string{}
-	addIfSet(out, "accentColor", s.AccentColor)
 	addIfSet(out, "activityHistoryMaxEntries", s.ActivityHistoryMaxEntries)
 	addIfSet(out, "activityHistoryRetentionDays", s.ActivityHistoryRetentionDays)
-	addIfSet(out, "applicationTheme", s.ApplicationTheme)
+	addIfSet(out, "apnsEnabled", s.ApnsEnabled)
 	addIfSet(out, "authLocalEnabled", s.AuthLocalEnabled)
 	addIfSet(out, "authPasswordPolicy", s.AuthPasswordPolicy)
 	addIfSet(out, "authSessionTimeout", s.AuthSessionTimeout)
@@ -360,12 +397,14 @@ func buildSettingsMapFromModel(s settingsModel) map[string]string {
 	addIfSet(out, "autoUpdate", s.AutoUpdate)
 	addIfSet(out, "autoUpdateExcludedContainers", s.AutoUpdateExcludedContainers)
 	addIfSet(out, "autoUpdateInterval", s.AutoUpdateInterval)
+	addIfSet(out, "avatarMaxUploadSizeMb", s.AvatarMaxUploadSizeMb)
 	addIfSet(out, "baseServerUrl", s.BaseServerUrl)
 	addIfSet(out, "buildProvider", s.BuildProvider)
 	addIfSet(out, "buildTimeout", s.BuildTimeout)
 	addIfSet(out, "buildsDirectory", s.BuildsDirectory)
 	addIfSet(out, "defaultDeployPullPolicy", s.DefaultDeployPullPolicy)
 	addIfSet(out, "defaultShell", s.DefaultShell)
+	addIfSet(out, "deployWaitTimeout", s.DeployWaitTimeout)
 	addIfSet(out, "depotProjectId", s.DepotProjectId)
 	addIfSet(out, "depotToken", s.DepotToken)
 	addIfSet(out, "diskUsagePath", s.DiskUsagePath)
@@ -375,20 +414,24 @@ func buildSettingsMapFromModel(s settingsModel) map[string]string {
 	addIfSet(out, "dockerImagePullTimeout", s.DockerImagePullTimeout)
 	addIfSet(out, "enableGravatar", s.EnableGravatar)
 	addIfSet(out, "environmentHealthInterval", s.EnvironmentHealthInterval)
+	addIfSet(out, "experimentalFeaturesEnabled", s.ExperimentalFeaturesEnabled)
 	addIfSet(out, "followProjectSymlinks", s.FollowProjectSymlinks)
 	addIfSet(out, "gitOperationTimeout", s.GitOperationTimeout)
 	addIfSet(out, "gitSyncMaxBinarySizeMb", s.GitSyncMaxBinarySizeMb)
 	addIfSet(out, "gitSyncMaxFiles", s.GitSyncMaxFiles)
 	addIfSet(out, "gitSyncMaxTotalSizeMb", s.GitSyncMaxTotalSizeMb)
 	addIfSet(out, "httpClientTimeout", s.HttpClientTimeout)
-	addIfSet(out, "iconCatalog", s.IconCatalog)
-	addIfSet(out, "keyboardShortcutsEnabled", s.KeyboardShortcutsEnabled)
+	addIfSet(out, "imagePatchTimeoutSec", s.ImagePatchTimeoutSec)
+	addIfSet(out, "imagePatchSuffix", s.ImagePatchSuffix)
+	addIfSet(out, "imagePatchAllPlatforms", s.ImagePatchAllPlatforms)
+	addIfSet(out, "imageEventWatcherEnabled", s.ImageEventWatcherEnabled)
+	addIfSet(out, "imageAutoPatchInterval", s.ImageAutoPatchInterval)
+	addIfSet(out, "imageAutoPatchEnabled", s.ImageAutoPatchEnabled)
 	addIfSet(out, "lifecycleEnabled", s.LifecycleEnabled)
 	addIfSet(out, "lifecycleDefaultRunnerImage", s.LifecycleDefaultRunnerImage)
 	addIfSet(out, "lifecycleMaxTimeoutSec", s.LifecycleMaxTimeoutSec)
+	addIfSet(out, "maxConcurrentActivities", s.MaxConcurrentActivities)
 	addIfSet(out, "maxImageUploadSize", s.MaxImageUploadSize)
-	addIfSet(out, "mobileNavigationMode", s.MobileNavigationMode)
-	addIfSet(out, "mobileNavigationShowLabels", s.MobileNavigationShowLabels)
 	addIfSet(out, "oidcAutoRedirectToProvider", s.OidcAutoRedirectToProvider)
 	addIfSet(out, "oidcClientId", s.OidcClientId)
 	addIfSet(out, "oidcClientSecret", s.OidcClientSecret)
@@ -400,7 +443,6 @@ func buildSettingsMapFromModel(s settingsModel) map[string]string {
 	addIfSet(out, "oidcProviderName", s.OidcProviderName)
 	addIfSet(out, "oidcScopes", s.OidcScopes)
 	addIfSet(out, "oidcSkipTlsVerify", s.OidcSkipTlsVerify)
-	addIfSet(out, "oledMode", s.OledMode)
 	addIfSet(out, "pollingEnabled", s.PollingEnabled)
 	addIfSet(out, "pollingInterval", s.PollingInterval)
 	addIfSet(out, "projectsDirectory", s.ProjectsDirectory)
@@ -417,20 +459,24 @@ func buildSettingsMapFromModel(s settingsModel) map[string]string {
 	addIfSet(out, "registryTimeout", s.RegistryTimeout)
 	addIfSet(out, "scheduledPruneEnabled", s.ScheduledPruneEnabled)
 	addIfSet(out, "scheduledPruneInterval", s.ScheduledPruneInterval)
-	addIfSet(out, "sidebarHoverExpansion", s.SidebarHoverExpansion)
 	addIfSet(out, "swarmStackSourcesDirectory", s.SwarmStackSourcesDirectory)
 	addIfSet(out, "templatesDirectory", s.TemplatesDirectory)
+	addIfSet(out, "toolsImageRegistry", s.ToolsImageRegistry)
 	addIfSet(out, "trivyConcurrentScanContainers", s.TrivyConcurrentScanContainers)
 	addIfSet(out, "trivyCpuLimit", s.TrivyCpuLimit)
-	addIfSet(out, "trivyImage", s.TrivyImage)
+	addIfSet(out, "trivyIgnoreUnfixed", s.TrivyIgnoreUnfixed)
+	addIfSet(out, "trivyDbRegistry", s.TrivyDbRegistry)
 	addIfSet(out, "trivyMemoryLimitMb", s.TrivyMemoryLimitMb)
 	addIfSet(out, "trivyNetwork", s.TrivyNetwork)
-	addIfSet(out, "trivyPreserveCacheOnVolumePrune", s.TrivyPreserveCacheOnVolumePrune)
 	addIfSet(out, "trivyPrivileged", s.TrivyPrivileged)
 	addIfSet(out, "trivyResourceLimitsEnabled", s.TrivyResourceLimitsEnabled)
 	addIfSet(out, "trivyScanTimeout", s.TrivyScanTimeout)
 	addIfSet(out, "trivySecurityOpts", s.TrivySecurityOpts)
-	addIfSet(out, "volumeBrowserHelperIdleTimeout", s.VolumeBrowserHelperIdleTimeout)
+	addIfSet(out, "volumeHelperIdleTimeout", s.VolumeHelperIdleTimeout)
+	addIfSet(out, "updateCheckRegistry", s.UpdateCheckRegistry)
+	addIfSet(out, "trivyServerUrl", s.TrivyServerUrl)
+	addIfSet(out, "trivyServerToken", s.TrivyServerToken)
+	addIfSet(out, "trivyServerEnabled", s.TrivyServerEnabled)
 	addIfSet(out, "vulnerabilityScanEnabled", s.VulnerabilityScanEnabled)
 	addIfSet(out, "vulnerabilityScanInterval", s.VulnerabilityScanInterval)
 	return out

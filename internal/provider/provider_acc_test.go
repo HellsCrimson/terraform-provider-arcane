@@ -63,7 +63,12 @@ func TestAccArcaneProvider_allResources(t *testing.T) {
 						resource.TestCheckResourceAttr("arcane_user.test", "display_name", "Terraform Acceptance User 1"),
 					),
 					logCheck(t, "arcane_api_key", resource.TestCheckResourceAttrSet("arcane_api_key.test", "id")),
-					logCheck(t, "arcane_container_registry", resource.TestCheckResourceAttrSet("arcane_container_registry.test", "id")),
+					logCheck(t, "arcane_container_registry",
+						resource.TestCheckResourceAttrSet("arcane_container_registry.test", "id"),
+						resource.TestCheckResourceAttr("arcane_container_registry.test", "repository_names.#", "2"),
+						resource.TestCheckResourceAttr("arcane_container_registry.test", "repository_names.0", "tfacc"),
+						resource.TestCheckResourceAttr("arcane_container_registry.test", "repository_names.1", "tfacc/platform"),
+					),
 					logCheck(t, "arcane_git_repository", resource.TestCheckResourceAttrSet("arcane_git_repository.test", "id")),
 					logCheck(t, "arcane_template", resource.TestCheckResourceAttrSet("arcane_template.test", "id")),
 					logCheck(t, "arcane_template_registry", resource.TestCheckResourceAttrSet("arcane_template_registry.test", "id")),
@@ -75,7 +80,7 @@ func TestAccArcaneProvider_allResources(t *testing.T) {
 					logCheck(t, "arcane_volume_backup", resource.TestCheckResourceAttrSet("arcane_volume_backup.test", "id")),
 					logCheck(t, "arcane_vulnerability_ignore", resource.TestCheckResourceAttrSet("arcane_vulnerability_ignore.test", "id")),
 					logCheck(t, "arcane_job_schedules", resource.TestCheckResourceAttr("arcane_job_schedules.test", "polling_interval", "0 */5 * * * *")),
-					logCheck(t, "arcane_settings", resource.TestCheckResourceAttr("arcane_settings.test", "application_theme", "light")),
+					logCheck(t, "arcane_settings", resource.TestCheckResourceAttr("arcane_settings.test", "default_shell", "/bin/sh")),
 					logCheck(t, "arcane_notification",
 						// Notification: generic webhook provider, enabled, pointing at the listener.
 						resource.TestCheckResourceAttrSet("arcane_notification.test", "id"),
@@ -113,7 +118,7 @@ func TestAccArcaneProvider_allResources(t *testing.T) {
 					logCheck(t, "arcane_network", resource.TestCheckResourceAttr("arcane_network.test", "name", testAccName("network-2"))),
 					logCheck(t, "arcane_volume", resource.TestCheckResourceAttr("arcane_volume.test", "name", testAccName("volume-2"))),
 					logCheck(t, "arcane_job_schedules", resource.TestCheckResourceAttr("arcane_job_schedules.test", "polling_interval", "0 */10 * * * *")),
-					logCheck(t, "arcane_settings", resource.TestCheckResourceAttr("arcane_settings.test", "application_theme", "dark")),
+					logCheck(t, "arcane_settings", resource.TestCheckResourceAttr("arcane_settings.test", "default_shell", "/bin/bash")),
 					logCheck(t, "arcane_vulnerability_ignore", resource.TestCheckResourceAttr("arcane_vulnerability_ignore.test", "reason", "Terraform acceptance 2")),
 					logCheck(t, "arcane_notification",
 						// Notification update: disabled and webhook URL changed.
@@ -147,6 +152,8 @@ func TestAccArcaneProvider_allResources(t *testing.T) {
 					logCheck(t, "data.arcane_container_registry",
 						resource.TestCheckResourceAttrPair("data.arcane_container_registry.test", "url", "arcane_container_registry.test", "url"),
 						resource.TestCheckResourceAttrPair("data.arcane_container_registry.test", "description", "arcane_container_registry.test", "description"),
+						resource.TestCheckResourceAttrPair("data.arcane_container_registry.test", "repository_names.#", "arcane_container_registry.test", "repository_names.#"),
+						resource.TestCheckResourceAttrPair("data.arcane_container_registry.test", "repository_names.0", "arcane_container_registry.test", "repository_names.0"),
 					),
 					logCheck(t, "data.arcane_environment",
 						resource.TestCheckResourceAttrPair("data.arcane_environment.test", "name", "arcane_environment.test", "name"),
@@ -177,7 +184,7 @@ func TestAccArcaneProvider_allResources(t *testing.T) {
 						resource.TestCheckResourceAttrPair("data.arcane_project_path.test", "name", "arcane_project_path.test", "name"),
 					),
 					logCheck(t, "data.arcane_settings",
-						resource.TestCheckResourceAttr("data.arcane_settings.test", "settings.applicationTheme", "dark"),
+						resource.TestCheckResourceAttr("data.arcane_settings.test", "settings.defaultShell", "/bin/bash"),
 					),
 					logCheck(t, "data.arcane_template",
 						resource.TestCheckResourceAttrPair("data.arcane_template.test", "name", "arcane_template.test", "name"),
@@ -1089,6 +1096,11 @@ provider "arcane" {
   http_timeout = "180s"
 }
 
+resource "arcane_settings" "pre_deploy" {
+  environment_id    = %q
+  lifecycle_enabled = "true"
+}
+
 resource "arcane_git_repository" "pre_deploy" {
   name      = %q
   url       = "https://github.com/docker/awesome-compose.git"
@@ -1097,6 +1109,8 @@ resource "arcane_git_repository" "pre_deploy" {
 }
 
 resource "arcane_gitops_sync" "pre_deploy" {
+  depends_on = [arcane_settings.pre_deploy]
+
   environment_id = %q
   name           = %q
   repository_id  = arcane_git_repository.pre_deploy.id
@@ -1128,7 +1142,7 @@ resource "arcane_gitops_sync" "no_hook" {
   target_type    = "project"
   start_project  = false
 }
-`, testAccEndpoint(), testAccAPIKey(), testAccName("pre-deploy-repo"), testAccEnvironmentID(), name, name, timeoutSec, networkMode, testAccEnvironmentID(), name, name)
+`, testAccEndpoint(), testAccAPIKey(), testAccEnvironmentID(), testAccName("pre-deploy-repo"), testAccEnvironmentID(), name, name, timeoutSec, networkMode, testAccEnvironmentID(), name, name)
 }
 
 // TestAccArcaneSettings_lifecycle covers the global lifecycle hook settings on
@@ -1288,8 +1302,8 @@ resource "arcane_notification" "test" {
 func testAccEnvReplaceSettingsConfig(envID string) string {
 	return testAccEnvReplaceProviderBlock() + fmt.Sprintf(`
 resource "arcane_settings" "test" {
-  environment_id    = %q
-  application_theme = "dark"
+  environment_id = %q
+  default_shell  = "/bin/sh"
 }
 `, envID)
 }
@@ -1426,7 +1440,7 @@ func testAccRestoreEnvironmentConfigOnCleanup(t *testing.T) {
 		t.Fatalf("reading existing job schedules for cleanup snapshot: %s", err)
 	}
 	settingsToRestore := map[string]string{}
-	for _, key := range []string{"applicationTheme", "pollingEnabled", "pollingInterval", "baseServerUrl"} {
+	for _, key := range []string{"defaultShell", "pollingEnabled", "pollingInterval", "baseServerUrl"} {
 		if value, ok := settings[key]; ok {
 			settingsToRestore[key] = value
 		}
@@ -1519,7 +1533,7 @@ resource "arcane_environment" "test" {
 
 resource "arcane_user" "test" {
   username     = %q
-  password     = "Terraform1!"
+  password     = "Terraform-Acc-1!"
   display_name = "Terraform Acceptance User %s"
   email        = "tfacc-%s-%s@example.test"
   locale       = "en-US"
@@ -1536,13 +1550,14 @@ resource "arcane_api_key" "test" {
 }
 
 resource "arcane_container_registry" "test" {
-  url           = "https://example.test"
-  username      = "tfacc"
-  token         = "tfacc-token-%s"
-  description   = "Terraform acceptance registry %s"
-  insecure      = true
-  enabled       = true
-  registry_type = "generic"
+  url              = "https://example.test"
+  username         = "tfacc"
+  token            = "tfacc-token-%s"
+  description      = "Terraform acceptance registry %s"
+  insecure         = true
+  enabled          = true
+  registry_type    = "generic"
+  repository_names = ["tfacc", "tfacc/platform"]
 }
 
 resource "arcane_git_repository" "test" {
@@ -1573,11 +1588,11 @@ resource "arcane_template_registry" "test" {
 }
 
 resource "arcane_settings" "test" {
-  environment_id     = %q
-  application_theme  = %q
-  polling_enabled    = "false"
-  polling_interval   = %q
-  base_server_url    = "http://localhost:3552"
+  environment_id   = %q
+  default_shell    = %q
+  polling_enabled  = "false"
+  polling_interval = %q
+  base_server_url  = "http://localhost:3552"
 }
 
 resource "arcane_job_schedules" "test" {
@@ -1713,7 +1728,7 @@ resource "arcane_gitops_sync" "test" {
 		testAccName("template-registry-"+suffix),
 		suffix,
 		testAccEnvironmentID(),
-		map[string]string{"1": "light", "2": "dark"}[suffix],
+		map[string]string{"1": "/bin/sh", "2": "/bin/bash"}[suffix],
 		map[string]string{"1": "0 */5 * * * *", "2": "0 */10 * * * *"}[suffix],
 		testAccEnvironmentID(),
 		map[string]string{"1": "0 */5 * * * *", "2": "0 */10 * * * *"}[suffix],

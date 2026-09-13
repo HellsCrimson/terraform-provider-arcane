@@ -24,7 +24,7 @@ resource "arcane_settings" "env" {
 All optional attributes are strings:
 
 **General Settings**
-- `accent_color` - UI accent color.
+- `accent_color` - **Deprecated** - removed from the Arcane API in v2.11.0 and ignored by the provider; it is now a per-user UI preference.
 - `base_server_url` - Base URL for the server.
 - `default_shell` - Default shell for terminal sessions.
 - `disk_usage_path` - Path for disk usage monitoring.
@@ -32,10 +32,16 @@ All optional attributes are strings:
 - `swarm_stack_sources_directory` - Directory for swarm stack sources.
 - `templates_directory` - Directory for templates.
 - `enable_gravatar` - Enable Gravatar for user avatars.
-- `keyboard_shortcuts_enabled` - Enable keyboard shortcuts.
+- `keyboard_shortcuts_enabled` - **Deprecated** - removed from the Arcane API in v2.11.0 and ignored by the provider; it is now a per-user UI preference.
 - `max_image_upload_size` - Maximum image upload size.
+- `avatar_max_upload_size_mb` - Maximum avatar upload size, in MB.
+- `experimental_features_enabled` - Enable experimental features.
+- `apns_enabled` - Enable Apple push notifications.
+- `max_concurrent_activities` - Maximum number of activities run concurrently.
+- `tools_image_registry` - Registry used to pull Arcane's helper tool images.
+- `update_check_registry` - Registry queried for update checks.
 - `follow_project_symlinks` - Follow symlinks when scanning project directories.
-- `icon_catalog` - Icon catalog.
+- `icon_catalog` - **Deprecated** - removed from the Arcane API in v2.11.0 and ignored by the provider; it is now a per-user UI preference.
 
 **Activity History Settings**
 - `activity_history_max_entries` - Maximum number of activity history entries to retain.
@@ -108,6 +114,7 @@ All optional attributes are strings:
 - `build_timeout` - Build timeout.
 - `builds_directory` - Builds directory.
 - `default_deploy_pull_policy` - Default deploy pull policy.
+- `deploy_wait_timeout` - How long a deploy waits for services to become ready.
 - `depot_project_id` - Depot project ID.
 - `depot_token` - Depot token.
 
@@ -117,26 +124,43 @@ All optional attributes are strings:
 - `http_client_timeout` - HTTP client timeout.
 - `proxy_request_timeout` - Proxy request timeout.
 - `registry_timeout` - Registry timeout.
-- `volume_browser_helper_idle_timeout` - Idle timeout for the volume browser helper.
+- `volume_helper_idle_timeout` - Idle timeout for the volume browser helper.
+- `volume_browser_helper_idle_timeout` - **Deprecated** - renamed to `volume_helper_idle_timeout` in Arcane v2.11.0; ignored by the provider.
 
-**UI Settings**
+**UI Settings** (all deprecated)
+
+Arcane v2.11.0 moved these to per-user preferences set in the UI. They were removed from the settings API, so the provider no longer sends them and they have no effect. They remain accepted in configuration so that existing configurations keep applying, and will be removed in a future major release.
+
 - `mobile_navigation_mode` - Mobile navigation mode.
 - `mobile_navigation_show_labels` - Show labels in mobile navigation.
 - `sidebar_hover_expansion` - Enable sidebar hover expansion.
 - `oled_mode` - OLED mode.
 - `application_theme` - Application theme.
 
+**Image Patch Settings**
+- `image_auto_patch_enabled` - Enable automatic image patching.
+- `image_auto_patch_interval` - Automatic image patch interval.
+- `image_event_watcher_enabled` - Watch Docker image events.
+- `image_patch_all_platforms` - Patch all platforms of a multi-platform image.
+- `image_patch_suffix` - Tag suffix applied to patched images.
+- `image_patch_timeout_sec` - Image patch timeout, in seconds.
+
 **Vulnerability Scan Settings**
 - `trivy_concurrent_scan_containers` - Trivy concurrent scan containers.
 - `trivy_cpu_limit` - Trivy CPU limit.
-- `trivy_image` - Trivy image.
+- `trivy_image` - **Deprecated** - removed from the Arcane API in v2.11.0 and ignored by the provider.
 - `trivy_memory_limit_mb` - Trivy memory limit in MB.
 - `trivy_network` - Trivy network.
-- `trivy_preserve_cache_on_volume_prune` - Preserve Trivy cache on volume prune.
+- `trivy_preserve_cache_on_volume_prune` - **Deprecated** - removed from the Arcane API in v2.11.0 and ignored by the provider.
 - `trivy_privileged` - Run Trivy with privileged mode.
 - `trivy_resource_limits_enabled` - Enable Trivy resource limits.
 - `trivy_scan_timeout` - Trivy scan timeout.
 - `trivy_security_opts` - Trivy security options.
+- `trivy_db_registry` - Registry used to pull the Trivy vulnerability database.
+- `trivy_ignore_unfixed` - Ignore vulnerabilities that have no fix available.
+- `trivy_server_enabled` - Use an external Trivy server instead of running scans locally.
+- `trivy_server_url` - External Trivy server URL.
+- `trivy_server_token` - External Trivy server token (sensitive).
 - `vulnerability_scan_enabled` - Enable vulnerability scanning.
 - `vulnerability_scan_interval` - Vulnerability scan interval.
 
