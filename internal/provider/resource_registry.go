@@ -37,6 +37,7 @@ func (r *RegistryResource) Schema(_ context.Context, _ resource.SchemaRequest, r
 			"insecure":              resourceschema.BoolAttribute{Optional: true},
 			"enabled":               resourceschema.BoolAttribute{Optional: true},
 			"registry_type":         resourceschema.StringAttribute{Optional: true, Computed: true, Default: stringdefault.StaticString("generic"), Description: "Registry implementation type"},
+			"repository_names":      resourceschema.ListAttribute{Optional: true, ElementType: types.StringType, Description: "Pre-configured repository namespaces offered when pushing images to this registry"},
 			"aws_access_key_id":     resourceschema.StringAttribute{Optional: true, Sensitive: true},
 			"aws_secret_access_key": resourceschema.StringAttribute{Optional: true, Sensitive: true},
 			"aws_region":            resourceschema.StringAttribute{Optional: true},
@@ -65,6 +66,7 @@ type registryModel struct {
 	Insecure           types.Bool   `tfsdk:"insecure"`
 	Enabled            types.Bool   `tfsdk:"enabled"`
 	RegistryType       types.String `tfsdk:"registry_type"`
+	RepositoryNames    types.List   `tfsdk:"repository_names"`
 	AWSAccessKeyID     types.String `tfsdk:"aws_access_key_id"`
 	AWSSecretAccessKey types.String `tfsdk:"aws_secret_access_key"`
 	AWSRegion          types.String `tfsdk:"aws_region"`
@@ -80,10 +82,11 @@ func (r *RegistryResource) Create(ctx context.Context, req resource.CreateReques
 	}
 
 	body := sdkclient.CreateContainerRegistryRequest{
-		URL:          plan.URL.ValueString(),
-		Username:     plan.Username.ValueString(),
-		Token:        plan.Token.ValueString(),
-		RegistryType: "generic",
+		URL:             plan.URL.ValueString(),
+		Username:        plan.Username.ValueString(),
+		Token:           plan.Token.ValueString(),
+		RepositoryNames: listToStrings(ctx, plan.RepositoryNames),
+		RegistryType:    "generic",
 	}
 	if !plan.Description.IsNull() && !plan.Description.IsUnknown() {
 		v := plan.Description.ValueString()
@@ -125,6 +128,7 @@ func (r *RegistryResource) Create(ctx context.Context, req resource.CreateReques
 		Insecure:           plan.Insecure,
 		Enabled:            plan.Enabled,
 		RegistryType:       plan.RegistryType,
+		RepositoryNames:    plan.RepositoryNames,
 		AWSAccessKeyID:     plan.AWSAccessKeyID,
 		AWSSecretAccessKey: plan.AWSSecretAccessKey,
 		AWSRegion:          plan.AWSRegion,
@@ -165,6 +169,9 @@ func (r *RegistryResource) Read(ctx context.Context, req resource.ReadRequest, r
 	}
 	if reg.RegistryType != "" {
 		state.RegistryType = types.StringValue(reg.RegistryType)
+	}
+	if !state.RepositoryNames.IsNull() && !state.RepositoryNames.IsUnknown() {
+		state.RepositoryNames = stringsToList(ctx, reg.RepositoryNames)
 	}
 	// AWS credentials are not returned by the API; keep whatever is in state.
 	if !state.AWSRegion.IsNull() && !state.AWSRegion.IsUnknown() {
@@ -214,6 +221,10 @@ func (r *RegistryResource) Update(ctx context.Context, req resource.UpdateReques
 		v := plan.RegistryType.ValueString()
 		body.RegistryType = &v
 	}
+	// Sent unconditionally (empty when unset) so that removing names from the
+	// configuration clears them on the server instead of being a no-op.
+	names := append([]string{}, listToStrings(ctx, plan.RepositoryNames)...)
+	body.RepositoryNames = &names
 	if !plan.AWSAccessKeyID.IsNull() && !plan.AWSAccessKeyID.IsUnknown() {
 		v := plan.AWSAccessKeyID.ValueString()
 		body.AWSAccessKeyID = &v
@@ -255,6 +266,7 @@ func (r *RegistryResource) Update(ctx context.Context, req resource.UpdateReques
 	} else {
 		state.RegistryType = plan.RegistryType
 	}
+	state.RepositoryNames = plan.RepositoryNames
 	// Persist unconditionally so clearing a previously-set credential to null
 	// also updates state (a guarded copy would leave the old secret behind and
 	// produce an inconsistent-result error on the clear-to-null transition).

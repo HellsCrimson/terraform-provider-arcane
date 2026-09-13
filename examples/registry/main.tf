@@ -33,5 +33,7 @@ resource "arcane_container_registry" "ghcr" {
   description = "GitHub Container Registry"
   insecure    = false
   enabled     = true
+
+  repository_names = ["my-org", "my-org/platform"]
 }
 

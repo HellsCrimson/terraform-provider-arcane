@@ -53,6 +53,11 @@ func (d *RegistryDataSource) Schema(ctx context.Context, req datasource.SchemaRe
 				Computed:    true,
 				Description: "Whether the registry is enabled",
 			},
+			"repository_names": schema.ListAttribute{
+				Computed:    true,
+				ElementType: types.StringType,
+				Description: "Pre-configured repository namespaces for this registry",
+			},
 			"created_at": schema.StringAttribute{
 				Computed:    true,
 				Description: "Creation timestamp",
@@ -78,14 +83,15 @@ func (d *RegistryDataSource) Configure(ctx context.Context, req datasource.Confi
 }
 
 type registryDataSourceModel struct {
-	ID          types.String `tfsdk:"id"`
-	URL         types.String `tfsdk:"url"`
-	Username    types.String `tfsdk:"username"`
-	Description types.String `tfsdk:"description"`
-	Insecure    types.Bool   `tfsdk:"insecure"`
-	Enabled     types.Bool   `tfsdk:"enabled"`
-	CreatedAt   types.String `tfsdk:"created_at"`
-	UpdatedAt   types.String `tfsdk:"updated_at"`
+	ID              types.String `tfsdk:"id"`
+	URL             types.String `tfsdk:"url"`
+	Username        types.String `tfsdk:"username"`
+	Description     types.String `tfsdk:"description"`
+	Insecure        types.Bool   `tfsdk:"insecure"`
+	Enabled         types.Bool   `tfsdk:"enabled"`
+	RepositoryNames types.List   `tfsdk:"repository_names"`
+	CreatedAt       types.String `tfsdk:"created_at"`
+	UpdatedAt       types.String `tfsdk:"updated_at"`
 }
 
 func (d *RegistryDataSource) Read(ctx context.Context, req datasource.ReadRequest, resp *datasource.ReadResponse) {
@@ -106,14 +112,15 @@ func (d *RegistryDataSource) Read(ctx context.Context, req datasource.ReadReques
 	}
 
 	state := registryDataSourceModel{
-		ID:          types.StringValue(registry.ID),
-		URL:         types.StringValue(registry.URL),
-		Username:    types.StringValue(registry.Username),
-		Description: types.StringValue(registry.Description),
-		Insecure:    types.BoolValue(registry.Insecure),
-		Enabled:     types.BoolValue(registry.Enabled),
-		CreatedAt:   types.StringValue(registry.CreatedAt),
-		UpdatedAt:   types.StringValue(registry.UpdatedAt),
+		ID:              types.StringValue(registry.ID),
+		URL:             types.StringValue(registry.URL),
+		Username:        types.StringValue(registry.Username),
+		Description:     types.StringValue(registry.Description),
+		Insecure:        types.BoolValue(registry.Insecure),
+		Enabled:         types.BoolValue(registry.Enabled),
+		RepositoryNames: stringsToList(ctx, registry.RepositoryNames),
+		CreatedAt:       types.StringValue(registry.CreatedAt),
+		UpdatedAt:       types.StringValue(registry.UpdatedAt),
 	}
 
 	resp.Diagnostics.Append(resp.State.Set(ctx, &state)...)

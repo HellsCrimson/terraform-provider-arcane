@@ -1305,44 +1305,47 @@ func (c *Client) ListContainers(ctx context.Context, envID string) ([]ContainerS
 
 // -------- Container Registries --------
 type CreateContainerRegistryRequest struct {
-	URL                string  `json:"url"`
-	Username           string  `json:"username"`
-	Token              string  `json:"token"`
-	Description        *string `json:"description"`
-	Insecure           *bool   `json:"insecure"`
-	Enabled            *bool   `json:"enabled"`
-	RegistryType       string  `json:"registryType"`
-	AWSAccessKeyID     string  `json:"awsAccessKeyId"`
-	AWSSecretAccessKey string  `json:"awsSecretAccessKey"`
-	AWSRegion          string  `json:"awsRegion"`
+	URL                string   `json:"url"`
+	Username           string   `json:"username"`
+	Token              string   `json:"token"`
+	Description        *string  `json:"description"`
+	Insecure           *bool    `json:"insecure"`
+	Enabled            *bool    `json:"enabled"`
+	RegistryType       string   `json:"registryType"`
+	RepositoryNames    []string `json:"repositoryNames"`
+	AWSAccessKeyID     string   `json:"awsAccessKeyId"`
+	AWSSecretAccessKey string   `json:"awsSecretAccessKey"`
+	AWSRegion          string   `json:"awsRegion"`
 }
 
 type UpdateContainerRegistryRequest struct {
-	URL                *string `json:"url"`
-	Username           *string `json:"username"`
-	Token              *string `json:"token"`
-	Description        *string `json:"description"`
-	Insecure           *bool   `json:"insecure"`
-	Enabled            *bool   `json:"enabled"`
-	RegistryType       *string `json:"registryType"`
-	AWSAccessKeyID     *string `json:"awsAccessKeyId"`
-	AWSSecretAccessKey *string `json:"awsSecretAccessKey"`
-	AWSRegion          *string `json:"awsRegion"`
+	URL                *string   `json:"url"`
+	Username           *string   `json:"username"`
+	Token              *string   `json:"token"`
+	Description        *string   `json:"description"`
+	Insecure           *bool     `json:"insecure"`
+	Enabled            *bool     `json:"enabled"`
+	RegistryType       *string   `json:"registryType"`
+	RepositoryNames    *[]string `json:"repositoryNames"`
+	AWSAccessKeyID     *string   `json:"awsAccessKeyId"`
+	AWSSecretAccessKey *string   `json:"awsSecretAccessKey"`
+	AWSRegion          *string   `json:"awsRegion"`
 }
 
 type ContainerRegistry struct {
-	ID                 string `json:"id"`
-	URL                string `json:"url"`
-	Username           string `json:"username"`
-	Description        string `json:"description"`
-	Insecure           bool   `json:"insecure"`
-	Enabled            bool   `json:"enabled"`
-	RegistryType       string `json:"registryType"`
-	AWSAccessKeyID     string `json:"awsAccessKeyId"`
-	AWSSecretAccessKey string `json:"awsSecretAccessKey"`
-	AWSRegion          string `json:"awsRegion"`
-	CreatedAt          string `json:"createdAt"`
-	UpdatedAt          string `json:"updatedAt"`
+	ID                 string   `json:"id"`
+	URL                string   `json:"url"`
+	Username           string   `json:"username"`
+	Description        string   `json:"description"`
+	Insecure           bool     `json:"insecure"`
+	Enabled            bool     `json:"enabled"`
+	RegistryType       string   `json:"registryType"`
+	RepositoryNames    []string `json:"repositoryNames"`
+	AWSAccessKeyID     string   `json:"awsAccessKeyId"`
+	AWSSecretAccessKey string   `json:"awsSecretAccessKey"`
+	AWSRegion          string   `json:"awsRegion"`
+	CreatedAt          string   `json:"createdAt"`
+	UpdatedAt          string   `json:"updatedAt"`
 }
 
 type containerRegistryEnvelope struct {
@@ -1351,6 +1354,11 @@ type containerRegistryEnvelope struct {
 }
 
 func (c *Client) CreateContainerRegistry(ctx context.Context, body CreateContainerRegistryRequest) (*ContainerRegistry, error) {
+	// The API rejects a body without repositoryNames ("expected required
+	// property repositoryNames to be present"), so always send an array.
+	if body.RepositoryNames == nil {
+		body.RepositoryNames = []string{}
+	}
 	req, err := c.newRequest(ctx, http.MethodPost, "container-registries", body)
 	if err != nil {
 		return nil, err
