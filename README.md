@@ -108,6 +108,12 @@ Resources
   - Computed: id, version_index, created_at, updated_at.
   - Note: Swarm secrets are immutable; changing `name`, `data`, or `labels` forces replacement.
 
+- arcane_swarm_config
+  - Manage a Docker Swarm config in an environment.
+  - Attributes: environment_id, name, data (required), labels.
+  - Computed: id, version_index, created_at, updated_at.
+  - Note: Swarm configs are immutable; changing `name`, `data`, or `labels` forces replacement.
+
 - arcane_role
   - Manage a custom RBAC role. Built-in roles (Admin/Editor/Deployer/Viewer) are read-only.
   - Attributes: name (required), permissions (required, at least one), description.
@@ -212,6 +218,7 @@ Imports
 - arcane_project: `environment_id:project_id`
 - arcane_swarm_stack: `environment_id:stack_name`
 - arcane_swarm_secret: `environment_id:secret_id`
+- arcane_swarm_config: `environment_id:config_id`
 - arcane_project_path: `environment_id:project_id`
 - arcane_notification: `environment_id:provider_name`
 - arcane_container: `environment_id:container_id`
@@ -236,6 +243,7 @@ Examples
 - Per-resource examples live under `examples/` (one directory per resource/data source).
 - Swarm stack example: `examples/swarm_stack/main.tf`
 - Swarm secret example: `examples/swarm_secret/main.tf`
+- Swarm config example: `examples/swarm_config/main.tf`
 - Role / RBAC example: `examples/role/main.tf`
 - OIDC role mapping example: `examples/oidc_role_mapping/main.tf`
 - Federated credential example: `examples/federated_credential/main.tf`
@@ -261,6 +269,7 @@ API Coverage & Notes
   - Projects: `POST /environments/{id}/projects`, `GET/PUT /environments/{id}/projects/{projectId}`, `DELETE /environments/{id}/projects/{projectId}/destroy`, `POST /environments/{id}/projects/{projectId}/up|down`
   - Swarm stacks: `POST /environments/{id}/swarm/stacks`, `GET/DELETE /environments/{id}/swarm/stacks/{name}`, `GET/PUT /environments/{id}/swarm/stacks/{name}/source`
   - Swarm secrets: `POST /environments/{id}/swarm/secrets`, `GET/PUT/DELETE /environments/{id}/swarm/secrets/{secretId}`
+  - Swarm configs: `POST /environments/{id}/swarm/configs`, `GET/PUT/DELETE /environments/{id}/swarm/configs/{configId}`
   - Roles: `POST /roles`, `GET/PUT/DELETE /roles/{id}`, `GET /roles` (paginated), `GET /roles/available-permissions`
   - OIDC role mappings: `POST /oidc/role-mappings`, `GET /oidc/role-mappings`, `PUT/DELETE /oidc/role-mappings/{id}`
   - Federated credentials: `POST /federated-credentials`, `GET/PUT/DELETE /federated-credentials/{id}`

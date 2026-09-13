@@ -1002,6 +1002,93 @@ func (c *Client) DeleteSwarmSecret(ctx context.Context, envID, secretID string) 
 	return c.do(req, nil)
 }
 
+type DockerSwarmConfigSpec struct {
+	Name   string            `json:"Name,omitempty"`
+	Data   string            `json:"Data,omitempty"`
+	Labels map[string]string `json:"Labels,omitempty"`
+}
+
+type SwarmConfigSummary struct {
+	ID        string                `json:"id"`
+	Spec      DockerSwarmConfigSpec `json:"spec"`
+	Version   DockerSwarmVersion    `json:"version"`
+	CreatedAt string                `json:"createdAt"`
+	UpdatedAt string                `json:"updatedAt"`
+}
+
+type SwarmConfigCreateRequest struct {
+	Spec DockerSwarmConfigSpec `json:"spec"`
+}
+
+type SwarmConfigUpdateRequest struct {
+	Spec    DockerSwarmConfigSpec `json:"spec"`
+	Version *int64                `json:"version,omitempty"`
+}
+
+type swarmConfigEnvelope struct {
+	Success bool               `json:"success"`
+	Data    SwarmConfigSummary `json:"data"`
+}
+
+func EncodeSwarmConfigData(raw string) string {
+	return base64.StdEncoding.EncodeToString([]byte(raw))
+}
+
+// DecodeSwarmConfigData reverses EncodeSwarmConfigData. Unlike secrets, the
+// config API returns spec.Data on read, so imported configs can recover their
+// plaintext content.
+func DecodeSwarmConfigData(encoded string) (string, error) {
+	raw, err := base64.StdEncoding.DecodeString(encoded)
+	if err != nil {
+		return "", err
+	}
+	return string(raw), nil
+}
+
+// CreateSwarmConfig POST /environments/{id}/swarm/configs
+func (c *Client) CreateSwarmConfig(ctx context.Context, envID string, body SwarmConfigCreateRequest) (*SwarmConfigSummary, error) {
+	req, err := c.newRequest(ctx, http.MethodPost, path.Join("environments", envID, "swarm", "configs"), body)
+	if err != nil {
+		return nil, err
+	}
+	var env swarmConfigEnvelope
+	if err := c.do(req, &env); err != nil {
+		return nil, err
+	}
+	return &env.Data, nil
+}
+
+// GetSwarmConfig GET /environments/{id}/swarm/configs/{configId}
+func (c *Client) GetSwarmConfig(ctx context.Context, envID, configID string) (*SwarmConfigSummary, error) {
+	req, err := c.newRequest(ctx, http.MethodGet, path.Join("environments", envID, "swarm", "configs", configID), nil)
+	if err != nil {
+		return nil, err
+	}
+	var env swarmConfigEnvelope
+	if err := c.do(req, &env); err != nil {
+		return nil, err
+	}
+	return &env.Data, nil
+}
+
+// UpdateSwarmConfig PUT /environments/{id}/swarm/configs/{configId}
+func (c *Client) UpdateSwarmConfig(ctx context.Context, envID, configID string, body SwarmConfigUpdateRequest) error {
+	req, err := c.newRequest(ctx, http.MethodPut, path.Join("environments", envID, "swarm", "configs", configID), body)
+	if err != nil {
+		return err
+	}
+	return c.do(req, nil)
+}
+
+// DeleteSwarmConfig DELETE /environments/{id}/swarm/configs/{configId}
+func (c *Client) DeleteSwarmConfig(ctx context.Context, envID, configID string) error {
+	req, err := c.newRequest(ctx, http.MethodDelete, path.Join("environments", envID, "swarm", "configs", configID), nil)
+	if err != nil {
+		return err
+	}
+	return c.do(req, nil)
+}
+
 // -------- Notifications --------
 type NotificationUpdate struct {
 	Provider string         `json:"provider"`
