@@ -1,5 +1,5 @@
 terraform {
-  required_version = ">= 1.4.0"
+  required_version = ">= 1.11.0"
   required_providers {
     arcane = {
       source  = "hellscrimson/arcane"
@@ -26,11 +26,13 @@ variable "arcane_endpoint" {
 }
 
 resource "arcane_user" "example" {
-  username     = "johndoe"
-  password     = "SuperSecret123!"
-  display_name = "John Doe"
-  email        = "john@example.com"
-  locale       = "en-US"
-  roles        = ["user"]
+  username = "johndoe"
+  # Write-only: never stored in state. Change password_wo_version to send a new one.
+  password_wo         = "SuperSecret123!"
+  password_wo_version = 1
+  display_name        = "John Doe"
+  email               = "john@example.com"
+  locale              = "en-US"
+  roles               = ["user"]
 }
 

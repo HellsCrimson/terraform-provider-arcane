@@ -1,10 +1,10 @@
 terraform {
-  required_version = ">= 1.4.0"
+  required_version = ">= 1.11.0"
   required_providers {
-	arcane = {
-	  source  = "hellscrimson/arcane"
-	  version = ">= 0.0.1"
-	}
+    arcane = {
+      source  = "hellscrimson/arcane"
+      version = ">= 0.0.1"
+    }
   }
 }
 
@@ -30,11 +30,14 @@ variable "environment_id" {
 resource "arcane_swarm_secret" "db_password" {
   environment_id = var.environment_id
   name           = "db_password"
-  data           = "super-secret-password"
+  # Write-only: never stored in state. Change data_wo_version to replace the
+  # secret with a new value.
+  data_wo         = "super-secret-password"
+  data_wo_version = 1
 
   labels = {
-	"app" = "demo"
-	"env" = "prod"
+    "app" = "demo"
+    "env" = "prod"
   }
 }
 

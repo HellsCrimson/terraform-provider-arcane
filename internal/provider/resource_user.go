@@ -50,13 +50,18 @@ func (r *UserResource) Schema(_ context.Context, _ resource.SchemaRequest, resp 
 				},
 			},
 			"password": resourceschema.StringAttribute{
-				Required:    true,
-				Sensitive:   true,
-				Description: "Password for the user. Stored in state as sensitive when using older Terraform/OpenTofu runtimes.",
+				Optional:           true,
+				Sensitive:          true,
+				Description:        "Password for the user. Exactly one of `password` or `password_wo` is required.",
+				DeprecationMessage: writeOnlyDeprecation("password"),
 				Validators: []validator.String{
 					stringvalidator.LengthAtLeast(8),
+					stringvalidator.ExactlyOneOf(path.MatchRoot("password_wo")),
 				},
 			},
+			"password_wo": writeOnlyAttribute("password", "Password for the user (at least 8 characters). Exactly one of `password` or `password_wo` is required.",
+				stringvalidator.LengthAtLeast(8)),
+			"password_wo_version": writeOnlyVersionAttribute("password"),
 			"display_name": resourceschema.StringAttribute{
 				Optional:    true,
 				Description: "Display name of the user.",
@@ -113,15 +118,17 @@ func (r *UserResource) Configure(_ context.Context, req resource.ConfigureReques
 }
 
 type userModel struct {
-	ID              types.String `tfsdk:"id"`
-	Username        types.String `tfsdk:"username"`
-	Password        types.String `tfsdk:"password"`
-	DisplayName     types.String `tfsdk:"display_name"`
-	Email           types.String `tfsdk:"email"`
-	Locale          types.String `tfsdk:"locale"`
-	RoleAssignments types.Set    `tfsdk:"role_assignments"`
-	CreatedAt       types.String `tfsdk:"created_at"`
-	UpdatedAt       types.String `tfsdk:"updated_at"`
+	ID                types.String `tfsdk:"id"`
+	Username          types.String `tfsdk:"username"`
+	Password          types.String `tfsdk:"password"`
+	PasswordWO        types.String `tfsdk:"password_wo"`
+	PasswordWOVersion types.Int64  `tfsdk:"password_wo_version"`
+	DisplayName       types.String `tfsdk:"display_name"`
+	Email             types.String `tfsdk:"email"`
+	Locale            types.String `tfsdk:"locale"`
+	RoleAssignments   types.Set    `tfsdk:"role_assignments"`
+	CreatedAt         types.String `tfsdk:"created_at"`
+	UpdatedAt         types.String `tfsdk:"updated_at"`
 }
 
 type roleAssignmentModel struct {
@@ -135,9 +142,10 @@ var roleAssignmentObjectType = types.ObjectType{AttrTypes: map[string]attr.Type{
 }}
 
 func (r *UserResource) Create(ctx context.Context, req resource.CreateRequest, resp *resource.CreateResponse) {
-	var plan userModel
+	var plan, config userModel
 	diags := req.Plan.Get(ctx, &plan)
 	resp.Diagnostics.Append(diags...)
+	resp.Diagnostics.Append(req.Config.Get(ctx, &config)...)
 	if resp.Diagnostics.HasError() {
 		return
 	}
@@ -145,6 +153,10 @@ func (r *UserResource) Create(ctx context.Context, req resource.CreateRequest, r
 	body := sdkclient.CreateUserRequest{
 		Username: plan.Username.ValueString(),
 		Password: plan.Password.ValueString(),
+	}
+	// Write-only: the plan holds null, the value is only in the configuration.
+	if isSetString(config.PasswordWO) {
+		body.Password = config.PasswordWO.ValueString()
 	}
 	if !plan.DisplayName.IsNull() && !plan.DisplayName.IsUnknown() {
 		v := plan.DisplayName.ValueString()
@@ -174,6 +186,7 @@ func (r *UserResource) Create(ctx context.Context, req resource.CreateRequest, r
 	}
 	// Keep provided password in state to avoid sensitive inconsistency after apply
 	state.Password = plan.Password
+	state.PasswordWOVersion = plan.PasswordWOVersion
 	if !plan.DisplayName.IsNull() && !plan.DisplayName.IsUnknown() && u.Display != nil {
 		state.DisplayName = types.StringValue(*u.Display)
 	} else {
@@ -256,9 +269,10 @@ func (r *UserResource) Read(ctx context.Context, req resource.ReadRequest, resp 
 }
 
 func (r *UserResource) Update(ctx context.Context, req resource.UpdateRequest, resp *resource.UpdateResponse) {
-	var plan userModel
+	var plan, config userModel
 	var state userModel
 	resp.Diagnostics.Append(req.Plan.Get(ctx, &plan)...)
+	resp.Diagnostics.Append(req.Config.Get(ctx, &config)...)
 	resp.Diagnostics.Append(req.State.Get(ctx, &state)...)
 	if resp.Diagnostics.HasError() {
 		return
@@ -280,6 +294,11 @@ func (r *UserResource) Update(ctx context.Context, req resource.UpdateRequest, r
 	}
 	if !plan.Password.IsNull() && !plan.Password.IsUnknown() && plan.Password.ValueString() != "" {
 		v := plan.Password.ValueString()
+		body.Password = &v
+	}
+	// The write-only password is only re-sent when its version changes.
+	if writeOnlySend(config.PasswordWO, plan.PasswordWOVersion, state.PasswordWOVersion) {
+		v := config.PasswordWO.ValueString()
 		body.Password = &v
 	}
 
@@ -328,10 +347,10 @@ func (r *UserResource) Update(ctx context.Context, req resource.UpdateRequest, r
 	} else {
 		state.RoleAssignments = types.SetNull(roleAssignmentObjectType)
 	}
-	// If password provided in plan, keep it in state to match planned value
-	if !plan.Password.IsNull() && !plan.Password.IsUnknown() && plan.Password.ValueString() != "" {
-		state.Password = plan.Password
-	}
+	// Persist unconditionally: moving to password_wo plans password as null,
+	// and keeping the old value would fail the apply as an inconsistent result.
+	state.Password = plan.Password
+	state.PasswordWOVersion = plan.PasswordWOVersion
 
 	resp.Diagnostics.Append(resp.State.Set(ctx, &state)...)
 }

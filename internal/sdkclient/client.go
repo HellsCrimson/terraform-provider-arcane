@@ -1710,6 +1710,8 @@ type GitRepository struct {
 	Username               string `json:"username"`
 	Description            string `json:"description"`
 	SSHHostKeyVerification string `json:"sshHostKeyVerification"`
+	HasSSHKey              bool   `json:"hasSshKey"`
+	HasToken               bool   `json:"hasToken"`
 	CreatedAt              string `json:"createdAt"`
 	UpdatedAt              string `json:"updatedAt"`
 }

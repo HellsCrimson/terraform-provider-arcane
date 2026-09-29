@@ -100,7 +100,9 @@ All optional attributes are strings:
 - `oidc_enabled` - Enable OIDC authentication.
 - `oidc_issuer_url` - OIDC issuer URL.
 - `oidc_client_id` - OIDC client ID.
-- `oidc_client_secret` - OIDC client secret.
+- `oidc_client_secret` - OIDC client secret. **Deprecated**: stored in state; use `oidc_client_secret_wo` instead, `oidc_client_secret` will be removed in the next major release.
+- `oidc_client_secret_wo` - OIDC client secret. Sensitive, write-only: never stored in state, only sent when `oidc_client_secret_wo_version` changes. See [write-only arguments](../index.md#write-only-arguments).
+- `oidc_client_secret_wo_version` (Number) - Change it to send a new `oidc_client_secret_wo`. Required with `oidc_client_secret_wo`.
 - `oidc_scopes` - OIDC scopes.
 - `oidc_auto_redirect_to_provider` - Auto redirect to OIDC provider.
 - `oidc_merge_accounts` - Merge OIDC accounts.
@@ -116,7 +118,9 @@ All optional attributes are strings:
 - `default_deploy_pull_policy` - Default deploy pull policy.
 - `deploy_wait_timeout` - How long a deploy waits for services to become ready.
 - `depot_project_id` - Depot project ID.
-- `depot_token` - Depot token.
+- `depot_token` - Depot token. **Deprecated**: stored in state; use `depot_token_wo` instead, `depot_token` will be removed in the next major release.
+- `depot_token_wo` - Depot token. Sensitive, write-only: never stored in state, only sent when `depot_token_wo_version` changes. See [write-only arguments](../index.md#write-only-arguments).
+- `depot_token_wo_version` (Number) - Change it to send a new `depot_token_wo`. Required with `depot_token_wo`.
 
 **Timeout Settings**
 - `environment_health_interval` - Environment health check interval.
@@ -160,7 +164,9 @@ Arcane v2.11.0 moved these to per-user preferences set in the UI. They were remo
 - `trivy_ignore_unfixed` - Ignore vulnerabilities that have no fix available.
 - `trivy_server_enabled` - Use an external Trivy server instead of running scans locally.
 - `trivy_server_url` - External Trivy server URL.
-- `trivy_server_token` - External Trivy server token (sensitive).
+- `trivy_server_token` - External Trivy server token (sensitive). **Deprecated**: stored in state; use `trivy_server_token_wo` instead, `trivy_server_token` will be removed in the next major release.
+- `trivy_server_token_wo` - External Trivy server token. Sensitive, write-only: never stored in state, only sent when `trivy_server_token_wo_version` changes. See [write-only arguments](../index.md#write-only-arguments).
+- `trivy_server_token_wo_version` (Number) - Change it to send a new `trivy_server_token_wo`. Required with `trivy_server_token_wo`.
 - `vulnerability_scan_enabled` - Enable vulnerability scanning.
 - `vulnerability_scan_interval` - Vulnerability scan interval.
 

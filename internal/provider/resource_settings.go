@@ -69,7 +69,9 @@ func (r *SettingsResource) Schema(_ context.Context, _ resource.SchemaRequest, r
 			"default_shell":                        resourceschema.StringAttribute{Optional: true, Description: "defaultShell"},
 			"deploy_wait_timeout":                  resourceschema.StringAttribute{Optional: true, Description: "deployWaitTimeout"},
 			"depot_project_id":                     resourceschema.StringAttribute{Optional: true, Description: "depotProjectId"},
-			"depot_token":                          resourceschema.StringAttribute{Optional: true, Description: "depotToken"},
+			"depot_token":                          resourceschema.StringAttribute{Optional: true, Description: "depotToken", DeprecationMessage: writeOnlyDeprecation("depot_token")},
+			"depot_token_wo":                       writeOnlyAttribute("depot_token", "depotToken."),
+			"depot_token_wo_version":               writeOnlyVersionAttribute("depot_token"),
 			"disk_usage_path":                      resourceschema.StringAttribute{Optional: true, Description: "diskUsagePath"},
 			"docker_host":                          resourceschema.StringAttribute{Optional: true, Description: "dockerHost"},
 			"docker_api_timeout":                   resourceschema.StringAttribute{Optional: true, Description: "dockerApiTimeout"},
@@ -101,7 +103,9 @@ func (r *SettingsResource) Schema(_ context.Context, _ resource.SchemaRequest, r
 			"mobile_navigation_show_labels":        resourceschema.StringAttribute{Optional: true, Description: "mobileNavigationShowLabels", DeprecationMessage: "Arcane no longer accepts this setting (removed in v2.11.0); it is ignored. It is now a per-user preference set in the Arcane UI."},
 			"oidc_auto_redirect_to_provider":       resourceschema.StringAttribute{Optional: true, Description: "oidcAutoRedirectToProvider"},
 			"oidc_client_id":                       resourceschema.StringAttribute{Optional: true, Description: "oidcClientId"},
-			"oidc_client_secret":                   resourceschema.StringAttribute{Optional: true, Description: "oidcClientSecret"},
+			"oidc_client_secret":                   resourceschema.StringAttribute{Optional: true, Description: "oidcClientSecret", DeprecationMessage: writeOnlyDeprecation("oidc_client_secret")},
+			"oidc_client_secret_wo":                writeOnlyAttribute("oidc_client_secret", "oidcClientSecret."),
+			"oidc_client_secret_wo_version":        writeOnlyVersionAttribute("oidc_client_secret"),
 			"oidc_enabled":                         resourceschema.StringAttribute{Optional: true, Description: "oidcEnabled"},
 			"oidc_groups_claim":                    resourceschema.StringAttribute{Optional: true, Description: "oidcGroupsClaim"},
 			"oidc_issuer_url":                      resourceschema.StringAttribute{Optional: true, Description: "oidcIssuerUrl"},
@@ -145,7 +149,9 @@ func (r *SettingsResource) Schema(_ context.Context, _ resource.SchemaRequest, r
 			"trivy_security_opts":                  resourceschema.StringAttribute{Optional: true, Description: "trivySecurityOpts"},
 			"update_check_registry":                resourceschema.StringAttribute{Optional: true, Description: "updateCheckRegistry"},
 			"trivy_server_url":                     resourceschema.StringAttribute{Optional: true, Description: "trivyServerUrl"},
-			"trivy_server_token":                   resourceschema.StringAttribute{Optional: true, Sensitive: true, Description: "trivyServerToken"},
+			"trivy_server_token":                   resourceschema.StringAttribute{Optional: true, Sensitive: true, Description: "trivyServerToken", DeprecationMessage: writeOnlyDeprecation("trivy_server_token")},
+			"trivy_server_token_wo":                writeOnlyAttribute("trivy_server_token", "trivyServerToken."),
+			"trivy_server_token_wo_version":        writeOnlyVersionAttribute("trivy_server_token"),
 			"trivy_server_enabled":                 resourceschema.StringAttribute{Optional: true, Description: "trivyServerEnabled"},
 			"volume_browser_helper_idle_timeout":   resourceschema.StringAttribute{Optional: true, Description: "volumeBrowserHelperIdleTimeout", DeprecationMessage: "Arcane no longer accepts this setting (removed in v2.11.0); it is ignored. Use volume_helper_idle_timeout instead."},
 			"volume_helper_idle_timeout":           resourceschema.StringAttribute{Optional: true, Description: "volumeHelperIdleTimeout"},
@@ -201,6 +207,8 @@ type settingsModel struct {
 	DefaultShell                    types.String `tfsdk:"default_shell"`
 	DepotProjectId                  types.String `tfsdk:"depot_project_id"`
 	DepotToken                      types.String `tfsdk:"depot_token"`
+	DepotTokenWO                    types.String `tfsdk:"depot_token_wo"`
+	DepotTokenWOVersion             types.Int64  `tfsdk:"depot_token_wo_version"`
 	DiskUsagePath                   types.String `tfsdk:"disk_usage_path"`
 	DockerApiTimeout                types.String `tfsdk:"docker_api_timeout"`
 	DockerClientRefreshInterval     types.String `tfsdk:"docker_client_refresh_interval"`
@@ -232,6 +240,8 @@ type settingsModel struct {
 	OidcAutoRedirectToProvider      types.String `tfsdk:"oidc_auto_redirect_to_provider"`
 	OidcClientId                    types.String `tfsdk:"oidc_client_id"`
 	OidcClientSecret                types.String `tfsdk:"oidc_client_secret"`
+	OidcClientSecretWO              types.String `tfsdk:"oidc_client_secret_wo"`
+	OidcClientSecretWOVersion       types.Int64  `tfsdk:"oidc_client_secret_wo_version"`
 	OidcEnabled                     types.String `tfsdk:"oidc_enabled"`
 	OidcGroupsClaim                 types.String `tfsdk:"oidc_groups_claim"`
 	OidcIssuerUrl                   types.String `tfsdk:"oidc_issuer_url"`
@@ -276,6 +286,8 @@ type settingsModel struct {
 	UpdateCheckRegistry             types.String `tfsdk:"update_check_registry"`
 	TrivyServerUrl                  types.String `tfsdk:"trivy_server_url"`
 	TrivyServerToken                types.String `tfsdk:"trivy_server_token"`
+	TrivyServerTokenWO              types.String `tfsdk:"trivy_server_token_wo"`
+	TrivyServerTokenWOVersion       types.Int64  `tfsdk:"trivy_server_token_wo_version"`
 	TrivyServerEnabled              types.String `tfsdk:"trivy_server_enabled"`
 	VolumeBrowserHelperIdleTimeout  types.String `tfsdk:"volume_browser_helper_idle_timeout"`
 	VolumeHelperIdleTimeout         types.String `tfsdk:"volume_helper_idle_timeout"`
@@ -285,14 +297,16 @@ type settingsModel struct {
 }
 
 func (r *SettingsResource) Create(ctx context.Context, req resource.CreateRequest, resp *resource.CreateResponse) {
-	var plan settingsModel
+	var plan, config settingsModel
 	resp.Diagnostics.Append(req.Plan.Get(ctx, &plan)...)
+	resp.Diagnostics.Append(req.Config.Get(ctx, &config)...)
 	if resp.Diagnostics.HasError() {
 		return
 	}
 
 	envID := plan.EnvironmentID.ValueString()
 	vals := buildSettingsMapFromModel(plan)
+	addWriteOnlySettings(vals, config, plan, nil)
 	if len(vals) > 0 {
 		if _, err := r.client.UpdateSettings(ctx, envID, vals); err != nil {
 			resp.Diagnostics.AddError("update settings failed", err.Error())
@@ -335,9 +349,10 @@ func (r *SettingsResource) Read(ctx context.Context, req resource.ReadRequest, r
 }
 
 func (r *SettingsResource) Update(ctx context.Context, req resource.UpdateRequest, resp *resource.UpdateResponse) {
-	var plan settingsModel
+	var plan, config settingsModel
 	var state settingsModel
 	resp.Diagnostics.Append(req.Plan.Get(ctx, &plan)...)
+	resp.Diagnostics.Append(req.Config.Get(ctx, &config)...)
 	resp.Diagnostics.Append(req.State.Get(ctx, &state)...)
 	if resp.Diagnostics.HasError() {
 		return
@@ -345,6 +360,7 @@ func (r *SettingsResource) Update(ctx context.Context, req resource.UpdateReques
 
 	envID := state.EnvironmentID.ValueString()
 	vals := buildSettingsMapFromModel(plan)
+	addWriteOnlySettings(vals, config, plan, &state)
 	if len(vals) > 0 {
 		if _, err := r.client.UpdateSettings(ctx, envID, vals); err != nil {
 			resp.Diagnostics.AddError("update settings failed", err.Error())
@@ -377,6 +393,40 @@ func (r *SettingsResource) ImportState(ctx context.Context, req resource.ImportS
 func addIfSet(m map[string]string, key string, v types.String) {
 	if !v.IsNull() && !v.IsUnknown() {
 		m[key] = v.ValueString()
+	}
+}
+
+// settingsSecret is a write-only secret setting with its version attribute.
+type settingsSecret struct {
+	key     string
+	value   types.String
+	version types.Int64
+}
+
+func settingsSecrets(s settingsModel) []settingsSecret {
+	return []settingsSecret{
+		{"depotToken", s.DepotTokenWO, s.DepotTokenWOVersion},
+		{"oidcClientSecret", s.OidcClientSecretWO, s.OidcClientSecretWOVersion},
+		{"trivyServerToken", s.TrivyServerTokenWO, s.TrivyServerTokenWOVersion},
+	}
+}
+
+// addWriteOnlySettings adds the configured write-only secrets to the update
+// map. They are absent from the plan, so buildSettingsMapFromModel never sees
+// them. On create (prior == nil) every configured secret is sent; on update a
+// secret is only sent when its version changed.
+func addWriteOnlySettings(out map[string]string, config, plan settingsModel, prior *settingsModel) {
+	configured, planned := settingsSecrets(config), settingsSecrets(plan)
+	for i, c := range configured {
+		if prior == nil {
+			if isSetString(c.value) {
+				out[c.key] = c.value.ValueString()
+			}
+			continue
+		}
+		if writeOnlySend(c.value, planned[i].version, settingsSecrets(*prior)[i].version) {
+			out[c.key] = c.value.ValueString()
+		}
 	}
 }
 
