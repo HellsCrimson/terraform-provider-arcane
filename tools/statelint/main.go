@@ -15,6 +15,8 @@
 //
 //   - Computed / RequiresReplace attributes are excluded (not user-settable in
 //     an in-place Update, or masked by a default).
+//   - WriteOnly attributes are excluded: the framework nulls them in every
+//     state, so there is nothing to persist.
 //   - Handlers that rebuild wholesale (`state = plan`) are immune.
 //   - Required attributes only need to be assigned on *some* path (their guards
 //     `if !plan.X.IsNull()` always fire, since Required values are never null).
@@ -76,6 +78,7 @@ type attrInfo struct {
 	required           bool
 	requiresReplace    bool
 	useStateForUnknown bool
+	writeOnly          bool
 }
 
 // serverDerived reports whether this attribute is one Terraform expects the
@@ -88,7 +91,7 @@ func (a attrInfo) serverDerived() bool {
 // settable reports whether a change to this attribute routes through Update in
 // place (and therefore must be persisted back into state).
 func (a attrInfo) settable() bool {
-	if a.computed || a.requiresReplace {
+	if a.computed || a.requiresReplace || a.writeOnly {
 		return false
 	}
 	return a.optional || a.required
@@ -362,6 +365,8 @@ func parseAttr(v ast.Expr) attrInfo {
 			info.computed = isTrue(kv.Value)
 		case "Required":
 			info.required = isTrue(kv.Value)
+		case "WriteOnly":
+			info.writeOnly = isTrue(kv.Value)
 		}
 	}
 	// Plan modifiers appear nested inside PlanModifiers.

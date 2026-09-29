@@ -6,10 +6,11 @@ Manages an Arcane user.
 
 ```hcl
 resource "arcane_user" "example" {
-  username     = "johndoe"
-  password     = "SuperSecret123!"
-  display_name = "John Doe"
-  email        = "john@example.com"
+  username            = "johndoe"
+  password_wo         = var.user_password
+  password_wo_version = 1
+  display_name        = "John Doe"
+  email               = "john@example.com"
 
   # A global role, plus one scoped to a single environment.
   role_assignments = [
@@ -22,7 +23,9 @@ resource "arcane_user" "example" {
 ## Argument Reference
 
 - `username` (String, Required, ForceNew)
-- `password` (String, Required, Sensitive) — at least 8 characters.
+- `password` (String, Optional, Sensitive) — at least 8 characters. Exactly one of `password` or `password_wo` is required. **Deprecated**: stored in state; use `password_wo` instead, `password` will be removed in the next major release.
+- `password_wo` (String, Optional, Sensitive, Write-only) — at least 8 characters. Never stored in state or plan files; only sent when `password_wo_version` changes. Conflicts with `password`. See [write-only arguments](../index.md#write-only-arguments).
+- `password_wo_version` (Number, Optional) — change it to send a new `password_wo`. Required with `password_wo`.
 - `display_name` (String, Optional)
 - `email` (String, Optional)
 - `locale` (String, Optional) — locale preference (e.g. `en-US`).

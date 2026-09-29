@@ -72,15 +72,18 @@ func (f *fakeGitOpsSyncPreDeploy) server(t *testing.T) *httptest.Server {
 	return srv
 }
 
-func updateGitOpsSyncPreDeploy(t *testing.T, fake *fakeGitOpsSyncPreDeploy, plan, state gitOpsSyncModel) *resource.UpdateResponse {
+// updateGitOpsSyncPreDeploy runs Update for configuration config against the
+// prior state.
+func updateGitOpsSyncPreDeploy(t *testing.T, fake *fakeGitOpsSyncPreDeploy, config, state gitOpsSyncModel) *resource.UpdateResponse {
 	t.Helper()
 
 	srv := fake.server(t)
 	r := &GitOpsSyncResource{client: newTestClient(t, srv)}
 
 	req := resource.UpdateRequest{
-		Plan:  gitOpsSyncPlan(t, plan),
-		State: gitOpsSyncState(t, state),
+		Plan:   gitOpsSyncApplyPlan(t, config),
+		Config: gitOpsSyncConfig(t, config),
+		State:  gitOpsSyncState(t, state),
 	}
 	resp := &resource.UpdateResponse{State: gitOpsSyncState(t, state)}
 	r.Update(context.Background(), req, resp)
@@ -364,4 +367,84 @@ func TestGitOpsSyncUpdate_PreDeployTimeoutKeepsPlanValue(t *testing.T) {
 	if got.PreDeployTimeoutSec.ValueInt64() != 600 {
 		t.Errorf("pre_deploy_timeout_sec in state: got %d, want 600 (the planned value, not the server's clamp)", got.PreDeployTimeoutSec.ValueInt64())
 	}
+}
+
+// TestGitOpsSyncUpdate_PreDeployEnvWO covers the write-only pre_deploy_env_wo:
+// a version change sends the configured value and keeps it out of state, an
+// unchanged version sends nothing, and a version change with the value
+// removed clears it on the server.
+func TestGitOpsSyncUpdate_PreDeployEnvWO(t *testing.T) {
+	t.Run("version changed", func(t *testing.T) {
+		config := renameGitOpsSyncModel("old")
+		config.PreDeployEnvWO = types.StringValue("SOPS_AGE_KEY=secret")
+		config.PreDeployEnvWOVersion = types.Int64Value(1)
+
+		fake := &fakeGitOpsSyncPreDeploy{}
+		resp := updateGitOpsSyncPreDeploy(t, fake, config, renameGitOpsSyncModel("old"))
+
+		if got := fake.lastPut["preDeployEnv"]; got != "SOPS_AGE_KEY=secret" {
+			t.Errorf("update body preDeployEnv: got %v, want the pre_deploy_env_wo value", got)
+		}
+		var got gitOpsSyncModel
+		if diags := resp.State.Get(context.Background(), &got); diags.HasError() {
+			t.Fatalf("get state: %v", diags)
+		}
+		if !got.PreDeployEnv.IsNull() || !got.PreDeployEnvWO.IsNull() {
+			t.Errorf("secret leaked into state: pre_deploy_env=%v pre_deploy_env_wo=%v", got.PreDeployEnv, got.PreDeployEnvWO)
+		}
+		if got.PreDeployEnvWOVersion.ValueInt64() != 1 {
+			t.Errorf("pre_deploy_env_wo_version in state: got %v, want 1", got.PreDeployEnvWOVersion)
+		}
+	})
+
+	t.Run("version unchanged", func(t *testing.T) {
+		state := renameGitOpsSyncModel("old")
+		state.PreDeployEnvWOVersion = types.Int64Value(1)
+		config := state
+		config.Branch = types.StringValue("release")
+		config.PreDeployEnvWO = types.StringValue("A=changed")
+
+		fake := &fakeGitOpsSyncPreDeploy{}
+		updateGitOpsSyncPreDeploy(t, fake, config, state)
+
+		if v, ok := fake.lastPut["preDeployEnv"]; ok {
+			t.Errorf("update body carries preDeployEnv = %v although pre_deploy_env_wo_version did not change", v)
+		}
+	})
+
+	t.Run("value removed", func(t *testing.T) {
+		state := renameGitOpsSyncModel("old")
+		state.PreDeployEnvWOVersion = types.Int64Value(1)
+		config := renameGitOpsSyncModel("old")
+		config.PreDeployEnvWOVersion = types.Int64Value(2)
+
+		fake := &fakeGitOpsSyncPreDeploy{}
+		updateGitOpsSyncPreDeploy(t, fake, config, state)
+
+		if v, ok := fake.lastPut["preDeployEnv"]; !ok || v != "" {
+			t.Errorf("update body preDeployEnv: got %v (present: %t), want \"\" to clear it", v, ok)
+		}
+	})
+
+	t.Run("moved from pre_deploy_env", func(t *testing.T) {
+		state := renameGitOpsSyncModel("old")
+		state.PreDeployEnv = types.StringValue("A=stored")
+		config := renameGitOpsSyncModel("old")
+		config.PreDeployEnvWO = types.StringValue("A=stored")
+		config.PreDeployEnvWOVersion = types.Int64Value(1)
+
+		fake := &fakeGitOpsSyncPreDeploy{}
+		resp := updateGitOpsSyncPreDeploy(t, fake, config, state)
+
+		if got := fake.lastPut["preDeployEnv"]; got != "A=stored" {
+			t.Errorf("update body preDeployEnv: got %v, want the pre_deploy_env_wo value rather than a clear", got)
+		}
+		var got gitOpsSyncModel
+		if diags := resp.State.Get(context.Background(), &got); diags.HasError() {
+			t.Fatalf("get state: %v", diags)
+		}
+		if !got.PreDeployEnv.IsNull() {
+			t.Errorf("pre_deploy_env still in state after the move: %v", got.PreDeployEnv)
+		}
+	})
 }

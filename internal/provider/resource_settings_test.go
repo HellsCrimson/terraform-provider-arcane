@@ -39,3 +39,44 @@ func TestBuildSettingsMapLifecycleFields(t *testing.T) {
 		}
 	}
 }
+
+// TestAddWriteOnlySettings pins how the write-only secret settings reach the
+// update map. They never appear in the plan, so they come from the
+// configuration: all of them on create, and on update only those whose
+// version changed (Terraform keeps no copy to diff the value itself).
+func TestAddWriteOnlySettings(t *testing.T) {
+	config := settingsModel{
+		DepotTokenWO:              types.StringValue("depot"),
+		DepotTokenWOVersion:       types.Int64Value(1),
+		OidcClientSecretWO:        types.StringValue("oidc"),
+		OidcClientSecretWOVersion: types.Int64Value(2),
+		TrivyServerTokenWO:        types.StringValue("trivy"),
+	}
+	plan := config
+	plan.DepotTokenWO = types.StringNull()
+	plan.OidcClientSecretWO = types.StringNull()
+	plan.TrivyServerTokenWO = types.StringNull()
+
+	created := map[string]string{}
+	addWriteOnlySettings(created, config, plan, nil)
+	want := map[string]string{"depotToken": "depot", "oidcClientSecret": "oidc", "trivyServerToken": "trivy"}
+	if len(created) != len(want) {
+		t.Errorf("create map: got %v, want %v", created, want)
+	}
+	for k, w := range want {
+		if created[k] != w {
+			t.Errorf("create %s: got %q, want %q", k, created[k], w)
+		}
+	}
+
+	// Only oidc_client_secret_wo_version moved (1 -> 2).
+	prior := settingsModel{
+		DepotTokenWOVersion:       types.Int64Value(1),
+		OidcClientSecretWOVersion: types.Int64Value(1),
+	}
+	updated := map[string]string{}
+	addWriteOnlySettings(updated, config, plan, &prior)
+	if len(updated) != 1 || updated["oidcClientSecret"] != "oidc" {
+		t.Errorf("update map: got %v, want only oidcClientSecret", updated)
+	}
+}

@@ -1,5 +1,5 @@
 terraform {
-  required_version = ">= 1.4.0"
+  required_version = ">= 1.11.0"
   required_providers {
     arcane = {
       source  = "hellscrimson/arcane"
@@ -36,7 +36,9 @@ resource "arcane_git_repository" "ssh_repo" {
   description = "Private repository with SSH key"
   enabled     = true
 
-  ssh_key = file("~/.ssh/id_rsa")
+  # Write-only: never stored in state. Change ssh_key_wo_version to send a new one.
+  ssh_key_wo         = file("~/.ssh/id_rsa")
+  ssh_key_wo_version = 1
 }
 
 # Example with token authentication
@@ -48,7 +50,9 @@ resource "arcane_git_repository" "token_repo" {
   enabled     = true
 
   username = "github-user"
-  token    = var.github_token
+  # Write-only: never stored in state. Change token_wo_version to send a new one.
+  token_wo         = var.github_token
+  token_wo_version = 1
 }
 
 # Example with no authentication (public repo)

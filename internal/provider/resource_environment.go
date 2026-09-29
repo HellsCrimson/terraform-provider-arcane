@@ -44,10 +44,13 @@ func (r *EnvironmentResource) Schema(_ context.Context, _ resource.SchemaRequest
 				Description: "Agent API URL (e.g., http://host:agent-port)",
 			},
 			"access_token": resourceschema.StringAttribute{
-				Optional:    true,
-				Sensitive:   true,
-				Description: "Access token for agent pairing (optional)",
+				Optional:           true,
+				Sensitive:          true,
+				Description:        "Access token for agent pairing (optional)",
+				DeprecationMessage: writeOnlyDeprecation("access_token"),
 			},
+			"access_token_wo":         writeOnlyAttribute("access_token", "Access token for agent pairing (optional)."),
+			"access_token_wo_version": writeOnlyVersionAttribute("access_token"),
 			"use_api_key": resourceschema.BoolAttribute{
 				Optional:    true,
 				Description: "When true, generates an API key for agent pairing.",
@@ -116,6 +119,8 @@ type environmentModel struct {
 	Name                    types.String `tfsdk:"name"`
 	APIURL                  types.String `tfsdk:"api_url"`
 	AccessToken             types.String `tfsdk:"access_token"`
+	AccessTokenWO           types.String `tfsdk:"access_token_wo"`
+	AccessTokenWOVersion    types.Int64  `tfsdk:"access_token_wo_version"`
 	UseAPIKey               types.Bool   `tfsdk:"use_api_key"`
 	IsEdge                  types.Bool   `tfsdk:"is_edge"`
 	Enabled                 types.Bool   `tfsdk:"enabled"`
@@ -130,8 +135,9 @@ type environmentModel struct {
 }
 
 func (r *EnvironmentResource) Create(ctx context.Context, req resource.CreateRequest, resp *resource.CreateResponse) {
-	var plan environmentModel
+	var plan, config environmentModel
 	resp.Diagnostics.Append(req.Plan.Get(ctx, &plan)...)
+	resp.Diagnostics.Append(req.Config.Get(ctx, &config)...)
 	if resp.Diagnostics.HasError() {
 		return
 	}
@@ -145,6 +151,11 @@ func (r *EnvironmentResource) Create(ctx context.Context, req resource.CreateReq
 	}
 	if !plan.AccessToken.IsNull() && !plan.AccessToken.IsUnknown() {
 		v := plan.AccessToken.ValueString()
+		body.AccessToken = &v
+	}
+	// Write-only: the plan holds null, the value is only in the configuration.
+	if isSetString(config.AccessTokenWO) {
+		v := config.AccessTokenWO.ValueString()
 		body.AccessToken = &v
 	}
 	if !plan.Enabled.IsNull() && !plan.Enabled.IsUnknown() {
@@ -167,12 +178,13 @@ func (r *EnvironmentResource) Create(ctx context.Context, req resource.CreateReq
 	}
 
 	state := environmentModel{
-		ID:               types.StringValue(env.ID),
-		APIURL:           types.StringValue(env.APIURL),
-		AccessToken:      plan.AccessToken,
-		UseAPIKey:        plan.UseAPIKey,
-		RegenerateAPIKey: plan.RegenerateAPIKey,
-		Status:           types.StringValue(env.Status),
+		ID:                   types.StringValue(env.ID),
+		APIURL:               types.StringValue(env.APIURL),
+		AccessToken:          plan.AccessToken,
+		AccessTokenWOVersion: plan.AccessTokenWOVersion,
+		UseAPIKey:            plan.UseAPIKey,
+		RegenerateAPIKey:     plan.RegenerateAPIKey,
+		Status:               types.StringValue(env.Status),
 	}
 	if !plan.Name.IsNull() && !plan.Name.IsUnknown() {
 		state.Name = types.StringValue(env.Name)
@@ -231,9 +243,10 @@ func (r *EnvironmentResource) Read(ctx context.Context, req resource.ReadRequest
 }
 
 func (r *EnvironmentResource) Update(ctx context.Context, req resource.UpdateRequest, resp *resource.UpdateResponse) {
-	var plan environmentModel
+	var plan, config environmentModel
 	var state environmentModel
 	resp.Diagnostics.Append(req.Plan.Get(ctx, &plan)...)
+	resp.Diagnostics.Append(req.Config.Get(ctx, &config)...)
 	resp.Diagnostics.Append(req.State.Get(ctx, &state)...)
 	if resp.Diagnostics.HasError() {
 		return
@@ -250,6 +263,11 @@ func (r *EnvironmentResource) Update(ctx context.Context, req resource.UpdateReq
 	}
 	if !plan.AccessToken.IsNull() && !plan.AccessToken.IsUnknown() {
 		v := plan.AccessToken.ValueString()
+		body.AccessToken = &v
+	}
+	// The write-only access token is only re-sent when its version changes.
+	if writeOnlySend(config.AccessTokenWO, plan.AccessTokenWOVersion, state.AccessTokenWOVersion) {
+		v := config.AccessTokenWO.ValueString()
 		body.AccessToken = &v
 	}
 	if !plan.Enabled.IsNull() && !plan.Enabled.IsUnknown() {
@@ -289,6 +307,7 @@ func (r *EnvironmentResource) Update(ctx context.Context, req resource.UpdateReq
 	// state; a guarded copy would keep the stale prior value and produce an
 	// inconsistent-result error on the clear-to-null transition.
 	state.AccessToken = plan.AccessToken
+	state.AccessTokenWOVersion = plan.AccessTokenWOVersion
 	state.UseAPIKey = plan.UseAPIKey
 	state.RegenerateAPIKey = plan.RegenerateAPIKey
 	resp.Diagnostics.Append(resp.State.Set(ctx, &state)...)

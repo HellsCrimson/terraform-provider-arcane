@@ -6,12 +6,14 @@ import (
 
 	"terraform-provider-arcane/internal/sdkclient"
 
+	"github.com/hashicorp/terraform-plugin-framework-validators/stringvalidator"
 	"github.com/hashicorp/terraform-plugin-framework/path"
 	"github.com/hashicorp/terraform-plugin-framework/resource"
 	resourceschema "github.com/hashicorp/terraform-plugin-framework/resource/schema"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema/planmodifier"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema/stringdefault"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema/stringplanmodifier"
+	"github.com/hashicorp/terraform-plugin-framework/schema/validator"
 	"github.com/hashicorp/terraform-plugin-framework/types"
 )
 
@@ -29,18 +31,30 @@ func (r *RegistryResource) Metadata(_ context.Context, req resource.MetadataRequ
 func (r *RegistryResource) Schema(_ context.Context, _ resource.SchemaRequest, resp *resource.SchemaResponse) {
 	resp.Schema = resourceschema.Schema{
 		Attributes: map[string]resourceschema.Attribute{
-			"id":                    resourceschema.StringAttribute{Computed: true, PlanModifiers: []planmodifier.String{stringplanmodifier.UseStateForUnknown()}},
-			"url":                   resourceschema.StringAttribute{Required: true, Description: "Registry URL"},
-			"username":              resourceschema.StringAttribute{Required: true, Description: "Registry username"},
-			"token":                 resourceschema.StringAttribute{Required: true, Sensitive: true, Description: "Registry access token or password"},
-			"description":           resourceschema.StringAttribute{Optional: true},
-			"insecure":              resourceschema.BoolAttribute{Optional: true},
-			"enabled":               resourceschema.BoolAttribute{Optional: true},
-			"registry_type":         resourceschema.StringAttribute{Optional: true, Computed: true, Default: stringdefault.StaticString("generic"), Description: "Registry implementation type"},
-			"repository_names":      resourceschema.ListAttribute{Optional: true, ElementType: types.StringType, Description: "Pre-configured repository namespaces offered when pushing images to this registry"},
-			"aws_access_key_id":     resourceschema.StringAttribute{Optional: true, Sensitive: true},
-			"aws_secret_access_key": resourceschema.StringAttribute{Optional: true, Sensitive: true},
-			"aws_region":            resourceschema.StringAttribute{Optional: true},
+			"id":       resourceschema.StringAttribute{Computed: true, PlanModifiers: []planmodifier.String{stringplanmodifier.UseStateForUnknown()}},
+			"url":      resourceschema.StringAttribute{Required: true, Description: "Registry URL"},
+			"username": resourceschema.StringAttribute{Required: true, Description: "Registry username"},
+			"token": resourceschema.StringAttribute{
+				Optional:           true,
+				Sensitive:          true,
+				Description:        "Registry access token or password. Exactly one of `token` or `token_wo` is required.",
+				DeprecationMessage: writeOnlyDeprecation("token"),
+				Validators:         []validator.String{stringvalidator.ExactlyOneOf(path.MatchRoot("token_wo"))},
+			},
+			"token_wo":                         writeOnlyAttribute("token", "Registry access token or password. Exactly one of `token` or `token_wo` is required."),
+			"token_wo_version":                 writeOnlyVersionAttribute("token"),
+			"description":                      resourceschema.StringAttribute{Optional: true},
+			"insecure":                         resourceschema.BoolAttribute{Optional: true},
+			"enabled":                          resourceschema.BoolAttribute{Optional: true},
+			"registry_type":                    resourceschema.StringAttribute{Optional: true, Computed: true, Default: stringdefault.StaticString("generic"), Description: "Registry implementation type"},
+			"repository_names":                 resourceschema.ListAttribute{Optional: true, ElementType: types.StringType, Description: "Pre-configured repository namespaces offered when pushing images to this registry"},
+			"aws_access_key_id":                resourceschema.StringAttribute{Optional: true, Sensitive: true, DeprecationMessage: writeOnlyDeprecation("aws_access_key_id")},
+			"aws_access_key_id_wo":             writeOnlyAttribute("aws_access_key_id", "AWS access key ID (ECR registries)."),
+			"aws_access_key_id_wo_version":     writeOnlyVersionAttribute("aws_access_key_id"),
+			"aws_secret_access_key":            resourceschema.StringAttribute{Optional: true, Sensitive: true, DeprecationMessage: writeOnlyDeprecation("aws_secret_access_key")},
+			"aws_secret_access_key_wo":         writeOnlyAttribute("aws_secret_access_key", "AWS secret access key (ECR registries)."),
+			"aws_secret_access_key_wo_version": writeOnlyVersionAttribute("aws_secret_access_key"),
+			"aws_region":                       resourceschema.StringAttribute{Optional: true},
 
 			// Computed timestamps
 			"created_at": resourceschema.StringAttribute{Computed: true, PlanModifiers: []planmodifier.String{stringplanmodifier.UseStateForUnknown()}},
@@ -58,25 +72,32 @@ func (r *RegistryResource) Configure(_ context.Context, req resource.ConfigureRe
 }
 
 type registryModel struct {
-	ID                 types.String `tfsdk:"id"`
-	URL                types.String `tfsdk:"url"`
-	Username           types.String `tfsdk:"username"`
-	Token              types.String `tfsdk:"token"`
-	Description        types.String `tfsdk:"description"`
-	Insecure           types.Bool   `tfsdk:"insecure"`
-	Enabled            types.Bool   `tfsdk:"enabled"`
-	RegistryType       types.String `tfsdk:"registry_type"`
-	RepositoryNames    types.List   `tfsdk:"repository_names"`
-	AWSAccessKeyID     types.String `tfsdk:"aws_access_key_id"`
-	AWSSecretAccessKey types.String `tfsdk:"aws_secret_access_key"`
-	AWSRegion          types.String `tfsdk:"aws_region"`
-	CreatedAt          types.String `tfsdk:"created_at"`
-	UpdatedAt          types.String `tfsdk:"updated_at"`
+	ID                          types.String `tfsdk:"id"`
+	URL                         types.String `tfsdk:"url"`
+	Username                    types.String `tfsdk:"username"`
+	Token                       types.String `tfsdk:"token"`
+	TokenWO                     types.String `tfsdk:"token_wo"`
+	TokenWOVersion              types.Int64  `tfsdk:"token_wo_version"`
+	Description                 types.String `tfsdk:"description"`
+	Insecure                    types.Bool   `tfsdk:"insecure"`
+	Enabled                     types.Bool   `tfsdk:"enabled"`
+	RegistryType                types.String `tfsdk:"registry_type"`
+	RepositoryNames             types.List   `tfsdk:"repository_names"`
+	AWSAccessKeyID              types.String `tfsdk:"aws_access_key_id"`
+	AWSAccessKeyIDWO            types.String `tfsdk:"aws_access_key_id_wo"`
+	AWSAccessKeyIDWOVersion     types.Int64  `tfsdk:"aws_access_key_id_wo_version"`
+	AWSSecretAccessKey          types.String `tfsdk:"aws_secret_access_key"`
+	AWSSecretAccessKeyWO        types.String `tfsdk:"aws_secret_access_key_wo"`
+	AWSSecretAccessKeyWOVersion types.Int64  `tfsdk:"aws_secret_access_key_wo_version"`
+	AWSRegion                   types.String `tfsdk:"aws_region"`
+	CreatedAt                   types.String `tfsdk:"created_at"`
+	UpdatedAt                   types.String `tfsdk:"updated_at"`
 }
 
 func (r *RegistryResource) Create(ctx context.Context, req resource.CreateRequest, resp *resource.CreateResponse) {
-	var plan registryModel
+	var plan, config registryModel
 	resp.Diagnostics.Append(req.Plan.Get(ctx, &plan)...)
+	resp.Diagnostics.Append(req.Config.Get(ctx, &config)...)
 	if resp.Diagnostics.HasError() {
 		return
 	}
@@ -109,6 +130,16 @@ func (r *RegistryResource) Create(ctx context.Context, req resource.CreateReques
 	if !plan.AWSSecretAccessKey.IsNull() && !plan.AWSSecretAccessKey.IsUnknown() {
 		body.AWSSecretAccessKey = plan.AWSSecretAccessKey.ValueString()
 	}
+	// Write-only: the plan holds null, the values are only in the configuration.
+	if isSetString(config.TokenWO) {
+		body.Token = config.TokenWO.ValueString()
+	}
+	if isSetString(config.AWSAccessKeyIDWO) {
+		body.AWSAccessKeyID = config.AWSAccessKeyIDWO.ValueString()
+	}
+	if isSetString(config.AWSSecretAccessKeyWO) {
+		body.AWSSecretAccessKey = config.AWSSecretAccessKeyWO.ValueString()
+	}
 	if !plan.AWSRegion.IsNull() && !plan.AWSRegion.IsUnknown() {
 		body.AWSRegion = plan.AWSRegion.ValueString()
 	}
@@ -120,20 +151,23 @@ func (r *RegistryResource) Create(ctx context.Context, req resource.CreateReques
 	}
 
 	state := registryModel{
-		ID:                 types.StringValue(reg.ID),
-		URL:                types.StringValue(reg.URL),
-		Username:           plan.Username,
-		Token:              plan.Token, // keep token in state for apply consistency
-		Description:        plan.Description,
-		Insecure:           plan.Insecure,
-		Enabled:            plan.Enabled,
-		RegistryType:       plan.RegistryType,
-		RepositoryNames:    plan.RepositoryNames,
-		AWSAccessKeyID:     plan.AWSAccessKeyID,
-		AWSSecretAccessKey: plan.AWSSecretAccessKey,
-		AWSRegion:          plan.AWSRegion,
-		CreatedAt:          types.StringValue(reg.CreatedAt),
-		UpdatedAt:          types.StringValue(reg.UpdatedAt),
+		ID:                          types.StringValue(reg.ID),
+		URL:                         types.StringValue(reg.URL),
+		Username:                    plan.Username,
+		Token:                       plan.Token, // keep token in state for apply consistency
+		TokenWOVersion:              plan.TokenWOVersion,
+		Description:                 plan.Description,
+		Insecure:                    plan.Insecure,
+		Enabled:                     plan.Enabled,
+		RegistryType:                plan.RegistryType,
+		RepositoryNames:             plan.RepositoryNames,
+		AWSAccessKeyID:              plan.AWSAccessKeyID,
+		AWSSecretAccessKey:          plan.AWSSecretAccessKey,
+		AWSAccessKeyIDWOVersion:     plan.AWSAccessKeyIDWOVersion,
+		AWSSecretAccessKeyWOVersion: plan.AWSSecretAccessKeyWOVersion,
+		AWSRegion:                   plan.AWSRegion,
+		CreatedAt:                   types.StringValue(reg.CreatedAt),
+		UpdatedAt:                   types.StringValue(reg.UpdatedAt),
 	}
 	resp.Diagnostics.Append(resp.State.Set(ctx, &state)...)
 }
@@ -184,8 +218,9 @@ func (r *RegistryResource) Read(ctx context.Context, req resource.ReadRequest, r
 }
 
 func (r *RegistryResource) Update(ctx context.Context, req resource.UpdateRequest, resp *resource.UpdateResponse) {
-	var plan, state registryModel
+	var plan, config, state registryModel
 	resp.Diagnostics.Append(req.Plan.Get(ctx, &plan)...)
+	resp.Diagnostics.Append(req.Config.Get(ctx, &config)...)
 	resp.Diagnostics.Append(req.State.Get(ctx, &state)...)
 	if resp.Diagnostics.HasError() {
 		return
@@ -237,6 +272,19 @@ func (r *RegistryResource) Update(ctx context.Context, req resource.UpdateReques
 		v := plan.AWSRegion.ValueString()
 		body.AWSRegion = &v
 	}
+	// Write-only credentials are only re-sent when their version changes.
+	if writeOnlySend(config.TokenWO, plan.TokenWOVersion, state.TokenWOVersion) {
+		v := config.TokenWO.ValueString()
+		body.Token = &v
+	}
+	if writeOnlySend(config.AWSAccessKeyIDWO, plan.AWSAccessKeyIDWOVersion, state.AWSAccessKeyIDWOVersion) {
+		v := config.AWSAccessKeyIDWO.ValueString()
+		body.AWSAccessKeyID = &v
+	}
+	if writeOnlySend(config.AWSSecretAccessKeyWO, plan.AWSSecretAccessKeyWOVersion, state.AWSSecretAccessKeyWOVersion) {
+		v := config.AWSSecretAccessKeyWO.ValueString()
+		body.AWSSecretAccessKey = &v
+	}
 
 	reg, err := r.client.UpdateContainerRegistry(ctx, id, body)
 	if err != nil {
@@ -272,6 +320,8 @@ func (r *RegistryResource) Update(ctx context.Context, req resource.UpdateReques
 	// produce an inconsistent-result error on the clear-to-null transition).
 	state.AWSAccessKeyID = plan.AWSAccessKeyID
 	state.AWSSecretAccessKey = plan.AWSSecretAccessKey
+	state.AWSAccessKeyIDWOVersion = plan.AWSAccessKeyIDWOVersion
+	state.AWSSecretAccessKeyWOVersion = plan.AWSSecretAccessKeyWOVersion
 	if !plan.AWSRegion.IsNull() && !plan.AWSRegion.IsUnknown() {
 		state.AWSRegion = types.StringValue(reg.AWSRegion)
 	} else {
@@ -281,10 +331,10 @@ func (r *RegistryResource) Update(ctx context.Context, req resource.UpdateReques
 	// promise the prior one, so rewriting it here would fail the apply as an
 	// inconsistent result.
 	state.UpdatedAt = types.StringValue(reg.UpdatedAt)
-	// Keep token in state if provided
-	if !plan.Token.IsNull() && !plan.Token.IsUnknown() && plan.Token.ValueString() != "" {
-		state.Token = plan.Token
-	}
+	// Persist unconditionally: moving to token_wo plans token as null, and
+	// keeping the old value would fail the apply as an inconsistent result.
+	state.Token = plan.Token
+	state.TokenWOVersion = plan.TokenWOVersion
 	resp.Diagnostics.Append(resp.State.Set(ctx, &state)...)
 }
 

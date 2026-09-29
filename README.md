@@ -13,7 +13,7 @@ Overview
 
 Requirements
 
-- Terraform or OpenTofu 1.4+.
+- Terraform or OpenTofu 1.4+; 1.11+ for the write-only (`_wo`) arguments, see [Write-only arguments](#write-only-arguments).
 - Go 1.21+ (to build from source).
 
 Installation
@@ -85,8 +85,7 @@ Resources
 
 - arcane_user
   - Create/read/update/delete Arcane users.
-  - Attributes: username (required, replace), password (required, sensitive), display_name, email, locale, roles.
-  - Note: Older runtimes do not support write-only attributes; password is stored sensitive in state for apply consistency.
+  - Attributes: username (required, replace), password_wo + password_wo_version (write-only) or the deprecated password (sensitive, stored in state), display_name, email, locale, role_assignments.
 
 - arcane_settings
   - Update environment settings using explicit attributes.
@@ -106,9 +105,9 @@ Resources
 
 - arcane_swarm_secret
   - Manage a Docker Swarm secret in an environment.
-  - Attributes: environment_id, name, data (required, sensitive), labels.
+  - Attributes: environment_id, name, data_wo + data_wo_version (write-only) or the deprecated data (sensitive, stored in state), labels.
   - Computed: id, version_index, created_at, updated_at.
-  - Note: Swarm secrets are immutable; changing `name`, `data`, or `labels` forces replacement.
+  - Note: Swarm secrets are immutable; changing `name`, `data`, `data_wo_version`, or `labels` forces replacement. Moving from `data` to `data_wo` does not.
 
 - arcane_swarm_config
   - Manage a Docker Swarm config in an environment.
@@ -152,17 +151,17 @@ Resources
 
 - arcane_container_registry
   - Manage container registries for pulling images.
-  - Attributes: url (required), username (required), token (required, sensitive), description, insecure, enabled.
+  - Attributes: url (required), username (required), token_wo + token_wo_version (write-only) or the deprecated token (sensitive), description, insecure, enabled, aws_access_key_id_wo / aws_secret_access_key_wo (write-only) or their deprecated stored forms.
   - Computed: id, created_at, updated_at.
 
 - arcane_environment
   - Manage Arcane environments.
-  - Attributes: api_url (required), name, access_token (sensitive), bootstrap_token (sensitive), enabled, use_api_key.
+  - Attributes: api_url (required), name, access_token_wo + access_token_wo_version (write-only) or the deprecated access_token (sensitive), bootstrap_token (sensitive), enabled, use_api_key.
   - Computed: id, status, api_key (sensitive).
 
 - arcane_git_repository
   - Manage Git repository credentials for GitOps.
-  - Attributes: name (required), url (required), auth_type (required: none, ssh, token), description, enabled, ssh_key (sensitive), token (sensitive), username.
+  - Attributes: name (required), url (required), auth_type (required: none, ssh, token), description, enabled, ssh_key_wo / token_wo + their _wo_version (write-only) or the deprecated ssh_key / token (sensitive), username.
   - Computed: id, created_at, updated_at.
 
 - arcane_gitops_sync
@@ -278,9 +277,23 @@ API Coverage & Notes
   - Notifications: `POST /environments/{id}/notifications/settings`, `GET/DELETE /environments/{id}/notifications/settings/{provider}`
   - Containers: `POST /environments/{id}/containers`, `GET/DELETE /environments/{id}/containers/{containerId}` (supports `force` and `volumes` on delete)
 
+Write-only arguments
+
+Each secret has a write-only variant with a `_wo` suffix: Terraform passes it to the provider but never stores it in the state or in saved plan files, so it can come from an ephemeral resource. Because Terraform keeps no copy to diff, it requires a `_wo_version` companion: change it to send a new value. Requires Terraform or OpenTofu 1.11+.
+
+- `arcane_user`: `password_wo`
+- `arcane_git_repository`: `token_wo`, `ssh_key_wo`
+- `arcane_container_registry`: `token_wo`, `aws_access_key_id_wo`, `aws_secret_access_key_wo`
+- `arcane_environment`: `access_token_wo`
+- `arcane_settings`: `oidc_client_secret_wo`, `depot_token_wo`, `trivy_server_token_wo`
+- `arcane_gitops_sync`: `pre_deploy_env_wo`
+- `arcane_swarm_secret`: `data_wo` (changing `data_wo_version` replaces the secret)
+
+The original arguments (`password`, `token`, ...) still work but are deprecated: they store the secret in the state and will be removed in the next major release. Replacing one with its `_wo` variant plus a `_wo_version` updates the resource in place and removes the secret from the state.
+
 Limitations / Roadmap
 
-- When using Terraform/OpenTofu < 1.11, write-only attributes are not available; sensitive-only storage is used for passwords.
+- The deprecated stored secret arguments will be removed in the next major release.
 
 Contributing
 

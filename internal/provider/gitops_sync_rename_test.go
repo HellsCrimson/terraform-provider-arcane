@@ -66,38 +66,40 @@ func (f *fakeArcaneGitOpsSync) server(t *testing.T) *httptest.Server {
 // object when every attribute has a value, null included.
 func renameGitOpsSyncModel(projectName string) gitOpsSyncModel {
 	return gitOpsSyncModel{
-		ID:                   types.StringValue("s1"),
-		EnvironmentID:        types.StringValue("env-1"),
-		Name:                 types.StringValue("sync"),
-		RepositoryID:         types.StringValue("repo-1"),
-		Branch:               types.StringValue("main"),
-		ComposePath:          types.StringValue("docker-compose.yml"),
-		ProjectName:          types.StringValue(projectName),
-		AutoSync:             types.BoolNull(),
-		SyncInterval:         types.Int64Null(),
-		MaxSyncBinarySize:    types.Int64Null(),
-		MaxSyncFiles:         types.Int64Null(),
-		MaxSyncTotalSize:     types.Int64Null(),
-		SyncDirectory:        types.BoolNull(),
-		TargetType:           types.StringNull(),
-		PreDeployScriptPath:  types.StringNull(),
-		PreDeployRunnerImage: types.StringNull(),
-		PreDeployEnv:         types.StringNull(),
-		PreDeployExtraMounts: types.StringNull(),
-		PreDeployTimeoutSec:  types.Int64Null(),
-		PreDeployNetworkMode: types.StringNull(),
-		Enabled:              types.BoolValue(true),
-		EnvironmentVariables: types.MapNull(types.StringType),
-		StartProject:         types.BoolNull(),
-		FailIfNameExists:     types.BoolNull(),
-		StopBeforeRename:     types.BoolNull(),
-		ProjectID:            types.StringValue("p1"),
-		LastSyncAt:           types.StringNull(),
-		LastSyncCommit:       types.StringNull(),
-		LastSyncStatus:       types.StringNull(),
-		LastSyncError:        types.StringNull(),
-		CreatedAt:            types.StringValue("2026-01-01T00:00:00Z"),
-		UpdatedAt:            types.StringValue("2026-01-01T00:00:00Z"),
+		ID:                    types.StringValue("s1"),
+		EnvironmentID:         types.StringValue("env-1"),
+		Name:                  types.StringValue("sync"),
+		RepositoryID:          types.StringValue("repo-1"),
+		Branch:                types.StringValue("main"),
+		ComposePath:           types.StringValue("docker-compose.yml"),
+		ProjectName:           types.StringValue(projectName),
+		AutoSync:              types.BoolNull(),
+		SyncInterval:          types.Int64Null(),
+		MaxSyncBinarySize:     types.Int64Null(),
+		MaxSyncFiles:          types.Int64Null(),
+		MaxSyncTotalSize:      types.Int64Null(),
+		SyncDirectory:         types.BoolNull(),
+		TargetType:            types.StringNull(),
+		PreDeployScriptPath:   types.StringNull(),
+		PreDeployRunnerImage:  types.StringNull(),
+		PreDeployEnv:          types.StringNull(),
+		PreDeployEnvWO:        types.StringNull(),
+		PreDeployEnvWOVersion: types.Int64Null(),
+		PreDeployExtraMounts:  types.StringNull(),
+		PreDeployTimeoutSec:   types.Int64Null(),
+		PreDeployNetworkMode:  types.StringNull(),
+		Enabled:               types.BoolValue(true),
+		EnvironmentVariables:  types.MapNull(types.StringType),
+		StartProject:          types.BoolNull(),
+		FailIfNameExists:      types.BoolNull(),
+		StopBeforeRename:      types.BoolNull(),
+		ProjectID:             types.StringValue("p1"),
+		LastSyncAt:            types.StringNull(),
+		LastSyncCommit:        types.StringNull(),
+		LastSyncStatus:        types.StringNull(),
+		LastSyncError:         types.StringNull(),
+		CreatedAt:             types.StringValue("2026-01-01T00:00:00Z"),
+		UpdatedAt:             types.StringValue("2026-01-01T00:00:00Z"),
 	}
 }
 
@@ -130,6 +132,25 @@ func gitOpsSyncPlan(t *testing.T, m gitOpsSyncModel) tfsdk.Plan {
 		t.Fatalf("set plan: %v", diags)
 	}
 	return p
+}
+
+// gitOpsSyncConfig builds the configuration for m. Paired with
+// gitOpsSyncApplyPlan it reproduces what the framework hands Create and
+// Update: the write-only pre_deploy_env_wo only survives in the configuration.
+func gitOpsSyncConfig(t *testing.T, m gitOpsSyncModel) tfsdk.Config {
+	t.Helper()
+
+	p := gitOpsSyncPlan(t, m)
+	return tfsdk.Config{Schema: p.Schema, Raw: p.Raw}
+}
+
+// gitOpsSyncApplyPlan is the plan for configuration m, with write-only values
+// nulled as the framework does.
+func gitOpsSyncApplyPlan(t *testing.T, m gitOpsSyncModel) tfsdk.Plan {
+	t.Helper()
+
+	m.PreDeployEnvWO = types.StringNull()
+	return gitOpsSyncPlan(t, m)
 }
 
 // modifyGitOpsSyncPlan runs ModifyPlan for a plan against the given state, and
@@ -227,8 +248,9 @@ func updateGitOpsSync(t *testing.T, fake *fakeArcaneGitOpsSync, plan gitOpsSyncM
 
 	state := renameGitOpsSyncModel("old")
 	req := resource.UpdateRequest{
-		Plan:  gitOpsSyncPlan(t, plan),
-		State: gitOpsSyncState(t, state),
+		Plan:   gitOpsSyncApplyPlan(t, plan),
+		Config: gitOpsSyncConfig(t, plan),
+		State:  gitOpsSyncState(t, state),
 	}
 	resp := &resource.UpdateResponse{State: gitOpsSyncState(t, state)}
 	r.Update(context.Background(), req, resp)

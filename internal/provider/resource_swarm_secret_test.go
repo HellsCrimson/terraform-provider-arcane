@@ -38,12 +38,23 @@ func secretPlan(t *testing.T, m swarmSecretModel) tfsdk.Plan {
 	return p
 }
 
+// secretConfig builds the configuration for m. The framework hands Create the
+// same values as the plan, except for the write-only data_wo that only
+// survives here.
+func secretConfig(t *testing.T, m swarmSecretModel) tfsdk.Config {
+	t.Helper()
+	p := secretPlan(t, m)
+	return tfsdk.Config{Schema: p.Schema, Raw: p.Raw}
+}
+
 func fullSecretModel() swarmSecretModel {
 	return swarmSecretModel{
 		ID:            types.StringValue("sec-1"),
 		EnvironmentID: types.StringValue("env-1"),
 		Name:          types.StringValue("db_password"),
 		Data:          types.StringValue("s3cr3t"),
+		DataWO:        types.StringNull(),
+		DataWOVersion: types.Int64Null(),
 		Labels:        types.MapNull(types.StringType),
 		VersionIndex:  types.Int64Value(10),
 		CreatedAt:     types.StringValue("2026-01-01T00:00:00Z"),
@@ -100,7 +111,7 @@ func TestSwarmSecretCreate_EncodesDataBase64(t *testing.T) {
 	plan.UpdatedAt = types.StringNull()
 
 	resp := &resource.CreateResponse{State: secretState(t, fullSecretModel())}
-	r.Create(context.Background(), resource.CreateRequest{Plan: secretPlan(t, plan)}, resp)
+	r.Create(context.Background(), resource.CreateRequest{Plan: secretPlan(t, plan), Config: secretConfig(t, plan)}, resp)
 	if resp.Diagnostics.HasError() {
 		t.Fatalf("create diagnostics: %v", resp.Diagnostics)
 	}
@@ -111,5 +122,46 @@ func TestSwarmSecretCreate_EncodesDataBase64(t *testing.T) {
 	}
 	if gotBody.Spec.Name != "db_password" {
 		t.Errorf("secret spec Name not sent: got %q", gotBody.Spec.Name)
+	}
+}
+
+// TestSwarmSecretCreate_WriteOnlyData covers data_wo: its value only exists in
+// the configuration, is what gets sent, and never lands in state.
+func TestSwarmSecretCreate_WriteOnlyData(t *testing.T) {
+	var gotBody sdkclient.SwarmSecretCreateRequest
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, req *http.Request) {
+		body, _ := io.ReadAll(req.Body)
+		_ = json.Unmarshal(body, &gotBody)
+		w.Write([]byte(`{"success":true,"data":{"id":"sec-1","spec":{"Name":"db_password"},"version":{"Index":1},"createdAt":"2026-01-01T00:00:00Z","updatedAt":"2026-01-01T00:00:00Z"}}`))
+	}))
+	defer srv.Close()
+
+	r := &SwarmSecretResource{client: sdkclient.NewClient(srv.URL, "k")}
+	plan := fullSecretModel()
+	plan.ID = types.StringNull()
+	plan.VersionIndex = types.Int64Null()
+	plan.CreatedAt = types.StringNull()
+	plan.UpdatedAt = types.StringNull()
+	plan.Data = types.StringNull()
+	plan.DataWOVersion = types.Int64Value(1)
+	config := plan
+	config.DataWO = types.StringValue("wo-s3cr3t")
+
+	resp := &resource.CreateResponse{State: secretState(t, fullSecretModel())}
+	r.Create(context.Background(), resource.CreateRequest{Plan: secretPlan(t, plan), Config: secretConfig(t, config)}, resp)
+	if resp.Diagnostics.HasError() {
+		t.Fatalf("create diagnostics: %v", resp.Diagnostics)
+	}
+
+	if want := base64.StdEncoding.EncodeToString([]byte("wo-s3cr3t")); gotBody.Spec.Data != want {
+		t.Errorf("data_wo not sent: got %q, want %q", gotBody.Spec.Data, want)
+	}
+	var got swarmSecretModel
+	resp.State.Get(context.Background(), &got)
+	if !got.Data.IsNull() || !got.DataWO.IsNull() {
+		t.Errorf("secret leaked into state: data=%v data_wo=%v", got.Data, got.DataWO)
+	}
+	if got.DataWOVersion.ValueInt64() != 1 {
+		t.Errorf("data_wo_version in state: got %v, want 1", got.DataWOVersion)
 	}
 }

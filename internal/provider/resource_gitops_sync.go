@@ -126,10 +126,14 @@ func (r *GitOpsSyncResource) Schema(_ context.Context, _ resource.SchemaRequest,
 				Description: "Container image used to run the pre-deploy script. Required by the API whenever pre_deploy_script_path is set",
 			},
 			"pre_deploy_env": resourceschema.StringAttribute{
-				Optional:    true,
-				Sensitive:   true,
-				Description: "Environment variables exposed to the pre-deploy script, one KEY=VALUE entry per line (.env file format). Marked sensitive because it commonly carries key material (e.g. SOPS_AGE_KEY)",
+				Optional:           true,
+				Sensitive:          true,
+				Description:        "Environment variables exposed to the pre-deploy script, one KEY=VALUE entry per line (.env file format). Marked sensitive because it commonly carries key material (e.g. SOPS_AGE_KEY)",
+				DeprecationMessage: writeOnlyDeprecation("pre_deploy_env"),
 			},
+			"pre_deploy_env_wo": writeOnlyAttribute("pre_deploy_env", "Environment variables exposed to the pre-deploy script, one KEY=VALUE entry per line (.env file format). "+
+				"Changing `pre_deploy_env_wo_version` while this is unset clears it on the server."),
+			"pre_deploy_env_wo_version": writeOnlyVersionAttribute("pre_deploy_env"),
 			"pre_deploy_extra_mounts": resourceschema.StringAttribute{
 				Optional:    true,
 				Sensitive:   true,
@@ -290,38 +294,40 @@ func (r *GitOpsSyncResource) planRenameRequiresStop(ctx context.Context, req res
 }
 
 type gitOpsSyncModel struct {
-	ID                   types.String `tfsdk:"id"`
-	EnvironmentID        types.String `tfsdk:"environment_id"`
-	Name                 types.String `tfsdk:"name"`
-	RepositoryID         types.String `tfsdk:"repository_id"`
-	Branch               types.String `tfsdk:"branch"`
-	ComposePath          types.String `tfsdk:"compose_path"`
-	ProjectName          types.String `tfsdk:"project_name"`
-	AutoSync             types.Bool   `tfsdk:"auto_sync"`
-	SyncInterval         types.Int64  `tfsdk:"sync_interval"`
-	MaxSyncBinarySize    types.Int64  `tfsdk:"max_sync_binary_size"`
-	MaxSyncFiles         types.Int64  `tfsdk:"max_sync_files"`
-	MaxSyncTotalSize     types.Int64  `tfsdk:"max_sync_total_size"`
-	SyncDirectory        types.Bool   `tfsdk:"sync_directory"`
-	TargetType           types.String `tfsdk:"target_type"`
-	PreDeployScriptPath  types.String `tfsdk:"pre_deploy_script_path"`
-	PreDeployRunnerImage types.String `tfsdk:"pre_deploy_runner_image"`
-	PreDeployEnv         types.String `tfsdk:"pre_deploy_env"`
-	PreDeployExtraMounts types.String `tfsdk:"pre_deploy_extra_mounts"`
-	PreDeployTimeoutSec  types.Int64  `tfsdk:"pre_deploy_timeout_sec"`
-	PreDeployNetworkMode types.String `tfsdk:"pre_deploy_network_mode"`
-	Enabled              types.Bool   `tfsdk:"enabled"`
-	EnvironmentVariables types.Map    `tfsdk:"environment_variables"`
-	StartProject         types.Bool   `tfsdk:"start_project"`
-	FailIfNameExists     types.Bool   `tfsdk:"fail_if_name_exists"`
-	StopBeforeRename     types.Bool   `tfsdk:"stop_before_rename"`
-	ProjectID            types.String `tfsdk:"project_id"`
-	LastSyncAt           types.String `tfsdk:"last_sync_at"`
-	LastSyncCommit       types.String `tfsdk:"last_sync_commit"`
-	LastSyncStatus       types.String `tfsdk:"last_sync_status"`
-	LastSyncError        types.String `tfsdk:"last_sync_error"`
-	CreatedAt            types.String `tfsdk:"created_at"`
-	UpdatedAt            types.String `tfsdk:"updated_at"`
+	ID                    types.String `tfsdk:"id"`
+	EnvironmentID         types.String `tfsdk:"environment_id"`
+	Name                  types.String `tfsdk:"name"`
+	RepositoryID          types.String `tfsdk:"repository_id"`
+	Branch                types.String `tfsdk:"branch"`
+	ComposePath           types.String `tfsdk:"compose_path"`
+	ProjectName           types.String `tfsdk:"project_name"`
+	AutoSync              types.Bool   `tfsdk:"auto_sync"`
+	SyncInterval          types.Int64  `tfsdk:"sync_interval"`
+	MaxSyncBinarySize     types.Int64  `tfsdk:"max_sync_binary_size"`
+	MaxSyncFiles          types.Int64  `tfsdk:"max_sync_files"`
+	MaxSyncTotalSize      types.Int64  `tfsdk:"max_sync_total_size"`
+	SyncDirectory         types.Bool   `tfsdk:"sync_directory"`
+	TargetType            types.String `tfsdk:"target_type"`
+	PreDeployScriptPath   types.String `tfsdk:"pre_deploy_script_path"`
+	PreDeployRunnerImage  types.String `tfsdk:"pre_deploy_runner_image"`
+	PreDeployEnv          types.String `tfsdk:"pre_deploy_env"`
+	PreDeployEnvWO        types.String `tfsdk:"pre_deploy_env_wo"`
+	PreDeployEnvWOVersion types.Int64  `tfsdk:"pre_deploy_env_wo_version"`
+	PreDeployExtraMounts  types.String `tfsdk:"pre_deploy_extra_mounts"`
+	PreDeployTimeoutSec   types.Int64  `tfsdk:"pre_deploy_timeout_sec"`
+	PreDeployNetworkMode  types.String `tfsdk:"pre_deploy_network_mode"`
+	Enabled               types.Bool   `tfsdk:"enabled"`
+	EnvironmentVariables  types.Map    `tfsdk:"environment_variables"`
+	StartProject          types.Bool   `tfsdk:"start_project"`
+	FailIfNameExists      types.Bool   `tfsdk:"fail_if_name_exists"`
+	StopBeforeRename      types.Bool   `tfsdk:"stop_before_rename"`
+	ProjectID             types.String `tfsdk:"project_id"`
+	LastSyncAt            types.String `tfsdk:"last_sync_at"`
+	LastSyncCommit        types.String `tfsdk:"last_sync_commit"`
+	LastSyncStatus        types.String `tfsdk:"last_sync_status"`
+	LastSyncError         types.String `tfsdk:"last_sync_error"`
+	CreatedAt             types.String `tfsdk:"created_at"`
+	UpdatedAt             types.String `tfsdk:"updated_at"`
 }
 
 // mapToEnvContent converts a Terraform map to .env file format
@@ -374,8 +380,9 @@ func envContentToMap(ctx context.Context, envContent string) (types.Map, error) 
 }
 
 func (r *GitOpsSyncResource) Create(ctx context.Context, req resource.CreateRequest, resp *resource.CreateResponse) {
-	var plan gitOpsSyncModel
+	var plan, config gitOpsSyncModel
 	resp.Diagnostics.Append(req.Plan.Get(ctx, &plan)...)
+	resp.Diagnostics.Append(req.Config.Get(ctx, &config)...)
 	if resp.Diagnostics.HasError() {
 		return
 	}
@@ -429,6 +436,11 @@ func (r *GitOpsSyncResource) Create(ctx context.Context, req resource.CreateRequ
 	}
 	if !plan.PreDeployEnv.IsNull() && !plan.PreDeployEnv.IsUnknown() {
 		v := plan.PreDeployEnv.ValueString()
+		body.PreDeployEnv = &v
+	}
+	// Write-only: the plan holds null, the value is only in the configuration.
+	if isSetString(config.PreDeployEnvWO) {
+		v := config.PreDeployEnvWO.ValueString()
 		body.PreDeployEnv = &v
 	}
 	if !plan.PreDeployExtraMounts.IsNull() && !plan.PreDeployExtraMounts.IsUnknown() {
@@ -548,6 +560,7 @@ func (r *GitOpsSyncResource) Create(ctx context.Context, req resource.CreateRequ
 	state.PreDeployScriptPath = preDeployString(plan.PreDeployScriptPath, sync.PreDeployScriptPath)
 	state.PreDeployRunnerImage = preDeployString(plan.PreDeployRunnerImage, sync.PreDeployRunnerImage)
 	state.PreDeployEnv = preDeployString(plan.PreDeployEnv, sync.PreDeployEnv)
+	state.PreDeployEnvWOVersion = plan.PreDeployEnvWOVersion
 	state.PreDeployExtraMounts = preDeployString(plan.PreDeployExtraMounts, sync.PreDeployExtraMounts)
 	if plan.PreDeployTimeoutSec.IsUnknown() {
 		state.PreDeployTimeoutSec = types.Int64Value(sync.PreDeployTimeoutSec)
@@ -676,9 +689,10 @@ func (r *GitOpsSyncResource) Read(ctx context.Context, req resource.ReadRequest,
 }
 
 func (r *GitOpsSyncResource) Update(ctx context.Context, req resource.UpdateRequest, resp *resource.UpdateResponse) {
-	var plan gitOpsSyncModel
+	var plan, config gitOpsSyncModel
 	var state gitOpsSyncModel
 	resp.Diagnostics.Append(req.Plan.Get(ctx, &plan)...)
+	resp.Diagnostics.Append(req.Config.Get(ctx, &config)...)
 	resp.Diagnostics.Append(req.State.Get(ctx, &state)...)
 	if resp.Diagnostics.HasError() {
 		return
@@ -755,6 +769,16 @@ func (r *GitOpsSyncResource) Update(ctx context.Context, req resource.UpdateRequ
 		body.PreDeployEnv = &v
 	} else if plan.PreDeployEnv.IsNull() && !state.PreDeployEnv.IsNull() {
 		v := ""
+		body.PreDeployEnv = &v
+	}
+	// pre_deploy_env_wo only reaches Arcane when its version changes: the
+	// configured value, or an empty string to clear it when it was removed.
+	// Skipped while pre_deploy_env is in use, which then owns the value.
+	if plan.PreDeployEnv.IsNull() && !plan.PreDeployEnvWOVersion.Equal(state.PreDeployEnvWOVersion) {
+		v := ""
+		if !config.PreDeployEnvWO.IsNull() && !config.PreDeployEnvWO.IsUnknown() {
+			v = config.PreDeployEnvWO.ValueString()
+		}
 		body.PreDeployEnv = &v
 	}
 	if !plan.PreDeployExtraMounts.IsNull() && !plan.PreDeployExtraMounts.IsUnknown() {
@@ -881,6 +905,7 @@ func (r *GitOpsSyncResource) Update(ctx context.Context, req resource.UpdateRequ
 	state.PreDeployScriptPath = preDeployString(plan.PreDeployScriptPath, sync.PreDeployScriptPath)
 	state.PreDeployRunnerImage = preDeployString(plan.PreDeployRunnerImage, sync.PreDeployRunnerImage)
 	state.PreDeployEnv = preDeployString(plan.PreDeployEnv, sync.PreDeployEnv)
+	state.PreDeployEnvWOVersion = plan.PreDeployEnvWOVersion
 	state.PreDeployExtraMounts = preDeployString(plan.PreDeployExtraMounts, sync.PreDeployExtraMounts)
 	if plan.PreDeployTimeoutSec.IsUnknown() {
 		state.PreDeployTimeoutSec = types.Int64Value(sync.PreDeployTimeoutSec)
