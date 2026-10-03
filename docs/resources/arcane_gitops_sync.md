@@ -90,6 +90,8 @@ resource "arcane_gitops_sync" "sops_sync" {
 - `auto_sync` (Bool, Optional) — Enable automatic sync on interval
 - `sync_interval` (Int, Optional) — Sync interval in seconds
 - `sync_directory` (Bool, Optional) — Whether to sync the full directory instead of only the compose file
+- `redeploy_after_sync` (Bool, Optional) — Redeploy the project after a sync that changes it, even when the project is stopped. Without it, Arcane only redeploys a project that is already running.
+- `pull_image_after_sync` (Bool, Optional) — Pull each service's image after a sync that changes the project but does not redeploy it.
 - `target_type` (String, Optional) — GitOps sync target type
 - `max_sync_binary_size` (Int, Optional) — Maximum binary file size to sync, in bytes
 - `max_sync_files` (Int, Optional) — Maximum number of files to sync

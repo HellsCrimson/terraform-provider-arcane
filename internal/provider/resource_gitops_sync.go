@@ -92,6 +92,14 @@ func (r *GitOpsSyncResource) Schema(_ context.Context, _ resource.SchemaRequest,
 				Optional:    true,
 				Description: "Whether to sync the full directory instead of only the compose file",
 			},
+			"pull_image_after_sync": resourceschema.BoolAttribute{
+				Optional:    true,
+				Description: "Whether to pull each service's image after a sync that changes the project while it is not redeployed",
+			},
+			"redeploy_after_sync": resourceschema.BoolAttribute{
+				Optional:    true,
+				Description: "Whether to redeploy the project after a sync that changes it, even when the project is stopped. Without it, only a running project is redeployed.",
+			},
 			"target_type": resourceschema.StringAttribute{
 				Optional:    true,
 				Description: "GitOps sync target type",
@@ -307,6 +315,8 @@ type gitOpsSyncModel struct {
 	MaxSyncFiles          types.Int64  `tfsdk:"max_sync_files"`
 	MaxSyncTotalSize      types.Int64  `tfsdk:"max_sync_total_size"`
 	SyncDirectory         types.Bool   `tfsdk:"sync_directory"`
+	PullImageAfterSync    types.Bool   `tfsdk:"pull_image_after_sync"`
+	RedeployAfterSync     types.Bool   `tfsdk:"redeploy_after_sync"`
 	TargetType            types.String `tfsdk:"target_type"`
 	PreDeployScriptPath   types.String `tfsdk:"pre_deploy_script_path"`
 	PreDeployRunnerImage  types.String `tfsdk:"pre_deploy_runner_image"`
@@ -421,6 +431,14 @@ func (r *GitOpsSyncResource) Create(ctx context.Context, req resource.CreateRequ
 	if !plan.SyncDirectory.IsNull() && !plan.SyncDirectory.IsUnknown() {
 		v := plan.SyncDirectory.ValueBool()
 		body.SyncDirectory = &v
+	}
+	if !plan.PullImageAfterSync.IsNull() && !plan.PullImageAfterSync.IsUnknown() {
+		v := plan.PullImageAfterSync.ValueBool()
+		body.PullImageAfterSync = &v
+	}
+	if !plan.RedeployAfterSync.IsNull() && !plan.RedeployAfterSync.IsUnknown() {
+		v := plan.RedeployAfterSync.ValueBool()
+		body.RedeployAfterSync = &v
 	}
 	if !plan.TargetType.IsNull() && !plan.TargetType.IsUnknown() {
 		v := plan.TargetType.ValueString()
@@ -547,6 +565,16 @@ func (r *GitOpsSyncResource) Create(ctx context.Context, req resource.CreateRequ
 	} else {
 		state.SyncDirectory = plan.SyncDirectory
 	}
+	if !plan.PullImageAfterSync.IsNull() && !plan.PullImageAfterSync.IsUnknown() {
+		state.PullImageAfterSync = types.BoolValue(sync.PullImageAfterSync)
+	} else {
+		state.PullImageAfterSync = plan.PullImageAfterSync
+	}
+	if !plan.RedeployAfterSync.IsNull() && !plan.RedeployAfterSync.IsUnknown() {
+		state.RedeployAfterSync = types.BoolValue(sync.RedeployAfterSync)
+	} else {
+		state.RedeployAfterSync = plan.RedeployAfterSync
+	}
 	if !plan.TargetType.IsNull() && !plan.TargetType.IsUnknown() {
 		state.TargetType = types.StringValue(sync.TargetType)
 	} else {
@@ -631,6 +659,12 @@ func (r *GitOpsSyncResource) Read(ctx context.Context, req resource.ReadRequest,
 	}
 	if !state.SyncDirectory.IsNull() && !state.SyncDirectory.IsUnknown() {
 		state.SyncDirectory = types.BoolValue(sync.SyncDirectory)
+	}
+	if !state.PullImageAfterSync.IsNull() && !state.PullImageAfterSync.IsUnknown() {
+		state.PullImageAfterSync = types.BoolValue(sync.PullImageAfterSync)
+	}
+	if !state.RedeployAfterSync.IsNull() && !state.RedeployAfterSync.IsUnknown() {
+		state.RedeployAfterSync = types.BoolValue(sync.RedeployAfterSync)
 	}
 	if !state.TargetType.IsNull() && !state.TargetType.IsUnknown() {
 		state.TargetType = types.StringValue(sync.TargetType)
@@ -743,6 +777,14 @@ func (r *GitOpsSyncResource) Update(ctx context.Context, req resource.UpdateRequ
 	if !plan.SyncDirectory.IsNull() && !plan.SyncDirectory.IsUnknown() {
 		v := plan.SyncDirectory.ValueBool()
 		body.SyncDirectory = &v
+	}
+	if !plan.PullImageAfterSync.IsNull() && !plan.PullImageAfterSync.IsUnknown() {
+		v := plan.PullImageAfterSync.ValueBool()
+		body.PullImageAfterSync = &v
+	}
+	if !plan.RedeployAfterSync.IsNull() && !plan.RedeployAfterSync.IsUnknown() {
+		v := plan.RedeployAfterSync.ValueBool()
+		body.RedeployAfterSync = &v
 	}
 	if !plan.TargetType.IsNull() && !plan.TargetType.IsUnknown() {
 		v := plan.TargetType.ValueString()
@@ -891,6 +933,16 @@ func (r *GitOpsSyncResource) Update(ctx context.Context, req resource.UpdateRequ
 		state.SyncDirectory = types.BoolValue(sync.SyncDirectory)
 	} else {
 		state.SyncDirectory = plan.SyncDirectory
+	}
+	if !plan.PullImageAfterSync.IsNull() && !plan.PullImageAfterSync.IsUnknown() {
+		state.PullImageAfterSync = types.BoolValue(sync.PullImageAfterSync)
+	} else {
+		state.PullImageAfterSync = plan.PullImageAfterSync
+	}
+	if !plan.RedeployAfterSync.IsNull() && !plan.RedeployAfterSync.IsUnknown() {
+		state.RedeployAfterSync = types.BoolValue(sync.RedeployAfterSync)
+	} else {
+		state.RedeployAfterSync = plan.RedeployAfterSync
 	}
 	if !plan.TargetType.IsNull() && !plan.TargetType.IsUnknown() {
 		state.TargetType = types.StringValue(sync.TargetType)
