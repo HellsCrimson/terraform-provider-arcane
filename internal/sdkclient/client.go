@@ -2317,6 +2317,8 @@ type GitOpsSyncCreateRequest struct {
 	MaxSyncFiles         *int64  `json:"maxSyncFiles,omitempty"`
 	MaxSyncTotalSize     *int64  `json:"maxSyncTotalSize,omitempty"`
 	SyncDirectory        *bool   `json:"syncDirectory,omitempty"`
+	PullImageAfterSync   *bool   `json:"pullImageAfterSync,omitempty"`
+	RedeployAfterSync    *bool   `json:"redeployAfterSync,omitempty"`
 	TargetType           *string `json:"targetType,omitempty"`
 	PreDeployScriptPath  *string `json:"preDeployScriptPath,omitempty"`
 	PreDeployRunnerImage *string `json:"preDeployRunnerImage,omitempty"`
@@ -2339,6 +2341,8 @@ type GitOpsSyncUpdateRequest struct {
 	MaxSyncFiles         *int64  `json:"maxSyncFiles,omitempty"`
 	MaxSyncTotalSize     *int64  `json:"maxSyncTotalSize,omitempty"`
 	SyncDirectory        *bool   `json:"syncDirectory,omitempty"`
+	PullImageAfterSync   *bool   `json:"pullImageAfterSync,omitempty"`
+	RedeployAfterSync    *bool   `json:"redeployAfterSync,omitempty"`
 	TargetType           *string `json:"targetType,omitempty"`
 	PreDeployScriptPath  *string `json:"preDeployScriptPath,omitempty"`
 	PreDeployRunnerImage *string `json:"preDeployRunnerImage,omitempty"`
@@ -2350,26 +2354,28 @@ type GitOpsSyncUpdateRequest struct {
 }
 
 type GitOpsSync struct {
-	ID                string  `json:"id"`
-	Name              string  `json:"name"`
-	EnvironmentID     string  `json:"environmentId"`
-	RepositoryID      string  `json:"repositoryId"`
-	Branch            string  `json:"branch"`
-	ComposePath       string  `json:"composePath"`
-	ProjectName       string  `json:"projectName"`
-	ProjectID         *string `json:"projectId,omitempty"`
-	AutoSync          bool    `json:"autoSync"`
-	SyncInterval      int64   `json:"syncInterval"`
-	MaxSyncBinarySize int64   `json:"maxSyncBinarySize"`
-	MaxSyncFiles      int64   `json:"maxSyncFiles"`
-	MaxSyncTotalSize  int64   `json:"maxSyncTotalSize"`
-	SyncDirectory     bool    `json:"syncDirectory"`
-	TargetType        string  `json:"targetType"`
-	Enabled           bool    `json:"enabled"`
-	LastSyncAt        *string `json:"lastSyncAt,omitempty"`
-	LastSyncCommit    *string `json:"lastSyncCommit,omitempty"`
-	LastSyncStatus    *string `json:"lastSyncStatus,omitempty"`
-	LastSyncError     *string `json:"lastSyncError,omitempty"`
+	ID                 string  `json:"id"`
+	Name               string  `json:"name"`
+	EnvironmentID      string  `json:"environmentId"`
+	RepositoryID       string  `json:"repositoryId"`
+	Branch             string  `json:"branch"`
+	ComposePath        string  `json:"composePath"`
+	ProjectName        string  `json:"projectName"`
+	ProjectID          *string `json:"projectId,omitempty"`
+	AutoSync           bool    `json:"autoSync"`
+	SyncInterval       int64   `json:"syncInterval"`
+	MaxSyncBinarySize  int64   `json:"maxSyncBinarySize"`
+	MaxSyncFiles       int64   `json:"maxSyncFiles"`
+	MaxSyncTotalSize   int64   `json:"maxSyncTotalSize"`
+	SyncDirectory      bool    `json:"syncDirectory"`
+	PullImageAfterSync bool    `json:"pullImageAfterSync"`
+	RedeployAfterSync  bool    `json:"redeployAfterSync"`
+	TargetType         string  `json:"targetType"`
+	Enabled            bool    `json:"enabled"`
+	LastSyncAt         *string `json:"lastSyncAt,omitempty"`
+	LastSyncCommit     *string `json:"lastSyncCommit,omitempty"`
+	LastSyncStatus     *string `json:"lastSyncStatus,omitempty"`
+	LastSyncError      *string `json:"lastSyncError,omitempty"`
 	// Pre-deploy lifecycle hook configuration. NetworkMode and TimeoutSec
 	// always carry server-side defaults ("none", 60) even when never
 	// configured; the rest are absent until set.
