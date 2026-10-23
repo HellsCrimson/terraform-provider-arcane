@@ -9,6 +9,7 @@ import (
 	"github.com/hashicorp/terraform-plugin-framework/path"
 	"github.com/hashicorp/terraform-plugin-framework/resource"
 	resourceschema "github.com/hashicorp/terraform-plugin-framework/resource/schema"
+	"github.com/hashicorp/terraform-plugin-framework/resource/schema/boolplanmodifier"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema/planmodifier"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema/stringplanmodifier"
 	"github.com/hashicorp/terraform-plugin-framework/types"
@@ -57,7 +58,15 @@ func (r *EnvironmentResource) Schema(_ context.Context, _ resource.SchemaRequest
 			},
 			"is_edge": resourceschema.BoolAttribute{
 				Optional:    true,
-				Description: "Whether the environment uses edge transport.",
+				Description: "Whether the environment uses edge transport. Changing it replaces the environment.",
+				PlanModifiers: []planmodifier.Bool{
+					// The API cannot change the transport of an existing environment.
+					// A null state (e.g. after import) is not a change.
+					boolplanmodifier.RequiresReplaceIf(func(_ context.Context, req planmodifier.BoolRequest, resp *boolplanmodifier.RequiresReplaceIfFuncResponse) {
+						resp.RequiresReplace = !req.StateValue.IsNull() && !req.PlanValue.IsNull() && !req.PlanValue.IsUnknown() &&
+							!req.StateValue.Equal(req.PlanValue)
+					}, "Changing is_edge replaces the environment.", "Changing `is_edge` replaces the environment."),
+				},
 			},
 			"enabled": resourceschema.BoolAttribute{
 				Optional:    true,

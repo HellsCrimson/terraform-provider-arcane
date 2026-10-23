@@ -21,7 +21,7 @@ resource "arcane_environment" "agent" {
 - `access_token_wo` (String, Optional, Sensitive, Write-only) — access token for agent pairing. Never stored in state or plan files; only sent when `access_token_wo_version` changes. Conflicts with `access_token`. See [write-only arguments](../index.md#write-only-arguments).
 - `access_token_wo_version` (Number, Optional) — change it to send a new `access_token_wo`. Required with `access_token_wo`.
 - `use_api_key` (Bool, Optional) — request Arcane to generate an API key for pairing.
-- `is_edge` (Bool, Optional) — whether the environment uses edge transport.
+- `is_edge` (Bool, Optional) — whether the environment uses edge transport. Changing it forces a new resource; Arcane cannot change the transport of an existing environment.
 - `regenerate_api_key` (Bool, Optional) — regenerate the pairing API key on update.
 - `enabled` (Bool, Optional)
 
