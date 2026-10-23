@@ -74,7 +74,7 @@ func (r *GitOpsSyncResource) Schema(_ context.Context, _ resource.SchemaRequest,
 			},
 			"sync_interval": resourceschema.Int64Attribute{
 				Optional:    true,
-				Description: "Sync interval in seconds",
+				Description: "Sync interval in minutes",
 			},
 			"max_sync_binary_size": resourceschema.Int64Attribute{
 				Optional:    true,
