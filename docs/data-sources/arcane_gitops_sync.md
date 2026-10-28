@@ -32,7 +32,7 @@ output "project_id" {
 - `compose_path` (String) — path to docker-compose file.
 - `project_name` (String) — project name.
 - `auto_sync` (Bool) — auto sync enabled.
-- `sync_interval` (Number) — sync interval in seconds.
+- `sync_interval` (Number) — sync interval in minutes.
 - `enabled` (Bool) — whether sync is enabled.
 - `pre_deploy_script_path` (String) — path inside the synced repository to the pre-deploy hook script.
 - `pre_deploy_runner_image` (String) — container image used to run the pre-deploy script.

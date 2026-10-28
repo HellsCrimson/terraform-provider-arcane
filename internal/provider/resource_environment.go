@@ -58,14 +58,14 @@ func (r *EnvironmentResource) Schema(_ context.Context, _ resource.SchemaRequest
 			},
 			"is_edge": resourceschema.BoolAttribute{
 				Optional:    true,
+				Computed:    true,
 				Description: "Whether the environment uses edge transport. Changing it replaces the environment.",
 				PlanModifiers: []planmodifier.Bool{
-					// The API cannot change the transport of an existing environment.
-					// A null state (e.g. after import) is not a change.
-					boolplanmodifier.RequiresReplaceIf(func(_ context.Context, req planmodifier.BoolRequest, resp *boolplanmodifier.RequiresReplaceIfFuncResponse) {
-						resp.RequiresReplace = !req.StateValue.IsNull() && !req.PlanValue.IsNull() && !req.PlanValue.IsUnknown() &&
-							!req.StateValue.Equal(req.PlanValue)
-					}, "Changing is_edge replaces the environment.", "Changing `is_edge` replaces the environment."),
+					// Always read back from the API so a configured value is compared
+					// against the real transport, even after import or when it was
+					// previously unset. The API cannot change it in place.
+					boolplanmodifier.UseStateForUnknown(),
+					boolplanmodifier.RequiresReplace(),
 				},
 			},
 			"enabled": resourceschema.BoolAttribute{
@@ -200,11 +200,7 @@ func (r *EnvironmentResource) Create(ctx context.Context, req resource.CreateReq
 	} else {
 		state.Name = plan.Name
 	}
-	if !plan.IsEdge.IsNull() && !plan.IsEdge.IsUnknown() {
-		state.IsEdge = types.BoolValue(env.IsEdge)
-	} else {
-		state.IsEdge = plan.IsEdge
-	}
+	state.IsEdge = types.BoolValue(env.IsEdge)
 	if !plan.Enabled.IsNull() && !plan.Enabled.IsUnknown() {
 		state.Enabled = types.BoolValue(env.Enabled)
 	} else {
@@ -243,9 +239,7 @@ func (r *EnvironmentResource) Read(ctx context.Context, req resource.ReadRequest
 	if !state.Enabled.IsNull() && !state.Enabled.IsUnknown() {
 		state.Enabled = types.BoolValue(env.Enabled)
 	}
-	if !state.IsEdge.IsNull() && !state.IsEdge.IsUnknown() {
-		state.IsEdge = types.BoolValue(env.IsEdge)
-	}
+	state.IsEdge = types.BoolValue(env.IsEdge)
 	applyEnvironmentEdgeFields(ctx, &state, env)
 	// access_token/use_api_key remain as configured
 	resp.Diagnostics.Append(resp.State.Set(ctx, &state)...)
@@ -306,11 +300,7 @@ func (r *EnvironmentResource) Update(ctx context.Context, req resource.UpdateReq
 	} else {
 		state.Enabled = plan.Enabled
 	}
-	if !plan.IsEdge.IsNull() && !plan.IsEdge.IsUnknown() {
-		state.IsEdge = types.BoolValue(env.IsEdge)
-	} else {
-		state.IsEdge = plan.IsEdge
-	}
+	state.IsEdge = types.BoolValue(env.IsEdge)
 	applyEnvironmentEdgeFields(ctx, &state, env)
 	// Persist unconditionally so clearing any of these to null also updates
 	// state; a guarded copy would keep the stale prior value and produce an

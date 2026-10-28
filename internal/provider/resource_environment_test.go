@@ -13,8 +13,8 @@ import (
 )
 
 // TestEnvironmentIsEdge_RequiresReplace verifies that changing is_edge replaces
-// the environment (the API cannot update it), while a null state after import,
-// a removed or unknown value, or an unchanged value does not.
+// the environment (the API cannot update it), including a value that is only
+// known at apply time, while an unchanged or removed value keeps the state.
 func TestEnvironmentIsEdge_RequiresReplace(t *testing.T) {
 	schemaResp := &resource.SchemaResponse{}
 	(&EnvironmentResource{}).Schema(context.Background(), resource.SchemaRequest{}, schemaResp)
@@ -24,29 +24,35 @@ func TestEnvironmentIsEdge_RequiresReplace(t *testing.T) {
 	raw := tftypes.NewValue(tftypes.Object{}, map[string]tftypes.Value{})
 
 	cases := []struct {
-		name  string
-		state types.Bool
-		plan  types.Bool
-		want  bool
+		name   string
+		state  types.Bool
+		config types.Bool
+		want   bool
 	}{
 		{"changed", types.BoolValue(false), types.BoolValue(true), true},
 		{"unchanged", types.BoolValue(true), types.BoolValue(true), false},
-		{"null state after import", types.BoolNull(), types.BoolValue(true), false},
 		{"removed from config", types.BoolValue(true), types.BoolNull(), false},
-		{"unknown plan", types.BoolValue(true), types.BoolUnknown(), false},
+		{"unknown config", types.BoolValue(true), types.BoolUnknown(), true},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
+			// A computed attribute absent from the config is planned as unknown.
+			plan := tc.config
+			if plan.IsNull() {
+				plan = types.BoolUnknown()
+			}
 			req := planmodifier.BoolRequest{
 				State:       tfsdk.State{Raw: raw},
 				Plan:        tfsdk.Plan{Raw: raw},
 				StateValue:  tc.state,
-				PlanValue:   tc.plan,
-				ConfigValue: tc.plan,
+				PlanValue:   plan,
+				ConfigValue: tc.config,
 			}
-			resp := &planmodifier.BoolResponse{PlanValue: tc.plan}
+			resp := &planmodifier.BoolResponse{PlanValue: plan}
+			// Like the framework, each modifier sees the previous one's plan.
 			for _, m := range attr.PlanModifiers {
 				m.PlanModifyBool(context.Background(), req, resp)
+				req.PlanValue = resp.PlanValue
 			}
 			if resp.RequiresReplace != tc.want {
 				t.Errorf("RequiresReplace = %v, want %v", resp.RequiresReplace, tc.want)
