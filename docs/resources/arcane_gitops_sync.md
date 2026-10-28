@@ -31,8 +31,7 @@ resource "arcane_gitops_sync" "app_sync" {
   project_name   = "my-app"
 
   auto_sync     = true
-  sync_interval = 300  # 5 minutes
-  enabled       = true
+  sync_interval = 5  # minutes
 }
 ```
 
@@ -48,8 +47,7 @@ resource "arcane_gitops_sync" "staging_sync" {
   project_name   = "app-staging"
 
   auto_sync     = true
-  sync_interval = 600  # 10 minutes
-  enabled       = true
+  sync_interval = 10  # minutes
 }
 ```
 
@@ -88,7 +86,7 @@ resource "arcane_gitops_sync" "sops_sync" {
 - `compose_path` (String, Required) — Path to docker-compose file in the repository
 - `project_name` (String, Optional) — Project name for the compose stack. Changing it renames the project the sync is bound to; see [Renaming the project](#renaming-the-project).
 - `auto_sync` (Bool, Optional) — Enable automatic sync on interval
-- `sync_interval` (Int, Optional) — Sync interval in seconds
+- `sync_interval` (Int, Optional) — Sync interval in minutes
 - `sync_directory` (Bool, Optional) — Whether to sync the full directory instead of only the compose file
 - `redeploy_after_sync` (Bool, Optional) — Redeploy the project after a sync that changes it, even when the project is stopped. Without it, Arcane only redeploys a project that is already running.
 - `pull_image_after_sync` (Bool, Optional) — Pull each service's image after a sync that changes the project but does not redeploy it.
@@ -108,7 +106,6 @@ resource "arcane_gitops_sync" "sops_sync" {
 - `pre_deploy_extra_mounts` (String, Optional, Sensitive) — Extra bind mounts for the pre-deploy runner container, one entry per line in docker `src:tgt[:ro|:rw]` form
 - `pre_deploy_timeout_sec` (Int, Optional) — Timeout in seconds for the pre-deploy script (server default 60, capped by the server-side maximum)
 - `pre_deploy_network_mode` (String, Optional) — Docker network mode for the pre-deploy runner container: `"none"` (server default), `"bridge"`, `"host"`, or a Docker network name
-- `enabled` (Bool, Optional) — Whether the sync is enabled
 
 ## Renaming the project
 
@@ -145,9 +142,14 @@ Only a `project_name` change renames. A project whose name drifted from the sync
 record — for instance one renamed outside Terraform — is left alone until the
 `project_name` in the configuration changes.
 
+## Deletion
+
+Destroying the resource deletes the sync and destroys its project (containers and networks) without removing volumes or files. Arcane moves the project directory to a hidden `.arcane-trash-*` directory in its projects directory, so it is not imported again.
+
 ## Attributes Reference
 
 - `id` (String) — GitOps sync ID
+- `enabled` (Bool) — Whether the sync is enabled (read-only)
 - `project_id` (String) — Associated project ID (created after first sync)
 - `last_sync_at` (String) — Last sync timestamp
 - `last_sync_commit` (String) — Last synced commit hash

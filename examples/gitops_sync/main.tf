@@ -57,7 +57,7 @@ resource "arcane_gitops_sync" "production_sync" {
   project_name   = "my-app-prod"
 
   auto_sync     = true
-  sync_interval = 300  # Sync every 5 minutes
+  sync_interval = 5    # Sync every 5 minutes
   start_project = true # Start the project after creation (default: true)
 
   # Environment variables for the deployed project
@@ -80,7 +80,7 @@ resource "arcane_gitops_sync" "encrypted_sync" {
   project_name   = "my-encrypted-app"
 
   auto_sync     = true
-  sync_interval = 300
+  sync_interval = 5
 
   # Run pre-deploy.sh from the synced repo in a sops container before each
   # deploy. The age key is mounted read-only from the host; the runner gets

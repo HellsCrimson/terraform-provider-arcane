@@ -63,7 +63,7 @@ func (d *GitOpsSyncDataSource) Schema(ctx context.Context, req datasource.Schema
 			},
 			"sync_interval": schema.Int64Attribute{
 				Computed:    true,
-				Description: "Sync interval in seconds",
+				Description: "Sync interval in minutes",
 			},
 			"enabled": schema.BoolAttribute{
 				Computed:    true,
