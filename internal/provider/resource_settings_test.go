@@ -80,3 +80,51 @@ func TestAddWriteOnlySettings(t *testing.T) {
 		t.Errorf("update map: got %v, want only oidcClientSecret", updated)
 	}
 }
+
+// TestRefreshSettingsFromAPI pins how Read picks up drift: a configured
+// setting takes the value Arcane reports, while unset settings, keys the API
+// does not return and secrets keep their state value.
+func TestRefreshSettingsFromAPI(t *testing.T) {
+	state := settingsModel{
+		AuthLocalEnabled: types.StringValue("false"),
+		OidcEnabled:      types.StringValue("true"),
+		OidcClientSecret: types.StringValue("secret"),
+	}
+	applied := map[string]string{
+		"authLocalEnabled": "true",
+		"pollingEnabled":   "true",
+		"oidcClientSecret": "",
+	}
+	refreshSettingsFromAPI(&state, applied)
+
+	if got := state.AuthLocalEnabled.ValueString(); got != "true" {
+		t.Errorf("auth_local_enabled: got %q, want the drifted value %q", got, "true")
+	}
+	if got := state.OidcEnabled.ValueString(); got != "true" {
+		t.Errorf("oidc_enabled missing from the response: got %q, want state value %q", got, "true")
+	}
+	if !state.PollingEnabled.IsNull() {
+		t.Errorf("unset polling_enabled was refreshed to %q, want null", state.PollingEnabled.ValueString())
+	}
+	if got := state.OidcClientSecret.ValueString(); got != "secret" {
+		t.Errorf("oidc_client_secret: got %q, want state value %q", got, "secret")
+	}
+}
+
+// TestSettingsFieldsKeys guards the field list against duplicated API keys
+// and keys pointing at the same attribute.
+func TestSettingsFieldsKeys(t *testing.T) {
+	var s settingsModel
+	keys := map[string]bool{}
+	ptrs := map[*types.String]string{}
+	for _, f := range settingsFields(&s) {
+		if keys[f.key] {
+			t.Errorf("duplicate key %s", f.key)
+		}
+		keys[f.key] = true
+		if other, ok := ptrs[f.value]; ok {
+			t.Errorf("%s and %s share an attribute", f.key, other)
+		}
+		ptrs[f.value] = f.key
+	}
+}
