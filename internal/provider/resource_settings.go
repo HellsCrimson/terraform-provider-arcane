@@ -344,6 +344,7 @@ func (r *SettingsResource) Read(ctx context.Context, req resource.ReadRequest, r
 		return
 	}
 	state.ID = types.StringValue(envID)
+	refreshSettingsFromAPI(&state, applied)
 	state.Applied = stringMapToMap(ctx, applied)
 	resp.Diagnostics.Append(resp.State.Set(ctx, &state)...)
 }
@@ -430,106 +431,144 @@ func addWriteOnlySettings(out map[string]string, config, plan settingsModel, pri
 	}
 }
 
+// settingsField pairs a settings API key with the attribute that configures it.
+type settingsField struct {
+	key   string
+	value *types.String
+}
+
+// settingsFields lists the settings the provider manages. Deprecated
+// attributes that Arcane no longer accepts are left out, so they are neither
+// sent nor refreshed. The write-only secrets are handled by
+// addWriteOnlySettings.
+func settingsFields(s *settingsModel) []settingsField {
+	return []settingsField{
+		{"activityHistoryMaxEntries", &s.ActivityHistoryMaxEntries},
+		{"activityHistoryRetentionDays", &s.ActivityHistoryRetentionDays},
+		{"apnsEnabled", &s.ApnsEnabled},
+		{"authLocalEnabled", &s.AuthLocalEnabled},
+		{"authPasswordPolicy", &s.AuthPasswordPolicy},
+		{"authSessionTimeout", &s.AuthSessionTimeout},
+		{"autoHealEnabled", &s.AutoHealEnabled},
+		{"autoHealExcludedContainers", &s.AutoHealExcludedContainers},
+		{"autoHealInterval", &s.AutoHealInterval},
+		{"autoHealMaxRestarts", &s.AutoHealMaxRestarts},
+		{"autoHealRestartWindow", &s.AutoHealRestartWindow},
+		{"autoInjectEnv", &s.AutoInjectEnv},
+		{"autoUpdate", &s.AutoUpdate},
+		{"autoUpdateExcludedContainers", &s.AutoUpdateExcludedContainers},
+		{"autoUpdateInterval", &s.AutoUpdateInterval},
+		{"avatarMaxUploadSizeMb", &s.AvatarMaxUploadSizeMb},
+		{"baseServerUrl", &s.BaseServerUrl},
+		{"buildProvider", &s.BuildProvider},
+		{"buildTimeout", &s.BuildTimeout},
+		{"buildsDirectory", &s.BuildsDirectory},
+		{"defaultDeployPullPolicy", &s.DefaultDeployPullPolicy},
+		{"defaultShell", &s.DefaultShell},
+		{"deployWaitTimeout", &s.DeployWaitTimeout},
+		{"depotProjectId", &s.DepotProjectId},
+		{"depotToken", &s.DepotToken},
+		{"diskUsagePath", &s.DiskUsagePath},
+		{"dockerApiTimeout", &s.DockerApiTimeout},
+		{"dockerClientRefreshInterval", &s.DockerClientRefreshInterval},
+		{"dockerHost", &s.DockerHost},
+		{"dockerImagePullTimeout", &s.DockerImagePullTimeout},
+		{"enableGravatar", &s.EnableGravatar},
+		{"environmentHealthInterval", &s.EnvironmentHealthInterval},
+		{"experimentalFeaturesEnabled", &s.ExperimentalFeaturesEnabled},
+		{"followProjectSymlinks", &s.FollowProjectSymlinks},
+		{"gitOperationTimeout", &s.GitOperationTimeout},
+		{"gitSyncMaxBinarySizeMb", &s.GitSyncMaxBinarySizeMb},
+		{"gitSyncMaxFiles", &s.GitSyncMaxFiles},
+		{"gitSyncMaxTotalSizeMb", &s.GitSyncMaxTotalSizeMb},
+		{"httpClientTimeout", &s.HttpClientTimeout},
+		{"imagePatchTimeoutSec", &s.ImagePatchTimeoutSec},
+		{"imagePatchSuffix", &s.ImagePatchSuffix},
+		{"imagePatchAllPlatforms", &s.ImagePatchAllPlatforms},
+		{"imageEventWatcherEnabled", &s.ImageEventWatcherEnabled},
+		{"imageAutoPatchInterval", &s.ImageAutoPatchInterval},
+		{"imageAutoPatchEnabled", &s.ImageAutoPatchEnabled},
+		{"lifecycleEnabled", &s.LifecycleEnabled},
+		{"lifecycleDefaultRunnerImage", &s.LifecycleDefaultRunnerImage},
+		{"lifecycleMaxTimeoutSec", &s.LifecycleMaxTimeoutSec},
+		{"maxConcurrentActivities", &s.MaxConcurrentActivities},
+		{"maxImageUploadSize", &s.MaxImageUploadSize},
+		{"oidcAutoRedirectToProvider", &s.OidcAutoRedirectToProvider},
+		{"oidcClientId", &s.OidcClientId},
+		{"oidcClientSecret", &s.OidcClientSecret},
+		{"oidcEnabled", &s.OidcEnabled},
+		{"oidcGroupsClaim", &s.OidcGroupsClaim},
+		{"oidcIssuerUrl", &s.OidcIssuerUrl},
+		{"oidcMergeAccounts", &s.OidcMergeAccounts},
+		{"oidcProviderLogoUrl", &s.OidcProviderLogoUrl},
+		{"oidcProviderName", &s.OidcProviderName},
+		{"oidcScopes", &s.OidcScopes},
+		{"oidcSkipTlsVerify", &s.OidcSkipTlsVerify},
+		{"pollingEnabled", &s.PollingEnabled},
+		{"pollingInterval", &s.PollingInterval},
+		{"projectsDirectory", &s.ProjectsDirectory},
+		{"pruneBuildCacheMode", &s.PruneBuildCacheMode},
+		{"pruneBuildCacheUntil", &s.PruneBuildCacheUntil},
+		{"pruneContainerMode", &s.PruneContainerMode},
+		{"pruneContainerUntil", &s.PruneContainerUntil},
+		{"pruneImageMode", &s.PruneImageMode},
+		{"pruneImageUntil", &s.PruneImageUntil},
+		{"pruneNetworkMode", &s.PruneNetworkMode},
+		{"pruneNetworkUntil", &s.PruneNetworkUntil},
+		{"pruneVolumeMode", &s.PruneVolumeMode},
+		{"proxyRequestTimeout", &s.ProxyRequestTimeout},
+		{"registryTimeout", &s.RegistryTimeout},
+		{"scheduledPruneEnabled", &s.ScheduledPruneEnabled},
+		{"scheduledPruneInterval", &s.ScheduledPruneInterval},
+		{"swarmStackSourcesDirectory", &s.SwarmStackSourcesDirectory},
+		{"templatesDirectory", &s.TemplatesDirectory},
+		{"toolsImageRegistry", &s.ToolsImageRegistry},
+		{"trivyConcurrentScanContainers", &s.TrivyConcurrentScanContainers},
+		{"trivyCpuLimit", &s.TrivyCpuLimit},
+		{"trivyIgnoreUnfixed", &s.TrivyIgnoreUnfixed},
+		{"trivyDbRegistry", &s.TrivyDbRegistry},
+		{"trivyMemoryLimitMb", &s.TrivyMemoryLimitMb},
+		{"trivyNetwork", &s.TrivyNetwork},
+		{"trivyPrivileged", &s.TrivyPrivileged},
+		{"trivyResourceLimitsEnabled", &s.TrivyResourceLimitsEnabled},
+		{"trivyScanTimeout", &s.TrivyScanTimeout},
+		{"trivySecurityOpts", &s.TrivySecurityOpts},
+		{"volumeHelperIdleTimeout", &s.VolumeHelperIdleTimeout},
+		{"updateCheckRegistry", &s.UpdateCheckRegistry},
+		{"trivyServerUrl", &s.TrivyServerUrl},
+		{"trivyServerToken", &s.TrivyServerToken},
+		{"trivyServerEnabled", &s.TrivyServerEnabled},
+		{"vulnerabilityScanEnabled", &s.VulnerabilityScanEnabled},
+		{"vulnerabilityScanInterval", &s.VulnerabilityScanInterval},
+	}
+}
+
 func buildSettingsMapFromModel(s settingsModel) map[string]string {
 	out := map[string]string{}
-	addIfSet(out, "activityHistoryMaxEntries", s.ActivityHistoryMaxEntries)
-	addIfSet(out, "activityHistoryRetentionDays", s.ActivityHistoryRetentionDays)
-	addIfSet(out, "apnsEnabled", s.ApnsEnabled)
-	addIfSet(out, "authLocalEnabled", s.AuthLocalEnabled)
-	addIfSet(out, "authPasswordPolicy", s.AuthPasswordPolicy)
-	addIfSet(out, "authSessionTimeout", s.AuthSessionTimeout)
-	addIfSet(out, "autoHealEnabled", s.AutoHealEnabled)
-	addIfSet(out, "autoHealExcludedContainers", s.AutoHealExcludedContainers)
-	addIfSet(out, "autoHealInterval", s.AutoHealInterval)
-	addIfSet(out, "autoHealMaxRestarts", s.AutoHealMaxRestarts)
-	addIfSet(out, "autoHealRestartWindow", s.AutoHealRestartWindow)
-	addIfSet(out, "autoInjectEnv", s.AutoInjectEnv)
-	addIfSet(out, "autoUpdate", s.AutoUpdate)
-	addIfSet(out, "autoUpdateExcludedContainers", s.AutoUpdateExcludedContainers)
-	addIfSet(out, "autoUpdateInterval", s.AutoUpdateInterval)
-	addIfSet(out, "avatarMaxUploadSizeMb", s.AvatarMaxUploadSizeMb)
-	addIfSet(out, "baseServerUrl", s.BaseServerUrl)
-	addIfSet(out, "buildProvider", s.BuildProvider)
-	addIfSet(out, "buildTimeout", s.BuildTimeout)
-	addIfSet(out, "buildsDirectory", s.BuildsDirectory)
-	addIfSet(out, "defaultDeployPullPolicy", s.DefaultDeployPullPolicy)
-	addIfSet(out, "defaultShell", s.DefaultShell)
-	addIfSet(out, "deployWaitTimeout", s.DeployWaitTimeout)
-	addIfSet(out, "depotProjectId", s.DepotProjectId)
-	addIfSet(out, "depotToken", s.DepotToken)
-	addIfSet(out, "diskUsagePath", s.DiskUsagePath)
-	addIfSet(out, "dockerApiTimeout", s.DockerApiTimeout)
-	addIfSet(out, "dockerClientRefreshInterval", s.DockerClientRefreshInterval)
-	addIfSet(out, "dockerHost", s.DockerHost)
-	addIfSet(out, "dockerImagePullTimeout", s.DockerImagePullTimeout)
-	addIfSet(out, "enableGravatar", s.EnableGravatar)
-	addIfSet(out, "environmentHealthInterval", s.EnvironmentHealthInterval)
-	addIfSet(out, "experimentalFeaturesEnabled", s.ExperimentalFeaturesEnabled)
-	addIfSet(out, "followProjectSymlinks", s.FollowProjectSymlinks)
-	addIfSet(out, "gitOperationTimeout", s.GitOperationTimeout)
-	addIfSet(out, "gitSyncMaxBinarySizeMb", s.GitSyncMaxBinarySizeMb)
-	addIfSet(out, "gitSyncMaxFiles", s.GitSyncMaxFiles)
-	addIfSet(out, "gitSyncMaxTotalSizeMb", s.GitSyncMaxTotalSizeMb)
-	addIfSet(out, "httpClientTimeout", s.HttpClientTimeout)
-	addIfSet(out, "imagePatchTimeoutSec", s.ImagePatchTimeoutSec)
-	addIfSet(out, "imagePatchSuffix", s.ImagePatchSuffix)
-	addIfSet(out, "imagePatchAllPlatforms", s.ImagePatchAllPlatforms)
-	addIfSet(out, "imageEventWatcherEnabled", s.ImageEventWatcherEnabled)
-	addIfSet(out, "imageAutoPatchInterval", s.ImageAutoPatchInterval)
-	addIfSet(out, "imageAutoPatchEnabled", s.ImageAutoPatchEnabled)
-	addIfSet(out, "lifecycleEnabled", s.LifecycleEnabled)
-	addIfSet(out, "lifecycleDefaultRunnerImage", s.LifecycleDefaultRunnerImage)
-	addIfSet(out, "lifecycleMaxTimeoutSec", s.LifecycleMaxTimeoutSec)
-	addIfSet(out, "maxConcurrentActivities", s.MaxConcurrentActivities)
-	addIfSet(out, "maxImageUploadSize", s.MaxImageUploadSize)
-	addIfSet(out, "oidcAutoRedirectToProvider", s.OidcAutoRedirectToProvider)
-	addIfSet(out, "oidcClientId", s.OidcClientId)
-	addIfSet(out, "oidcClientSecret", s.OidcClientSecret)
-	addIfSet(out, "oidcEnabled", s.OidcEnabled)
-	addIfSet(out, "oidcGroupsClaim", s.OidcGroupsClaim)
-	addIfSet(out, "oidcIssuerUrl", s.OidcIssuerUrl)
-	addIfSet(out, "oidcMergeAccounts", s.OidcMergeAccounts)
-	addIfSet(out, "oidcProviderLogoUrl", s.OidcProviderLogoUrl)
-	addIfSet(out, "oidcProviderName", s.OidcProviderName)
-	addIfSet(out, "oidcScopes", s.OidcScopes)
-	addIfSet(out, "oidcSkipTlsVerify", s.OidcSkipTlsVerify)
-	addIfSet(out, "pollingEnabled", s.PollingEnabled)
-	addIfSet(out, "pollingInterval", s.PollingInterval)
-	addIfSet(out, "projectsDirectory", s.ProjectsDirectory)
-	addIfSet(out, "pruneBuildCacheMode", s.PruneBuildCacheMode)
-	addIfSet(out, "pruneBuildCacheUntil", s.PruneBuildCacheUntil)
-	addIfSet(out, "pruneContainerMode", s.PruneContainerMode)
-	addIfSet(out, "pruneContainerUntil", s.PruneContainerUntil)
-	addIfSet(out, "pruneImageMode", s.PruneImageMode)
-	addIfSet(out, "pruneImageUntil", s.PruneImageUntil)
-	addIfSet(out, "pruneNetworkMode", s.PruneNetworkMode)
-	addIfSet(out, "pruneNetworkUntil", s.PruneNetworkUntil)
-	addIfSet(out, "pruneVolumeMode", s.PruneVolumeMode)
-	addIfSet(out, "proxyRequestTimeout", s.ProxyRequestTimeout)
-	addIfSet(out, "registryTimeout", s.RegistryTimeout)
-	addIfSet(out, "scheduledPruneEnabled", s.ScheduledPruneEnabled)
-	addIfSet(out, "scheduledPruneInterval", s.ScheduledPruneInterval)
-	addIfSet(out, "swarmStackSourcesDirectory", s.SwarmStackSourcesDirectory)
-	addIfSet(out, "templatesDirectory", s.TemplatesDirectory)
-	addIfSet(out, "toolsImageRegistry", s.ToolsImageRegistry)
-	addIfSet(out, "trivyConcurrentScanContainers", s.TrivyConcurrentScanContainers)
-	addIfSet(out, "trivyCpuLimit", s.TrivyCpuLimit)
-	addIfSet(out, "trivyIgnoreUnfixed", s.TrivyIgnoreUnfixed)
-	addIfSet(out, "trivyDbRegistry", s.TrivyDbRegistry)
-	addIfSet(out, "trivyMemoryLimitMb", s.TrivyMemoryLimitMb)
-	addIfSet(out, "trivyNetwork", s.TrivyNetwork)
-	addIfSet(out, "trivyPrivileged", s.TrivyPrivileged)
-	addIfSet(out, "trivyResourceLimitsEnabled", s.TrivyResourceLimitsEnabled)
-	addIfSet(out, "trivyScanTimeout", s.TrivyScanTimeout)
-	addIfSet(out, "trivySecurityOpts", s.TrivySecurityOpts)
-	addIfSet(out, "volumeHelperIdleTimeout", s.VolumeHelperIdleTimeout)
-	addIfSet(out, "updateCheckRegistry", s.UpdateCheckRegistry)
-	addIfSet(out, "trivyServerUrl", s.TrivyServerUrl)
-	addIfSet(out, "trivyServerToken", s.TrivyServerToken)
-	addIfSet(out, "trivyServerEnabled", s.TrivyServerEnabled)
-	addIfSet(out, "vulnerabilityScanEnabled", s.VulnerabilityScanEnabled)
-	addIfSet(out, "vulnerabilityScanInterval", s.VulnerabilityScanInterval)
+	for _, f := range settingsFields(&s) {
+		addIfSet(out, f.key, *f.value)
+	}
 	return out
+}
+
+// refreshSettingsFromAPI overwrites each configured setting with the value
+// Arcane reports, so changes made outside Terraform show up in the plan.
+// Unset settings stay null (unmanaged), a key missing from the response keeps
+// its state value, and secrets are skipped: the API does not return them as
+// sent.
+func refreshSettingsFromAPI(s *settingsModel, applied map[string]string) {
+	secrets := map[string]bool{}
+	for _, sec := range settingsSecrets(settingsModel{}) {
+		secrets[sec.key] = true
+	}
+	for _, f := range settingsFields(s) {
+		if f.value.IsNull() || f.value.IsUnknown() || secrets[f.key] {
+			continue
+		}
+		if v, ok := applied[f.key]; ok {
+			*f.value = types.StringValue(v)
+		}
+	}
 }
 
 func stringMapToMap(ctx context.Context, m map[string]string) types.Map {

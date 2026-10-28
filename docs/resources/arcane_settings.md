@@ -57,7 +57,7 @@ All optional attributes are strings:
 - `lifecycle_default_runner_image` - Default container image used to run pre-deploy lifecycle scripts when a sync does not set `pre_deploy_runner_image`.
 - `lifecycle_max_timeout_sec` - Caps the per-sync `pre_deploy_timeout_sec` admins can configure. `"0"` disables the cap.
 
-**Note:** writing these settings works with API-key authentication, but they will not be echoed back in the `applied` map (or in the `arcane_settings` data source). Arcane filters the settings GET by visibility, API-key principals do not get admin visibility, and the lifecycle settings are admin-visibility.
+**Note:** writing these settings works with API-key authentication, but they will not be echoed back in the `applied` map (or in the `arcane_settings` data source). Arcane filters the settings GET by visibility, API-key principals do not get admin visibility, and the lifecycle settings are admin-visibility. For the same reason, changes made to them outside Terraform are not detected (see [Drift detection](#drift-detection)).
 
 **Docker Settings**
 - `docker_host` - Docker host socket/URL.
@@ -169,6 +169,13 @@ Arcane v2.11.0 moved these to per-user preferences set in the UI. They were remo
 - `trivy_server_token_wo_version` (Number) - Change it to send a new `trivy_server_token_wo`. Required with `trivy_server_token_wo`.
 - `vulnerability_scan_enabled` - Enable vulnerability scanning.
 - `vulnerability_scan_interval` - Vulnerability scan interval.
+
+## Drift detection
+
+On refresh, every setting set in the configuration is read back from Arcane, so a change made outside Terraform shows up in the next plan and is reverted on apply. Settings not set in the configuration are not managed and never show a diff. Two exceptions keep their last applied value:
+
+- secrets (`depot_token`, `oidc_client_secret`, `trivy_server_token` and their `_wo` variants), which Arcane does not return as sent;
+- settings missing from Arcane's response, such as the admin-visibility lifecycle settings when authenticating with an API key, and the deprecated settings Arcane no longer accepts.
 
 ## Attributes Reference
 
