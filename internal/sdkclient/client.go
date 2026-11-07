@@ -1,6 +1,7 @@
 package sdkclient
 
 import (
+	"bufio"
 	"bytes"
 	"context"
 	"crypto/tls"
@@ -156,6 +157,71 @@ func (c *Client) do(req *http.Request, v any) error {
 	}
 	dec := json.NewDecoder(res.Body)
 	return dec.Decode(v)
+}
+
+// doStream runs a project operation that Arcane answers with a stream of
+// JSON lines (up, redeploy, pull). The HTTP status only says the operation
+// started: it is 200 even when the operation then fails, which Arcane reports
+// as an {"error": ...} line, while success ends with {"done": true}. So the
+// stream is read to its end, and an error line, or a stream that ends without
+// finishing, is an error. A response that isn't a stream is checked like any
+// other.
+func (c *Client) doStream(req *http.Request) error {
+	res, err := c.http.Do(req)
+	if err != nil {
+		return err
+	}
+	defer res.Body.Close()
+	if res.StatusCode >= 300 {
+		b, _ := io.ReadAll(io.LimitReader(res.Body, 1<<20))
+		return fmt.Errorf("arcane API error: %s: %s", res.Status, strings.TrimSpace(string(b)))
+	}
+	if !isJSONStream(res.Header.Get("Content-Type")) {
+		_, _ = io.Copy(io.Discard, res.Body)
+		return nil
+	}
+	return readOperationStream(res.Body)
+}
+
+func isJSONStream(contentType string) bool {
+	ct := strings.ToLower(contentType)
+	return strings.Contains(ct, "json-stream") || strings.Contains(ct, "ndjson") || strings.Contains(ct, "jsonl")
+}
+
+// readOperationStream reads an operation's JSON lines until {"done": true}
+// or an error. Lines that aren't JSON objects (raw docker output) are skipped.
+func readOperationStream(r io.Reader) error {
+	sc := bufio.NewScanner(r)
+	sc.Buffer(make([]byte, 64*1024), 4*1024*1024)
+	for sc.Scan() {
+		line := bytes.TrimSpace(sc.Bytes())
+		if len(line) == 0 || line[0] != '{' {
+			continue
+		}
+		var msg struct {
+			Done        bool   `json:"done"`
+			Error       string `json:"error"`
+			ErrorDetail struct {
+				Message string `json:"message"`
+			} `json:"errorDetail"`
+		}
+		if json.Unmarshal(line, &msg) != nil {
+			continue
+		}
+		if msg.Error != "" {
+			return fmt.Errorf("arcane operation failed: %s", msg.Error)
+		}
+		if msg.ErrorDetail.Message != "" {
+			return fmt.Errorf("arcane operation failed: %s", msg.ErrorDetail.Message)
+		}
+		if msg.Done {
+			return nil
+		}
+	}
+	if err := sc.Err(); err != nil {
+		return fmt.Errorf("reading arcane operation output: %w", err)
+	}
+	return fmt.Errorf("arcane operation output ended before the operation finished")
 }
 
 func (c *Client) doBytes(req *http.Request) ([]byte, error) {
@@ -813,7 +879,7 @@ func (c *Client) DeployProject(ctx context.Context, envID, projectID string) err
 	if err != nil {
 		return err
 	}
-	return c.do(req, nil)
+	return c.doStream(req)
 }
 
 func (c *Client) DestroyProject(ctx context.Context, envID, projectID string, opts ProjectDestroyOptions) error {
@@ -1617,7 +1683,7 @@ func (c *Client) UpProject(ctx context.Context, envID, projectID string, opts *P
 	if err != nil {
 		return err
 	}
-	return c.do(req, nil)
+	return c.doStream(req)
 }
 
 func (c *Client) DownProject(ctx context.Context, envID, projectID string) error {
@@ -1633,7 +1699,7 @@ func (c *Client) RedeployProject(ctx context.Context, envID, projectID string) e
 	if err != nil {
 		return err
 	}
-	return c.do(req, nil)
+	return c.doStream(req)
 }
 
 // PullProjectImages POST /environments/{id}/projects/{projectId}/pull
@@ -1642,7 +1708,7 @@ func (c *Client) PullProjectImages(ctx context.Context, envID, projectID string)
 	if err != nil {
 		return err
 	}
-	return c.do(req, nil)
+	return c.doStream(req)
 }
 
 func (c *Client) ArchiveProject(ctx context.Context, envID, projectID string) error {

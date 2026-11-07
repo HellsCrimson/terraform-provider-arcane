@@ -7,6 +7,7 @@ import (
 	"mime/multipart"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
 )
 
@@ -95,4 +96,48 @@ func anyMap[V any](m map[string]V) map[string]any {
 		out[k] = v
 	}
 	return out
+}
+
+// TestProjectOperationStream pins how up, redeploy and pull read Arcane's
+// answer: HTTP 200 and a stream of JSON lines, where a failure is an
+// {"error": ...} line and success ends with {"done": true}. A 200 alone must
+// not count as success, or a failed deploy applies cleanly.
+func TestProjectOperationStream(t *testing.T) {
+	cases := []struct {
+		name    string
+		ctype   string
+		body    string
+		wantErr string
+	}{
+		{"done", "application/x-json-stream", `{"type":"activity","activityId":"a1"}` + "\n" + `{"status":"Pulling"}` + "\nraw docker output\n" + `{"done":true}` + "\n", ""},
+		{"error line", "application/x-json-stream", `{"type":"activity","activityId":"a1"}` + "\n" + `{"error":"pull access denied for web"}` + "\n", "pull access denied for web"},
+		{"docker error detail", "application/x-json-stream", `{"errorDetail":{"message":"manifest unknown"}}` + "\n", "manifest unknown"},
+		{"cut short", "application/x-json-stream", `{"type":"activity","activityId":"a1"}` + "\n", "ended before the operation finished"},
+		{"not a stream", "application/json", `{"success":true}`, ""},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				w.Header().Set("Content-Type", tc.ctype)
+				w.Write([]byte(tc.body))
+			}))
+			defer srv.Close()
+			c := NewClient(srv.URL, "k")
+			ops := map[string]func() error{
+				"up":       func() error { return c.UpProject(context.Background(), "0", "p", nil) },
+				"deploy":   func() error { return c.DeployProject(context.Background(), "0", "p") },
+				"redeploy": func() error { return c.RedeployProject(context.Background(), "0", "p") },
+				"pull":     func() error { return c.PullProjectImages(context.Background(), "0", "p") },
+			}
+			for op, run := range ops {
+				err := run()
+				switch {
+				case tc.wantErr == "" && err != nil:
+					t.Errorf("%s: unexpected error: %v", op, err)
+				case tc.wantErr != "" && (err == nil || !strings.Contains(err.Error(), tc.wantErr)):
+					t.Errorf("%s: got %v, want an error containing %q", op, err, tc.wantErr)
+				}
+			}
+		})
+	}
 }
