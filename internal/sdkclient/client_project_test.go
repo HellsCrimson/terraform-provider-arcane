@@ -114,6 +114,12 @@ func TestProjectOperationStream(t *testing.T) {
 		{"docker error detail", "application/x-json-stream", `{"errorDetail":{"message":"manifest unknown"}}` + "\n", "manifest unknown"},
 		{"cut short", "application/x-json-stream", `{"type":"activity","activityId":"a1"}` + "\n", "ended before the operation finished"},
 		{"not a stream", "application/json", `{"success":true}`, ""},
+		{"one-shot exited 0", "application/x-json-stream", `{"type":"activity","activityId":"a1"}` + "\n" + `{"error":"failed to deploy project: container web-setup-1 exited (0)"}` + "\n", ""},
+		{"one-shot exited 0, then done", "application/x-json-stream", `{"error":"container web-setup-1 exited (0)"}` + "\n" + `{"done":true}` + "\n", ""},
+		{"one-shot exited 1", "application/x-json-stream", `{"error":"failed to deploy project: container web-setup-1 exited (1)"}` + "\n", "web-setup-1 exited (1)"},
+		{"one-shot exited 0, then a real error", "application/x-json-stream", `{"error":"container web-setup-1 exited (0)"}` + "\n" + `{"error":"container web-1 is unhealthy"}` + "\n", "web-1 is unhealthy"},
+		{"dependency exited 0", "application/x-json-stream", `{"error":"failed to deploy project: dependency failed to start: container web-db-1 exited (0)"}` + "\n", "dependency failed to start"},
+		{"exit 0 inside another error", "application/x-json-stream", `{"error":"dependency failed to start: container web-setup-1 exited (0) and more"}` + "\n", "dependency failed"},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {

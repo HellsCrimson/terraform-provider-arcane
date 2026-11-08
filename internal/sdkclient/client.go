@@ -13,6 +13,7 @@ import (
 	"net/http"
 	"net/url"
 	"path"
+	"regexp"
 	"strconv"
 	"strings"
 	"time"
@@ -188,9 +189,25 @@ func isJSONStream(contentType string) bool {
 	return strings.Contains(ct, "json-stream") || strings.Contains(ct, "ndjson") || strings.Contains(ct, "jsonl")
 }
 
+// oneShotFinished matches the error docker compose's --wait gives for a
+// container that has stopped, when its exit code is 0: "container web-setup-1
+// exited (0)", possibly behind Arcane's "failed to deploy project: ". Compose
+// counts every stopped container as a failure unless another service depends
+// on it with condition service_completed_successfully, so a one-shot setup
+// job that finished (or that finished on an earlier deploy and wasn't
+// recreated) fails the wait, though exit 0 is exactly what it should do.
+// Compose's "dependency failed to start: container ... exited (0)" is not
+// matched: there a service waited for that container to be healthy.
+var oneShotFinished = regexp.MustCompile(`^(?:failed to deploy project: )?container \S+ exited \(0\)$`)
+
 // readOperationStream reads an operation's JSON lines until {"done": true}
 // or an error. Lines that aren't JSON objects (raw docker output) are skipped.
+//
+// A container that exited 0 (see oneShotFinished) is not a failure: the
+// operation counts as finished when the stream ends after it, with no other
+// error.
 func readOperationStream(r io.Reader) error {
+	finishedOneShot := false
 	sc := bufio.NewScanner(r)
 	sc.Buffer(make([]byte, 64*1024), 4*1024*1024)
 	for sc.Scan() {
@@ -209,6 +226,10 @@ func readOperationStream(r io.Reader) error {
 			continue
 		}
 		if msg.Error != "" {
+			if oneShotFinished.MatchString(strings.TrimSpace(msg.Error)) {
+				finishedOneShot = true
+				continue
+			}
 			return fmt.Errorf("arcane operation failed: %s", msg.Error)
 		}
 		if msg.ErrorDetail.Message != "" {
@@ -220,6 +241,9 @@ func readOperationStream(r io.Reader) error {
 	}
 	if err := sc.Err(); err != nil {
 		return fmt.Errorf("reading arcane operation output: %w", err)
+	}
+	if finishedOneShot {
+		return nil
 	}
 	return fmt.Errorf("arcane operation output ended before the operation finished")
 }
