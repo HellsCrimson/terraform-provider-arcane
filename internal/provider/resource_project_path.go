@@ -54,6 +54,7 @@ func (r *ProjectPathResource) Schema(_ context.Context, _ resource.SchemaRequest
 			"running":            resourceschema.BoolAttribute{Optional: true, Description: "If true, ensure project is running (compose up); if false, compose down. If unset, no lifecycle management."},
 			"stop_before_rename": resourceschema.BoolAttribute{Optional: true, Description: stopBeforeRenameDescription},
 			"pull_on_update":     resourceschema.BoolAttribute{Optional: true, Computed: true, Description: "Pull images before redeploy.", Default: booldefault.StaticBool(false)},
+			"force_recreate":     resourceschema.BoolAttribute{Optional: true, Description: forceRecreateDescription},
 			"redeploy_trigger": resourceschema.StringAttribute{
 				Optional:    true,
 				Computed:    true,
@@ -103,6 +104,7 @@ type projectPathModel struct {
 	Running          types.Bool   `tfsdk:"running"`
 	StopBeforeRename types.Bool   `tfsdk:"stop_before_rename"`
 	PullOnUpdate     types.Bool   `tfsdk:"pull_on_update"`
+	ForceRecreate    types.Bool   `tfsdk:"force_recreate"`
 	RedeployTrigger  types.String `tfsdk:"redeploy_trigger"`
 	LastRedeploy     types.String `tfsdk:"last_redeploy"`
 	Path             types.String `tfsdk:"path"`
@@ -260,6 +262,15 @@ func projectPathRedeployAllowed(m projectPathModel) bool {
 	return true
 }
 
+// projectPathDeployOpts returns the options for up and redeploy, or nil when
+// none is set.
+func projectPathDeployOpts(m projectPathModel) *sdkclient.ProjectDeployOptions {
+	if v := optionalBool(m.ForceRecreate); v != nil {
+		return &sdkclient.ProjectDeployOptions{ForceRecreate: v}
+	}
+	return nil
+}
+
 // fileContentChanged reports whether freshly read file content differs from what
 // state recorded, in either storage mode. content is nil when the file is not
 // configured at all.
@@ -348,7 +359,7 @@ func (r *ProjectPathResource) Create(ctx context.Context, req resource.CreateReq
 	// Optionally manage lifecycle
 	if !plan.Running.IsNull() && !plan.Running.IsUnknown() {
 		if plan.Running.ValueBool() {
-			if err := r.client.UpProject(ctx, envID, out.ID, nil); err != nil {
+			if err := r.client.UpProject(ctx, envID, out.ID, projectPathDeployOpts(plan)); err != nil {
 				resp.Diagnostics.AddError("project up failed", err.Error())
 				return
 			}
@@ -525,7 +536,7 @@ func (r *ProjectPathResource) Update(ctx context.Context, req resource.UpdateReq
 	// stop_before_rename promises the project comes back up after the rename,
 	// unless the plan wants it stopped anyway or the redeploy below starts it.
 	if stoppedForRename && !planStops && !redeployNow {
-		if err := r.client.UpProject(ctx, envID, projID, nil); err != nil {
+		if err := r.client.UpProject(ctx, envID, projID, projectPathDeployOpts(plan)); err != nil {
 			resp.Diagnostics.AddError("project up after rename failed", err.Error())
 			return
 		}
@@ -547,7 +558,7 @@ func (r *ProjectPathResource) Update(ctx context.Context, req resource.UpdateReq
 			}
 		}
 
-		if err := r.client.RedeployProject(ctx, envID, projID); err != nil {
+		if err := r.client.RedeployProject(ctx, envID, projID, projectPathDeployOpts(plan)); err != nil {
 			if strings.Contains(strings.ToLower(err.Error()), "unhealthy") {
 				resp.Diagnostics.AddWarning("project redeploy reported unhealthy", err.Error())
 			} else {
@@ -604,7 +615,7 @@ func (r *ProjectPathResource) Update(ctx context.Context, req resource.UpdateReq
 		current := state.Running.ValueBool()
 		if desired != current {
 			if desired {
-				if err := r.client.UpProject(ctx, envID, projID, nil); err != nil {
+				if err := r.client.UpProject(ctx, envID, projID, projectPathDeployOpts(plan)); err != nil {
 					resp.Diagnostics.AddError("project up failed", err.Error())
 					return
 				}
@@ -631,6 +642,7 @@ func (r *ProjectPathResource) Update(ctx context.Context, req resource.UpdateReq
 	state.ContentHashMode = plan.ContentHashMode
 	state.Running = plan.Running
 	state.StopBeforeRename = plan.StopBeforeRename
+	state.ForceRecreate = plan.ForceRecreate
 	state.RemoveFiles = plan.RemoveFiles
 	state.RemoveVolumes = plan.RemoveVolumes
 	state.RedeployTrigger = redeployTrigger

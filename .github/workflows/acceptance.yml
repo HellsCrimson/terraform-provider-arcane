@@ -43,6 +43,12 @@ jobs:
           go-version-file: go.mod
           cache: true
 
+      # fix backup error
+      - name: Pre-pull Arcane backup images
+        run: |
+          docker pull ghcr.io/rustic-rs/rustic:v0.11.2
+          docker pull ghcr.io/getarcaneapp/tools:latest
+
       - name: Run acceptance tests
         run: make test-all
 

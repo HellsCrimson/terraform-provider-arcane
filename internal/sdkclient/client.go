@@ -848,7 +848,7 @@ type ProjectDestroyOptions struct {
 }
 
 // ProjectDeployOptions is the optional request body for the project "up"
-// (deploy) endpoint. components/schemas/ProjectDeployOptions
+// (deploy) and "redeploy" endpoints. components/schemas/ProjectDeployOptions
 type ProjectDeployOptions struct {
 	ForceRecreate *bool   `json:"forceRecreate,omitempty"`
 	PullPolicy    *string `json:"pullPolicy,omitempty"`
@@ -1718,8 +1718,14 @@ func (c *Client) DownProject(ctx context.Context, envID, projectID string) error
 	return c.do(req, nil)
 }
 
-func (c *Client) RedeployProject(ctx context.Context, envID, projectID string) error {
-	req, err := c.newRequest(ctx, http.MethodPost, path.Join("environments", envID, "projects", projectID, "redeploy"), nil)
+// RedeployProject POST /environments/{id}/projects/{projectId}/redeploy. It
+// takes the same optional body as UpProject.
+func (c *Client) RedeployProject(ctx context.Context, envID, projectID string, opts *ProjectDeployOptions) error {
+	var body any
+	if opts != nil {
+		body = opts
+	}
+	req, err := c.newRequest(ctx, http.MethodPost, path.Join("environments", envID, "projects", projectID, "redeploy"), body)
 	if err != nil {
 		return err
 	}
