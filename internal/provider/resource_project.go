@@ -66,6 +66,7 @@ func (r *ProjectResource) Schema(_ context.Context, _ resource.SchemaRequest, re
 			},
 			"pull_on_update":      resourceschema.BoolAttribute{Optional: true, Computed: true, Description: "Pull images before redeploy.", Default: booldefault.StaticBool(false)},
 			"remove_orphans":      resourceschema.BoolAttribute{Optional: true, Description: "When deploying (compose up), remove containers for services not defined in the compose file."},
+			"force_recreate":      resourceschema.BoolAttribute{Optional: true, Description: forceRecreateDescription},
 			"fail_if_name_exists": resourceschema.BoolAttribute{Optional: true, Description: "If true, fail during the plan phase when a project with the same name already exists in the environment (including folders Arcane has discovered on disk), instead of letting Arcane auto-rename the new project with a numeric suffix. Defaults to false."},
 			"stop_before_rename":  resourceschema.BoolAttribute{Optional: true, Description: stopBeforeRenameDescription},
 
@@ -287,6 +288,7 @@ type projectModel struct {
 	LastRedeploy     types.String `tfsdk:"last_redeploy"`
 	PullOnUpdate     types.Bool   `tfsdk:"pull_on_update"`
 	RemoveOrphans    types.Bool   `tfsdk:"remove_orphans"`
+	ForceRecreate    types.Bool   `tfsdk:"force_recreate"`
 	FailIfNameExists types.Bool   `tfsdk:"fail_if_name_exists"`
 	StopBeforeRename types.Bool   `tfsdk:"stop_before_rename"`
 	Path             types.String `tfsdk:"path"`
@@ -364,6 +366,7 @@ func (r *ProjectResource) Create(ctx context.Context, req resource.CreateRequest
 		LastRedeploy:     types.StringNull(),
 		PullOnUpdate:     plan.PullOnUpdate,
 		RemoveOrphans:    plan.RemoveOrphans,
+		ForceRecreate:    plan.ForceRecreate,
 		FailIfNameExists: plan.FailIfNameExists,
 		StopBeforeRename: plan.StopBeforeRename,
 	}
@@ -509,7 +512,7 @@ func (r *ProjectResource) Update(ctx context.Context, req resource.UpdateRequest
 			}
 		}
 
-		if err := r.client.RedeployProject(ctx, envID, projID); err != nil {
+		if err := r.client.RedeployProject(ctx, envID, projID, projectDeployOpts(plan)); err != nil {
 			resp.Diagnostics.AddError("project redeploy failed", err.Error())
 			if contentChanged {
 				r.restoreContent(ctx, resp, envID, projID, state)
@@ -616,6 +619,7 @@ func (r *ProjectResource) Update(ctx context.Context, req resource.UpdateRequest
 		state.LastRedeploy = plan.LastRedeploy
 	}
 	state.RemoveOrphans = plan.RemoveOrphans
+	state.ForceRecreate = plan.ForceRecreate
 	state.FailIfNameExists = plan.FailIfNameExists
 	state.StopBeforeRename = plan.StopBeforeRename
 	state.RemoveFiles = plan.RemoveFiles
@@ -661,11 +665,14 @@ func projectRedeployAllowed(m projectModel) bool {
 // the model. Returns nil when no deploy option is configured so the request
 // body is omitted.
 func projectDeployOpts(m projectModel) *sdkclient.ProjectDeployOptions {
-	if m.RemoveOrphans.IsNull() || m.RemoveOrphans.IsUnknown() {
+	opts := &sdkclient.ProjectDeployOptions{
+		RemoveOrphans: optionalBool(m.RemoveOrphans),
+		ForceRecreate: optionalBool(m.ForceRecreate),
+	}
+	if opts.RemoveOrphans == nil && opts.ForceRecreate == nil {
 		return nil
 	}
-	v := m.RemoveOrphans.ValueBool()
-	return &sdkclient.ProjectDeployOptions{RemoveOrphans: &v}
+	return opts
 }
 
 func (r *ProjectResource) ImportState(ctx context.Context, req resource.ImportStateRequest, resp *resource.ImportStateResponse) {

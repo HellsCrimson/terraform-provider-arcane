@@ -24,6 +24,7 @@ resource "arcane_project_path" "demo" {
 - `content_hash_mode` (Bool, Optional) — keeps only SHA256 hashes in state.
 - `running` (Bool, Optional) — when true, ensures the project is running (compose up); when false, brings it down. If unset, lifecycle is not managed.
 - `pull_on_update` (Bool, Optional) — when true, pulls images before each redeploy (default false).
+- `force_recreate` (Bool, Optional) — when deploying or redeploying, recreate every container even when its configuration did not change, like `docker compose up --force-recreate` (default false). See [arcane_project](arcane_project.md#recreating-containers).
 - `redeploy_trigger` (String, Optional) — when the project is redeployed: `never`, `default` (when the compose/env file content changed — the default), `update` (on any in-place update) or `always` (on every apply). A redeploy is skipped when `running = false`. `always` makes the resource report a change on every plan (`last_redeploy` becomes "known after apply"), which is what lets Terraform call the provider when nothing else changed. See [arcane_project](arcane_project.md#redeploy-trigger) for details.
 - `stop_before_rename` (Bool, Optional) — when true, a rename stops the project, renames it and starts it again in the same apply (default false). Arcane only renames stopped projects; without this, the plan fails when a rename targets a running project. See [arcane_project](arcane_project.md#renaming-a-project) for details.
 - `remove_files` (Bool, Optional) — remove files on destroy.

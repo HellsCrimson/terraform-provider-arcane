@@ -36,6 +36,8 @@ var redeployTriggerValues = []string{
 
 const redeployTriggerDescription = "When to redeploy the project: `never` never redeploys; `default` redeploys when the compose/env content changed; `update` redeploys on any in-place update of this resource; `always` redeploys on every apply. `always` makes the resource report a change on every plan (`last_redeploy` becomes \"known after apply\"), which is the only way Terraform will call the provider when nothing else changed. Defaults to `default`."
 
+const forceRecreateDescription = "When deploying or redeploying (compose up), recreate every container even when its configuration did not change, like `docker compose up --force-recreate`. Use it with `redeploy_trigger` so a redeploy picks up changes compose does not see, such as the content of a mounted config file or secret. Defaults to false."
+
 const lastRedeployDescription = "Timestamp (RFC3339) of the last redeploy performed by the provider. Null until the provider has redeployed the project at least once."
 
 // resolveRedeployTrigger returns the effective redeploy trigger for a plan,

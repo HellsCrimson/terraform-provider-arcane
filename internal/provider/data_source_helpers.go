@@ -37,6 +37,16 @@ func boolValue(v types.Bool) bool {
 	return !v.IsNull() && !v.IsUnknown() && v.ValueBool()
 }
 
+// optionalBool returns nil for a null or unknown value, so an unset attribute
+// is left out of a request body.
+func optionalBool(v types.Bool) *bool {
+	if v.IsNull() || v.IsUnknown() {
+		return nil
+	}
+	b := v.ValueBool()
+	return &b
+}
+
 type categoriesModel struct {
 	TotalCount types.Int64  `tfsdk:"total_count"`
 	DataJSON   types.String `tfsdk:"data_json"`

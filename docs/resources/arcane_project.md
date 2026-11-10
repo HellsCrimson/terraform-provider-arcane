@@ -24,6 +24,7 @@ resource "arcane_project" "demo" {
 - `redeploy_on_update` (Bool, **Deprecated**) — use `redeploy_trigger` instead: `true` is equivalent to `redeploy_trigger = "default"`, `false` to `redeploy_trigger = "never"`. Setting both attributes is an error.
 - `pull_on_update` (Bool, Optional) — when true, pulls images before each redeploy (default false).
 - `remove_orphans` (Bool, Optional) — when deploying (compose up), remove containers for services not defined in the compose file.
+- `force_recreate` (Bool, Optional) — when deploying or redeploying, recreate every container even when its configuration did not change, like `docker compose up --force-recreate` (default false). See [Redeploy trigger](#redeploy-trigger).
 - `running` (Bool, Optional) — when true, ensures the project is running (compose up); when false, brings it down. If unset, lifecycle is not managed.
 - `stop_before_rename` (Bool, Optional) — when true, a rename stops the project, renames it and starts it again in the same apply (default false). See [Renaming a project](#renaming-a-project).
 - `fail_if_name_exists` (Bool, Optional) — when true, the plan fails if a project with the same `name` already exists in the environment (including folders Arcane has discovered on disk), instead of letting Arcane auto-rename the new project with a numeric suffix (default false). The check runs during the plan phase, so the collision is reported before any change is applied.
@@ -70,6 +71,28 @@ a change on every plan**, even a plan that would otherwise be empty:
 
 That is inherent to "redeploy unconditionally"; the other trigger values keep
 producing empty plans when nothing changed.
+
+### Recreating containers
+
+A redeploy only replaces the containers whose compose definition changed: a
+container whose image, command, environment and mounts are the same keeps
+running, even when the content of a file it mounts changed. Set
+`force_recreate = true` to replace every container on each redeploy, so it
+picks up such changes:
+
+```hcl
+resource "arcane_project" "demo" {
+  environment_id   = var.environment_id
+  name             = "demo"
+  compose_content  = file("${path.module}/docker-compose.yml")
+  running          = true
+  redeploy_trigger = "always"
+  force_recreate   = true
+}
+```
+
+`force_recreate` changes how a redeploy runs, not when: it works with any
+`redeploy_trigger` value, and also applies when the provider starts the project.
 
 ## Renaming a project
 

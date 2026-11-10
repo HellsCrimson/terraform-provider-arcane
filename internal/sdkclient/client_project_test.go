@@ -132,7 +132,7 @@ func TestProjectOperationStream(t *testing.T) {
 			ops := map[string]func() error{
 				"up":       func() error { return c.UpProject(context.Background(), "0", "p", nil) },
 				"deploy":   func() error { return c.DeployProject(context.Background(), "0", "p") },
-				"redeploy": func() error { return c.RedeployProject(context.Background(), "0", "p") },
+				"redeploy": func() error { return c.RedeployProject(context.Background(), "0", "p", nil) },
 				"pull":     func() error { return c.PullProjectImages(context.Background(), "0", "p") },
 			}
 			for op, run := range ops {
@@ -145,5 +145,50 @@ func TestProjectOperationStream(t *testing.T) {
 				}
 			}
 		})
+	}
+}
+
+// TestProjectDeployOptionsBody pins that up and redeploy send their options:
+// Arcane only recreates unchanged containers when it gets forceRecreate, and
+// a nil options value sends no body at all.
+func TestProjectDeployOptionsBody(t *testing.T) {
+	var gotBody map[string]any
+	var gotLen int64
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		gotBody, gotLen = nil, r.ContentLength
+		if r.ContentLength > 0 {
+			if err := json.NewDecoder(r.Body).Decode(&gotBody); err != nil {
+				t.Errorf("decoding body: %v", err)
+			}
+		}
+		w.Header().Set("Content-Type", "application/x-json-stream")
+		w.Write([]byte(`{"done":true}` + "\n"))
+	}))
+	defer srv.Close()
+	c := NewClient(srv.URL, "k")
+	force, orphans := true, false
+	opts := &ProjectDeployOptions{ForceRecreate: &force, RemoveOrphans: &orphans}
+
+	ops := map[string]func(*ProjectDeployOptions) error{
+		"up":       func(o *ProjectDeployOptions) error { return c.UpProject(context.Background(), "0", "p", o) },
+		"redeploy": func(o *ProjectDeployOptions) error { return c.RedeployProject(context.Background(), "0", "p", o) },
+	}
+	for op, run := range ops {
+		if err := run(opts); err != nil {
+			t.Fatalf("%s: %v", op, err)
+		}
+		if gotBody["forceRecreate"] != true || gotBody["removeOrphans"] != false {
+			t.Errorf("%s: body %v, want forceRecreate true and removeOrphans false", op, gotBody)
+		}
+		if _, ok := gotBody["pullPolicy"]; ok {
+			t.Errorf("%s: unset pullPolicy was sent: %v", op, gotBody)
+		}
+
+		if err := run(nil); err != nil {
+			t.Fatalf("%s without options: %v", op, err)
+		}
+		if gotLen > 0 {
+			t.Errorf("%s without options: sent a body of %d bytes, want none", op, gotLen)
+		}
 	}
 }
