@@ -332,44 +332,12 @@ func (r *ProjectResource) Create(ctx context.Context, req resource.CreateRequest
 		return
 	}
 
-	// Manage lifecycle if requested
-	if !plan.Running.IsNull() && !plan.Running.IsUnknown() {
-		if plan.Running.ValueBool() {
-			if err := r.client.UpProject(ctx, envID, out.ID, projectDeployOpts(plan)); err != nil {
-				resp.Diagnostics.AddError("project up failed", err.Error())
-				return
-			}
-		} else {
-			if err := r.client.DownProject(ctx, envID, out.ID); err != nil {
-				resp.Diagnostics.AddError("project down failed", err.Error())
-				return
-			}
-		}
-		if det, derr := r.client.GetProject(ctx, envID, out.ID); derr == nil {
-			out.Status = det.Status
-			out.RunningCount = det.RunningCount
-			out.ServiceCount = det.ServiceCount
-			out.UpdatedAt = det.UpdatedAt
-		}
-	}
-
-	if boolValue(plan.Archived) {
-		if err := r.client.DownProject(ctx, envID, out.ID); err != nil {
-			resp.Diagnostics.AddError("project down before archive failed", err.Error())
-			return
-		}
-		if err := r.client.ArchiveProject(ctx, envID, out.ID); err != nil {
-			resp.Diagnostics.AddError("project archive failed", err.Error())
-			return
-		}
-		if det, derr := r.client.GetProject(ctx, envID, out.ID); derr == nil {
-			out.Status = det.Status
-			out.RunningCount = det.RunningCount
-			out.ServiceCount = det.ServiceCount
-			out.IsArchived = det.IsArchived
-			out.ArchivedAt = det.ArchivedAt
-			out.UpdatedAt = det.UpdatedAt
-		}
+	// Start, stop or archive it as planned. The project exists from here on,
+	// so a failure (such as an image that can't be pulled) still saves it in
+	// state: Terraform marks it tainted and replaces it on the next apply,
+	// instead of losing track of it.
+	if summary, err := r.createLifecycle(ctx, envID, plan, out); err != nil {
+		resp.Diagnostics.AddError(summary, err.Error())
 	}
 
 	state := projectModel{
@@ -534,12 +502,18 @@ func (r *ProjectResource) Update(ctx context.Context, req resource.UpdateRequest
 		if boolValue(plan.PullOnUpdate) {
 			if err := r.client.PullProjectImages(ctx, envID, projID); err != nil {
 				resp.Diagnostics.AddError("project image pull failed", err.Error())
+				if contentChanged {
+					r.restoreContent(ctx, resp, envID, projID, state)
+				}
 				return
 			}
 		}
 
 		if err := r.client.RedeployProject(ctx, envID, projID); err != nil {
 			resp.Diagnostics.AddError("project redeploy failed", err.Error())
+			if contentChanged {
+				r.restoreContent(ctx, resp, envID, projID, state)
+			}
 			return
 		}
 		redeployed = true
@@ -703,4 +677,75 @@ func (r *ProjectResource) ImportState(ctx context.Context, req resource.ImportSt
 	}
 	resp.Diagnostics.Append(resp.State.SetAttribute(ctx, path.Root("environment_id"), parts[0])...)
 	resp.Diagnostics.Append(resp.State.SetAttribute(ctx, path.Root("id"), parts[1])...)
+}
+
+// createLifecycle brings a newly created project to the planned running and
+// archived state, updating out with what Arcane reports afterwards. It
+// returns a summary and the error of the first step that failed.
+func (r *ProjectResource) createLifecycle(ctx context.Context, envID string, plan projectModel, out *sdkclient.ProjectCreateResponse) (string, error) {
+	// Manage lifecycle if requested
+	if !plan.Running.IsNull() && !plan.Running.IsUnknown() {
+		if plan.Running.ValueBool() {
+			if err := r.client.UpProject(ctx, envID, out.ID, projectDeployOpts(plan)); err != nil {
+				return "project up failed", err
+			}
+		} else {
+			if err := r.client.DownProject(ctx, envID, out.ID); err != nil {
+				return "project down failed", err
+			}
+		}
+		if det, derr := r.client.GetProject(ctx, envID, out.ID); derr == nil {
+			out.Status = det.Status
+			out.RunningCount = det.RunningCount
+			out.ServiceCount = det.ServiceCount
+			out.UpdatedAt = det.UpdatedAt
+		}
+	}
+
+	if boolValue(plan.Archived) {
+		if err := r.client.DownProject(ctx, envID, out.ID); err != nil {
+			return "project down before archive failed", err
+		}
+		if err := r.client.ArchiveProject(ctx, envID, out.ID); err != nil {
+			return "project archive failed", err
+		}
+		if det, derr := r.client.GetProject(ctx, envID, out.ID); derr == nil {
+			out.Status = det.Status
+			out.RunningCount = det.RunningCount
+			out.ServiceCount = det.ServiceCount
+			out.IsArchived = det.IsArchived
+			out.ArchivedAt = det.ArchivedAt
+			out.UpdatedAt = det.UpdatedAt
+		}
+	}
+
+	return "", nil
+}
+
+// restoreContent puts the prior compose and env content back after the new
+// content failed to deploy. Update sends the content before it redeploys, and
+// a failed Update keeps the prior state, so without this Arcane would hold
+// content that Terraform's state doesn't: the next plan would see no change
+// when the configuration goes back to the prior content, and Arcane would
+// deploy the failing content the next time the project restarts. With it, the
+// next apply simply tries the new content again.
+func (r *ProjectResource) restoreContent(ctx context.Context, resp *resource.UpdateResponse, envID, projID string, prior projectModel) {
+	body := sdkclient.ProjectUpdateRequest{}
+	if !prior.Compose.IsNull() && !prior.Compose.IsUnknown() {
+		v := prior.Compose.ValueString()
+		body.ComposeContent = &v
+	}
+	if !prior.Env.IsNull() && !prior.Env.IsUnknown() {
+		v := prior.Env.ValueString()
+		body.EnvContent = &v
+	}
+	if body.ComposeContent == nil && body.EnvContent == nil {
+		return
+	}
+	if _, err := r.client.UpdateProject(ctx, envID, projID, body); err != nil {
+		resp.Diagnostics.AddWarning(
+			"restoring the prior project content failed",
+			"The project now holds the new compose/env content that failed to deploy: "+err.Error(),
+		)
+	}
 }
