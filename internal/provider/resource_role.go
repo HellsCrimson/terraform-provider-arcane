@@ -172,12 +172,16 @@ func (r *RoleResource) Read(ctx context.Context, req resource.ReadRequest, resp 
 	if !state.Description.IsNull() || role.Description != "" {
 		state.Description = stringOrNullEmpty(role.Description)
 	}
-	permSet, diags := roleStringSliceToSet(ctx, role.Permissions)
+	prior, diags := roleSetToStringSlice(ctx, state.Permissions)
 	resp.Diagnostics.Append(diags...)
+	if !impliedSuperset(prior, role.Permissions) {
+		permSet, diags := roleStringSliceToSet(ctx, role.Permissions)
+		resp.Diagnostics.Append(diags...)
+		state.Permissions = permSet
+	}
 	if resp.Diagnostics.HasError() {
 		return
 	}
-	state.Permissions = permSet
 	state.BuiltIn = types.BoolValue(role.BuiltIn)
 	state.AssignedUserCount = types.Int64Value(role.AssignedUserCount)
 	// Leave created_at and updated_at unchanged to avoid plan inconsistency
@@ -254,6 +258,11 @@ func buildRoleState(ctx context.Context, role *sdkclient.Role, plan roleModel) (
 		AssignedUserCount: types.Int64Value(role.AssignedUserCount),
 		CreatedAt:         stringOrNullEmpty(role.CreatedAt),
 		UpdatedAt:         stringOrNullEmpty(role.UpdatedAt),
+	}
+	// Arcane v3 adds the permissions each configured one requires; keep the
+	// configured set when it is fully granted.
+	if planned, d := roleSetToStringSlice(ctx, plan.Permissions); !d.HasError() && impliedSuperset(planned, role.Permissions) {
+		state.Permissions = plan.Permissions
 	}
 	if !plan.Description.IsNull() && !plan.Description.IsUnknown() {
 		state.Description = plan.Description

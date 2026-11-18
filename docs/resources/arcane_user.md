@@ -23,8 +23,7 @@ resource "arcane_user" "example" {
 ## Argument Reference
 
 - `username` (String, Required, ForceNew)
-- `password` (String, Optional, Sensitive) — at least 8 characters. Exactly one of `password` or `password_wo` is required. **Deprecated**: stored in state; use `password_wo` instead, `password` will be removed in the next major release.
-- `password_wo` (String, Optional, Sensitive, Write-only) — at least 8 characters. Never stored in state or plan files; only sent when `password_wo_version` changes. Conflicts with `password`. See [write-only arguments](../index.md#write-only-arguments).
+- `password_wo` (String, Required, Sensitive, Write-only) — at least 8 characters. Never stored in state or plan files; only sent when `password_wo_version` changes. See [write-only arguments](../index.md#write-only-arguments).
 - `password_wo_version` (Number, Optional) — change it to send a new `password_wo`. Required with `password_wo`.
 - `display_name` (String, Optional)
 - `email` (String, Optional)

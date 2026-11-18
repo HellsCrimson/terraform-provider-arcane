@@ -167,7 +167,7 @@ func (r *ProjectPathResource) planContentAndRedeploy(ctx context.Context, req re
 
 	// Resolve the trigger before anything that can bail out early, so the
 	// attribute is never left unknown in the plan.
-	trigger, diags := resolveRedeployTrigger(ctx, req.Config, "")
+	trigger, diags := resolveRedeployTrigger(ctx, req.Config)
 	resp.Diagnostics.Append(diags...)
 	if resp.Diagnostics.HasError() {
 		return
@@ -407,7 +407,7 @@ func (r *ProjectPathResource) Create(ctx context.Context, req resource.CreateReq
 	}
 	state.Running = plan.Running
 	state.PullOnUpdate = plan.PullOnUpdate
-	redeployTrigger, _, tdiags := resolvedRedeployAttrs(ctx, req.Config, "", plan.RedeployTrigger, types.BoolNull())
+	redeployTrigger, tdiags := resolvedRedeployTrigger(ctx, req.Config, plan.RedeployTrigger)
 	resp.Diagnostics.Append(tdiags...)
 	if resp.Diagnostics.HasError() {
 		return
@@ -428,7 +428,7 @@ func (r *ProjectPathResource) Read(ctx context.Context, req resource.ReadRequest
 	projID := state.ID.ValueString()
 	out, err := r.client.GetProject(ctx, envID, projID)
 	if err != nil {
-		if strings.Contains(strings.ToLower(err.Error()), "404") {
+		if r.client.IsResourceGone(err) {
 			resp.State.RemoveResource(ctx)
 			return
 		}
@@ -499,7 +499,7 @@ func (r *ProjectPathResource) Update(ctx context.Context, req resource.UpdateReq
 	// value is authoritative here. Whether the redeploy happens is decided
 	// before the update call: a rename that stopped the project can leave the
 	// restart to the redeploy instead of starting the project twice.
-	redeployTrigger, _, tdiags := resolvedRedeployAttrs(ctx, req.Config, "", plan.RedeployTrigger, types.BoolNull())
+	redeployTrigger, tdiags := resolvedRedeployTrigger(ctx, req.Config, plan.RedeployTrigger)
 	resp.Diagnostics.Append(tdiags...)
 	if resp.Diagnostics.HasError() {
 		return
@@ -671,7 +671,7 @@ func (r *ProjectPathResource) Delete(ctx context.Context, req resource.DeleteReq
 	projID := state.ID.ValueString()
 	opts := sdkclient.ProjectDestroyOptions{RemoveFiles: state.RemoveFiles.ValueBool(), RemoveVolumes: state.RemoveVolumes.ValueBool()}
 	if err := r.client.DestroyProject(ctx, envID, projID, opts); err != nil {
-		if strings.Contains(strings.ToLower(err.Error()), "404") {
+		if r.client.IsResourceGone(err) {
 			return
 		}
 		resp.Diagnostics.AddError("destroy project failed", err.Error())

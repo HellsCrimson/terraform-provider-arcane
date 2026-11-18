@@ -57,6 +57,8 @@ func TestAccArcaneProvider_allResources(t *testing.T) {
 					logCheck(t, "arcane_environment",
 						resource.TestCheckResourceAttrSet("arcane_environment.test", "id"),
 						resource.TestCheckResourceAttr("arcane_environment.test", "name", testAccName("env-1")),
+						resource.TestCheckResourceAttrSet("arcane_environment.test", "enrollment_token"),
+						resource.TestCheckResourceAttr("arcane_environment.test", "status", "pending"),
 					),
 					logCheck(t, "arcane_user",
 						resource.TestCheckResourceAttrSet("arcane_user.test", "id"),
@@ -79,7 +81,7 @@ func TestAccArcaneProvider_allResources(t *testing.T) {
 					logCheck(t, "arcane_volume", resource.TestCheckResourceAttrSet("arcane_volume.test", "id")),
 					logCheck(t, "arcane_volume_backup", resource.TestCheckResourceAttrSet("arcane_volume_backup.test", "id")),
 					logCheck(t, "arcane_vulnerability_ignore", resource.TestCheckResourceAttrSet("arcane_vulnerability_ignore.test", "id")),
-					logCheck(t, "arcane_job_schedules", resource.TestCheckResourceAttr("arcane_job_schedules.test", "polling_interval", "0 */5 * * * *")),
+					logCheck(t, "arcane_job_schedules", resource.TestCheckResourceAttr("arcane_job_schedules.test", "polling_interval", "*/5 * * * *")),
 					logCheck(t, "arcane_settings", resource.TestCheckResourceAttr("arcane_settings.test", "default_shell", "/bin/sh")),
 					logCheck(t, "arcane_notification",
 						// Notification: generic webhook provider, enabled, pointing at the listener.
@@ -117,7 +119,7 @@ func TestAccArcaneProvider_allResources(t *testing.T) {
 					logCheck(t, "arcane_container", resource.TestCheckResourceAttr("arcane_container.test", "name", testAccName("container-2"))),
 					logCheck(t, "arcane_network", resource.TestCheckResourceAttr("arcane_network.test", "name", testAccName("network-2"))),
 					logCheck(t, "arcane_volume", resource.TestCheckResourceAttr("arcane_volume.test", "name", testAccName("volume-2"))),
-					logCheck(t, "arcane_job_schedules", resource.TestCheckResourceAttr("arcane_job_schedules.test", "polling_interval", "0 */10 * * * *")),
+					logCheck(t, "arcane_job_schedules", resource.TestCheckResourceAttr("arcane_job_schedules.test", "polling_interval", "*/10 * * * *")),
 					logCheck(t, "arcane_settings", resource.TestCheckResourceAttr("arcane_settings.test", "default_shell", "/bin/bash")),
 					logCheck(t, "arcane_vulnerability_ignore", resource.TestCheckResourceAttr("arcane_vulnerability_ignore.test", "reason", "Terraform acceptance 2")),
 					logCheck(t, "arcane_notification",
@@ -272,7 +274,7 @@ services:
     command: ["sh", "-c", "echo dup && sleep 1"]
 YAML
   running             = false
-  redeploy_on_update  = false
+  redeploy_trigger = "never"
   pull_on_update      = false
   fail_if_name_exists = true
   remove_files        = true
@@ -292,7 +294,7 @@ services:
     command: ["sh", "-c", "echo dup2 && sleep 1"]
 YAML
   running             = false
-  redeploy_on_update  = false
+  redeploy_trigger = "never"
   pull_on_update      = false
   fail_if_name_exists = true
   remove_files        = true
@@ -370,7 +372,7 @@ services:
     command: ["sh", "-c", "echo remove-files && sleep 1"]
 YAML
   running            = false
-  redeploy_on_update = false
+  redeploy_trigger = "never"
   pull_on_update     = false%s
 }
 `, testAccEndpoint(), testAccAPIKey(), testAccEnvironmentID(), name, removeOpts)
@@ -662,7 +664,7 @@ services:
     image: alpine:latest
     command: ["sh", "-c", "echo running && sleep 1"]
 YAML
-  redeploy_on_update = false
+  redeploy_trigger = "never"
   pull_on_update     = false%s
 }
 `, testAccEndpoint(), testAccAPIKey(), testAccEnvironmentID(), name, running)
@@ -681,16 +683,16 @@ func TestAccArcaneRegistry_clearAWSCredsToNull(t *testing.T) {
 			{
 				Config: testAccRegistryAWSConfig(true),
 				Check: resource.ComposeAggregateTestCheckFunc(
-					resource.TestCheckResourceAttr("arcane_container_registry.test", "aws_access_key_id", "AKIAEXAMPLE"),
-					resource.TestCheckResourceAttr("arcane_container_registry.test", "aws_secret_access_key", "secretexample"),
+					resource.TestCheckResourceAttr("arcane_container_registry.test", "aws_access_key_id_wo_version", "1"),
+					resource.TestCheckResourceAttr("arcane_container_registry.test", "aws_secret_access_key_wo_version", "1"),
 				),
 			},
 			{
-				// Clear both credentials: the in-place Update must persist null.
+				// Remove both credentials: the in-place Update must persist null.
 				Config: testAccRegistryAWSConfig(false),
 				Check: resource.ComposeAggregateTestCheckFunc(
-					resource.TestCheckNoResourceAttr("arcane_container_registry.test", "aws_access_key_id"),
-					resource.TestCheckNoResourceAttr("arcane_container_registry.test", "aws_secret_access_key"),
+					resource.TestCheckNoResourceAttr("arcane_container_registry.test", "aws_access_key_id_wo_version"),
+					resource.TestCheckNoResourceAttr("arcane_container_registry.test", "aws_secret_access_key_wo_version"),
 				),
 			},
 		},
@@ -701,8 +703,10 @@ func testAccRegistryAWSConfig(withAWS bool) string {
 	aws := ""
 	if withAWS {
 		aws = `
-  aws_access_key_id     = "AKIAEXAMPLE"
-  aws_secret_access_key = "secretexample"`
+  aws_access_key_id_wo             = "AKIAEXAMPLE"
+  aws_access_key_id_wo_version     = 1
+  aws_secret_access_key_wo         = "secretexample"
+  aws_secret_access_key_wo_version = 1`
 	}
 
 	return fmt.Sprintf(`
@@ -714,58 +718,14 @@ provider "arcane" {
 
 resource "arcane_container_registry" "test" {
   url           = "https://example.test"
-  username      = "tfacc"
-  token         = "tfacc-token"
-  registry_type = "generic"
+  username         = "tfacc"
+  token_wo         = "tfacc-token"
+  token_wo_version = 1
+  registry_type    = "generic"
   insecure      = true
   enabled       = true%s
 }
 `, testAccEndpoint(), testAccAPIKey(), aws)
-}
-
-// TestAccArcaneEnvironment_clearUseAPIKeyToNull is a regression test for
-// STALE_STATE_UPDATE_FINDINGS #4. use_api_key was copied into state only when the
-// planned value was non-null; removing it after it had been set left the stale
-// prior value and produced an inconsistent-result error. Step 1 sets it to an
-// explicit value so step 2 can clear it without generating a real API key.
-func TestAccArcaneEnvironment_clearUseAPIKeyToNull(t *testing.T) {
-	name := testAccName("clear-env")
-
-	resource.Test(t, resource.TestCase{
-		ProtoV6ProviderFactories: testAccProtoV6ProviderFactories,
-		PreCheck:                 func() { testAccPreCheck(t) },
-		Steps: []resource.TestStep{
-			{
-				Config: testAccEnvironmentClearConfig(name, true),
-				Check:  resource.TestCheckResourceAttr("arcane_environment.test", "use_api_key", "false"),
-			},
-			{
-				Config: testAccEnvironmentClearConfig(name, false),
-				Check:  resource.TestCheckNoResourceAttr("arcane_environment.test", "use_api_key"),
-			},
-		},
-	})
-}
-
-func testAccEnvironmentClearConfig(name string, setUseAPIKey bool) string {
-	line := ""
-	if setUseAPIKey {
-		line = "\n  use_api_key = false"
-	}
-
-	return fmt.Sprintf(`
-provider "arcane" {
-  endpoint     = %q
-  api_key      = %q
-  http_timeout = "180s"
-}
-
-resource "arcane_environment" "test" {
-  name    = %q
-  api_url = "http://localhost:3552"
-  enabled = true%s
-}
-`, testAccEndpoint(), testAccAPIKey(), name, line)
 }
 
 // TestAccArcaneNotification_providerNameForcesReplace verifies provider_name on
@@ -805,14 +765,13 @@ provider "arcane" {
 }
 
 resource "arcane_notification" "test" {
-  environment_id = %q
-  provider_name  = %q
-  enabled        = false
+  provider_name = %q
+  enabled       = false
   config = {
     webhookUrl = "http://example.com/hook"
   }
 }
-`, testAccEndpoint(), testAccAPIKey(), testAccEnvironmentID(), provider)
+`, testAccEndpoint(), testAccAPIKey(), provider)
 }
 
 // TestAccArcaneImmutableResources_forceReplace verifies STALE_STATE_UPDATE_
@@ -1065,7 +1024,8 @@ func TestAccArcaneGitOpsSync_preDeployHook(t *testing.T) {
 					resource.TestCheckResourceAttrSet("arcane_gitops_sync.pre_deploy", "id"),
 					resource.TestCheckResourceAttr("arcane_gitops_sync.pre_deploy", "pre_deploy_script_path", "pre-deploy.sh"),
 					resource.TestCheckResourceAttr("arcane_gitops_sync.pre_deploy", "pre_deploy_runner_image", "ghcr.io/getsops/sops:v3.11.0"),
-					resource.TestCheckResourceAttr("arcane_gitops_sync.pre_deploy", "pre_deploy_env", "SOPS_AGE_KEY_FILE=/run/secrets/age.key"),
+					resource.TestCheckNoResourceAttr("arcane_gitops_sync.pre_deploy", "pre_deploy_env_wo"),
+					testAccCheckGitOpsSyncPreDeployEnv("arcane_gitops_sync.pre_deploy", "SOPS_AGE_KEY_FILE=/run/secrets/age.key"),
 					resource.TestCheckResourceAttr("arcane_gitops_sync.pre_deploy", "pre_deploy_extra_mounts", "/opt/arcane/secrets/age.key:/run/secrets/age.key:ro"),
 					resource.TestCheckResourceAttr("arcane_gitops_sync.pre_deploy", "pre_deploy_timeout_sec", "120"),
 					resource.TestCheckResourceAttr("arcane_gitops_sync.pre_deploy", "pre_deploy_network_mode", "none"),
@@ -1124,7 +1084,8 @@ resource "arcane_gitops_sync" "pre_deploy" {
 
   pre_deploy_script_path  = "pre-deploy.sh"
   pre_deploy_runner_image = "ghcr.io/getsops/sops:v3.11.0"
-  pre_deploy_env          = "SOPS_AGE_KEY_FILE=/run/secrets/age.key"
+  pre_deploy_env_wo         = "SOPS_AGE_KEY_FILE=/run/secrets/age.key"
+  pre_deploy_env_wo_version = 1
   pre_deploy_extra_mounts = "/opt/arcane/secrets/age.key:/run/secrets/age.key:ro"
   pre_deploy_timeout_sec  = %d
   pre_deploy_network_mode = %q
@@ -1214,7 +1175,8 @@ func TestAccArcaneEnvironmentID_forcesReplace(t *testing.T) {
 	}{
 		{"project", "arcane_project.test", testAccEnvReplaceProjectConfig},
 		{"container", "arcane_container.test", testAccEnvReplaceContainerConfig},
-		{"notification", "arcane_notification.test", testAccEnvReplaceNotificationConfig},
+		// arcane_notification is no longer per-environment since Arcane v3:
+		// its environment_id is deprecated and ignored, so it never replaces.
 		{"settings", "arcane_settings.test", testAccEnvReplaceSettingsConfig},
 	}
 
@@ -1266,7 +1228,7 @@ services:
     command: ["sh", "-c", "sleep 1"]
 YAML
   running            = false
-  redeploy_on_update = false
+  redeploy_trigger = "never"
   pull_on_update     = false
   remove_files       = true
   remove_volumes     = true
@@ -1284,19 +1246,6 @@ resource "arcane_container" "test" {
   force_delete   = true
 }
 `, envID, testAccName("env-replace-container"))
-}
-
-func testAccEnvReplaceNotificationConfig(envID string) string {
-	return testAccEnvReplaceProviderBlock() + fmt.Sprintf(`
-resource "arcane_notification" "test" {
-  environment_id = %q
-  provider_name  = "generic"
-  enabled        = false
-  config = {
-    webhookUrl = "http://example.com/hook"
-  }
-}
-`, envID)
 }
 
 func testAccEnvReplaceSettingsConfig(envID string) string {
@@ -1378,7 +1327,7 @@ func testAccCheckNotificationDelivers(wc *webhookCapture, envID string) resource
 	return func(_ *terraform.State) error {
 		wc.reset()
 		client := sdkclient.NewClient(testAccEndpoint(), testAccAPIKey())
-		if err := client.TestNotification(context.Background(), envID, "generic", "simple"); err != nil {
+		if err := client.TestNotification(context.Background(), "generic", "simple"); err != nil {
 			return fmt.Errorf("triggering test notification: %w", err)
 		}
 		deadline := time.Now().Add(10 * time.Second)
@@ -1525,15 +1474,14 @@ provider "arcane" {
 }
 
 resource "arcane_environment" "test" {
-  name        = %q
-  api_url     = "http://localhost:3552"
-  enabled     = true
-  use_api_key = false
+  name    = %q
+  enabled = true
 }
 
 resource "arcane_user" "test" {
   username     = %q
-  password     = "Terraform-Acc-1!"
+  password_wo         = "Terraform-Acc-1!"
+  password_wo_version = 1
   display_name = "Terraform Acceptance User %s"
   email        = "tfacc-%s-%s@example.test"
   locale       = "en-US"
@@ -1552,7 +1500,8 @@ resource "arcane_api_key" "test" {
 resource "arcane_container_registry" "test" {
   url              = "https://example.test"
   username         = "tfacc"
-  token            = "tfacc-token-%s"
+  token_wo         = "tfacc-token-%s"
+  token_wo_version = 1
   description      = "Terraform acceptance registry %s"
   insecure         = true
   enabled          = true
@@ -1598,11 +1547,10 @@ resource "arcane_settings" "test" {
 resource "arcane_job_schedules" "test" {
   environment_id              = %q
   polling_interval            = %q
-  environment_health_interval = "0 */15 * * * *"
+  environment_health_interval = "*/15 * * * *"
 }
 
 resource "arcane_notification" "test" {
-  environment_id = %q
   provider_name  = "generic"
   enabled        = %s
   config = {
@@ -1621,7 +1569,7 @@ services:
 YAML
   env_content         = "TFACC_SUFFIX=%s\n"
   running             = false
-  redeploy_on_update  = false
+  redeploy_trigger = "never"
   pull_on_update      = false
   remove_files        = true
   remove_volumes      = true
@@ -1729,10 +1677,9 @@ resource "arcane_gitops_sync" "test" {
 		suffix,
 		testAccEnvironmentID(),
 		map[string]string{"1": "/bin/sh", "2": "/bin/bash"}[suffix],
-		map[string]string{"1": "0 */5 * * * *", "2": "0 */10 * * * *"}[suffix],
+		map[string]string{"1": "*/5 * * * *", "2": "*/10 * * * *"}[suffix],
 		testAccEnvironmentID(),
-		map[string]string{"1": "0 */5 * * * *", "2": "0 */10 * * * *"}[suffix],
-		testAccEnvironmentID(),
+		map[string]string{"1": "*/5 * * * *", "2": "*/10 * * * *"}[suffix],
 		map[string]string{"1": "true", "2": "false"}[suffix],
 		webhookURL,
 		testAccEnvironmentID(),
@@ -1808,8 +1755,7 @@ data "arcane_network" "test" {
 }
 
 data "arcane_notification" "test" {
-  environment_id = arcane_notification.test.environment_id
-  provider_name  = arcane_notification.test.provider_name
+  provider_name = arcane_notification.test.provider_name
 }
 
 data "arcane_project" "test" {

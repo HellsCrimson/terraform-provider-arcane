@@ -21,7 +21,6 @@ resource "arcane_project" "demo" {
 - `env_content` (String, Optional)
 - `archived` (Bool, Optional) — when true, brings the project down and archives it; when false, unarchives it.
 - `redeploy_trigger` (String, Optional) — when the project is redeployed (default `default`). See [Redeploy trigger](#redeploy-trigger).
-- `redeploy_on_update` (Bool, **Deprecated**) — use `redeploy_trigger` instead: `true` is equivalent to `redeploy_trigger = "default"`, `false` to `redeploy_trigger = "never"`. Setting both attributes is an error.
 - `pull_on_update` (Bool, Optional) — when true, pulls images before each redeploy (default false).
 - `remove_orphans` (Bool, Optional) — when deploying (compose up), remove containers for services not defined in the compose file.
 - `force_recreate` (Bool, Optional) — when deploying or redeploying, recreate every container even when its configuration did not change, like `docker compose up --force-recreate` (default false). See [Redeploy trigger](#redeploy-trigger).
@@ -38,7 +37,7 @@ resource "arcane_project" "demo" {
 | Value | Redeploys |
 | --- | --- |
 | `never` | Never. |
-| `default` | When `compose_content` or `env_content` changed. This is the default, and matches the old `redeploy_on_update = true`. |
+| `default` | When `compose_content` or `env_content` changed. This is the default. |
 | `update` | On any in-place update of the resource, including changes that leave the compose/env content untouched. |
 | `always` | On every apply, even when nothing changed. |
 

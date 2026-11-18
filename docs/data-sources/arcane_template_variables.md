@@ -1,6 +1,6 @@
 # arcane_template_variables
 
-Reads global template variables.
+Reads global variables. Secret values are redacted by Arcane.
 
 ## Example Usage
 
@@ -19,4 +19,4 @@ This data source has no arguments.
 ## Attributes Reference
 
 - `variables` (Map of String) - key/value template variables.
-- `data_json` (String) - full variable payload as JSON.
+- `data_json` (String) - full variable payload as JSON (includes `isSecret`, `allEnvironments`, `environmentIds`, `injectIntoContainers`).

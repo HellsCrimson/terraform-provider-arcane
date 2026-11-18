@@ -1,13 +1,12 @@
 # arcane_notification
 
-Reads an Arcane notification provider configuration.
+Reads an Arcane notification provider configuration (notification settings are app-wide).
 
 ## Example Usage
 
 ```hcl
 data "arcane_notification" "slack" {
-  environment_id = "env-123456"
-  provider_name  = "slack"
+  provider_name = "slack"
 }
 
 output "notification_enabled" {
@@ -17,11 +16,10 @@ output "notification_enabled" {
 
 ## Argument Reference
 
-- `environment_id` (String, Required) — environment ID.
 - `provider_name` (String, Required) — notification provider name.
 
 ## Attributes Reference
 
-- `id` (String) — notification ID (environment_id:provider_name).
+- `id` (String) — notification ID (the provider name).
 - `enabled` (Bool) — whether the notification is enabled.
 - `config` (Dynamic) — provider-specific configuration object. Nested objects are preserved.

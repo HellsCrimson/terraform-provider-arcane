@@ -45,23 +45,12 @@ func (r *ProjectResource) Schema(_ context.Context, _ resource.SchemaRequest, re
 			"env_content":     resourceschema.StringAttribute{Optional: true, Description: ".env content"},
 			"running":         resourceschema.BoolAttribute{Optional: true, Description: "If true, ensure project is running (compose up); if false, compose down. If unset, no lifecycle management."},
 			"archived":        resourceschema.BoolAttribute{Optional: true, Computed: true, Description: "Whether the project is archived.", PlanModifiers: []planmodifier.Bool{boolplanmodifier.UseStateForUnknown()}},
-			// No Default here: the value is derived from redeploy_trigger in
-			// planRedeploy when the practitioner did not set it. A static default
-			// would fight that mirror on every plan (the default is applied before
-			// ModifyPlan runs), leaving the resource with a perpetual diff.
-			"redeploy_on_update": resourceschema.BoolAttribute{
-				Optional:           true,
-				Computed:           true,
-				Description:        "Deprecated, use redeploy_trigger. Redeploy the project after updating compose/env content.",
-				DeprecationMessage: "redeploy_on_update is deprecated, use redeploy_trigger instead: true is equivalent to redeploy_trigger = \"default\", false to redeploy_trigger = \"never\".",
-			},
 			"redeploy_trigger": resourceschema.StringAttribute{
 				Optional:    true,
 				Computed:    true,
 				Description: redeployTriggerDescription,
 				Validators: []validator.String{
 					stringvalidator.OneOf(redeployTriggerValues...),
-					stringvalidator.ConflictsWith(path.MatchRoot("redeploy_on_update")),
 				},
 			},
 			"pull_on_update":      resourceschema.BoolAttribute{Optional: true, Computed: true, Description: "Pull images before redeploy.", Default: booldefault.StaticBool(false)},
@@ -162,24 +151,13 @@ func (r *ProjectResource) planRedeploy(ctx context.Context, req resource.ModifyP
 		return
 	}
 
-	trigger, diags := resolveRedeployTrigger(ctx, req.Config, "redeploy_on_update")
+	trigger, diags := resolveRedeployTrigger(ctx, req.Config)
 	resp.Diagnostics.Append(diags...)
 	if resp.Diagnostics.HasError() {
 		return
 	}
 
 	resp.Diagnostics.Append(resp.Plan.SetAttribute(ctx, path.Root("redeploy_trigger"), types.StringValue(trigger))...)
-
-	// Keep the deprecated mirror in sync when the practitioner did not set it, so
-	// state never claims redeploy_on_update = true while the trigger says never.
-	var legacy types.Bool
-	resp.Diagnostics.Append(req.Config.GetAttribute(ctx, path.Root("redeploy_on_update"), &legacy)...)
-	if resp.Diagnostics.HasError() {
-		return
-	}
-	if legacy.IsNull() {
-		resp.Diagnostics.Append(resp.Plan.SetAttribute(ctx, path.Root("redeploy_on_update"), types.BoolValue(trigger != redeployTriggerNever))...)
-	}
 
 	if req.State.Raw.IsNull() {
 		// Create: Create() seeds last_redeploy itself.
@@ -283,7 +261,6 @@ type projectModel struct {
 	Env              types.String `tfsdk:"env_content"`
 	Running          types.Bool   `tfsdk:"running"`
 	Archived         types.Bool   `tfsdk:"archived"`
-	RedeployOnUpdate types.Bool   `tfsdk:"redeploy_on_update"`
 	RedeployTrigger  types.String `tfsdk:"redeploy_trigger"`
 	LastRedeploy     types.String `tfsdk:"last_redeploy"`
 	PullOnUpdate     types.Bool   `tfsdk:"pull_on_update"`
@@ -315,7 +292,7 @@ func (r *ProjectResource) Create(ctx context.Context, req resource.CreateRequest
 		return
 	}
 
-	redeployTrigger, redeployOnUpdate, diags := resolvedRedeployAttrs(ctx, req.Config, "redeploy_on_update", plan.RedeployTrigger, plan.RedeployOnUpdate)
+	redeployTrigger, diags := resolvedRedeployTrigger(ctx, req.Config, plan.RedeployTrigger)
 	resp.Diagnostics.Append(diags...)
 	if resp.Diagnostics.HasError() {
 		return
@@ -343,24 +320,23 @@ func (r *ProjectResource) Create(ctx context.Context, req resource.CreateRequest
 	}
 
 	state := projectModel{
-		ID:               types.StringValue(out.ID),
-		EnvironmentID:    plan.EnvironmentID,
-		Name:             types.StringValue(out.Name),
-		Compose:          plan.Compose,
-		Env:              plan.Env,
-		Path:             types.StringValue(out.Path),
-		Status:           types.StringValue(out.Status),
-		ServiceCount:     types.Int64Value(int64(out.ServiceCount)),
-		RunningCount:     types.Int64Value(int64(out.RunningCount)),
-		CreatedAt:        types.StringValue(out.CreatedAt),
-		UpdatedAt:        types.StringValue(out.UpdatedAt),
-		Archived:         types.BoolValue(out.IsArchived),
-		ArchivedAt:       nullableString(out.ArchivedAt),
-		RemoveFiles:      plan.RemoveFiles,
-		RemoveVolumes:    plan.RemoveVolumes,
-		Running:          plan.Running,
-		RedeployOnUpdate: redeployOnUpdate,
-		RedeployTrigger:  redeployTrigger,
+		ID:              types.StringValue(out.ID),
+		EnvironmentID:   plan.EnvironmentID,
+		Name:            types.StringValue(out.Name),
+		Compose:         plan.Compose,
+		Env:             plan.Env,
+		Path:            types.StringValue(out.Path),
+		Status:          types.StringValue(out.Status),
+		ServiceCount:    types.Int64Value(int64(out.ServiceCount)),
+		RunningCount:    types.Int64Value(int64(out.RunningCount)),
+		CreatedAt:       types.StringValue(out.CreatedAt),
+		UpdatedAt:       types.StringValue(out.UpdatedAt),
+		Archived:        types.BoolValue(out.IsArchived),
+		ArchivedAt:      nullableString(out.ArchivedAt),
+		RemoveFiles:     plan.RemoveFiles,
+		RemoveVolumes:   plan.RemoveVolumes,
+		Running:         plan.Running,
+		RedeployTrigger: redeployTrigger,
 		// Create deploys through "up", not "redeploy": nothing has been
 		// redeployed yet.
 		LastRedeploy:     types.StringNull(),
@@ -409,7 +385,7 @@ func (r *ProjectResource) Read(ctx context.Context, req resource.ReadRequest, re
 		state.Env = types.StringValue(*out.EnvContent)
 	}
 	// Preserve configuration values that have defaults
-	// PullOnUpdate, RedeployOnUpdate, Running, RemoveFiles, RemoveVolumes are already in state
+	// PullOnUpdate, Running, RemoveFiles, RemoveVolumes are already in state
 
 	resp.Diagnostics.Append(resp.State.Set(ctx, &state)...)
 }
@@ -427,7 +403,7 @@ func (r *ProjectResource) Update(ctx context.Context, req resource.UpdateRequest
 		return
 	}
 
-	redeployTrigger, redeployOnUpdate, diags := resolvedRedeployAttrs(ctx, req.Config, "redeploy_on_update", plan.RedeployTrigger, plan.RedeployOnUpdate)
+	redeployTrigger, diags := resolvedRedeployTrigger(ctx, req.Config, plan.RedeployTrigger)
 	resp.Diagnostics.Append(diags...)
 	if resp.Diagnostics.HasError() {
 		return
@@ -605,7 +581,6 @@ func (r *ProjectResource) Update(ctx context.Context, req resource.UpdateRequest
 	state.Compose = plan.Compose
 	state.Env = plan.Env
 	state.PullOnUpdate = plan.PullOnUpdate
-	state.RedeployOnUpdate = redeployOnUpdate
 	state.RedeployTrigger = redeployTrigger
 	// last_redeploy only moves when the plan left it unknown (planRedeploy marks
 	// it whenever a redeploy is expected); otherwise the planned value, which

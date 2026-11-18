@@ -63,7 +63,7 @@ func TestCreateProject_MultipartWireContract(t *testing.T) {
 	if gotMethod != http.MethodPost {
 		t.Errorf("method: got %s, want POST", gotMethod)
 	}
-	if gotPath != "/environments/env-1/projects" {
+	if gotPath != "/agents/env-1/projects" {
 		t.Errorf("path: got %q", gotPath)
 	}
 

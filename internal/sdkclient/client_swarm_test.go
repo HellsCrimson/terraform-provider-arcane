@@ -39,7 +39,7 @@ func TestDeploySwarmStack_WireContract(t *testing.T) {
 	if gotMethod != http.MethodPost {
 		t.Errorf("method: got %s, want POST", gotMethod)
 	}
-	if gotPath != "/environments/env-1/swarm/stacks" {
+	if gotPath != "/agents/env-1/swarm/stacks" {
 		t.Errorf("path: got %q", gotPath)
 	}
 	for _, key := range []string{"name", "composeContent", "envContent"} {

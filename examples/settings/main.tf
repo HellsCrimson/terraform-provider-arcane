@@ -1,5 +1,5 @@
 terraform {
-  required_version = ">= 1.4.0"
+  required_version = ">= 1.11.0"
   required_providers {
     arcane = {
       source  = "hellscrimson/arcane"
@@ -26,11 +26,10 @@ variable "environment_id" {
 }
 
 resource "arcane_settings" "env" {
-  environment_id          = var.environment_id
-  base_server_url         = "http://localhost:3552"
-  polling_enabled         = "true"
-  polling_interval        = "0 */15 * * * *"  # Cron expression: every 15 minutes
-  sidebar_hover_expansion = "true"
+  environment_id   = var.environment_id
+  base_server_url  = "http://localhost:3552"
+  polling_enabled  = "true"
+  polling_interval = "*/15 * * * *" # Cron expression: every 15 minutes
 
   # GitOps pre-deploy lifecycle hooks (disabled by default): allow syncs to
   # configure pre-deploy scripts, with a default runner image and a cap on

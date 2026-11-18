@@ -133,12 +133,6 @@ func (r *GitOpsSyncResource) Schema(_ context.Context, _ resource.SchemaRequest,
 				Optional:    true,
 				Description: "Container image used to run the pre-deploy script. Required by the API whenever pre_deploy_script_path is set",
 			},
-			"pre_deploy_env": resourceschema.StringAttribute{
-				Optional:           true,
-				Sensitive:          true,
-				Description:        "Environment variables exposed to the pre-deploy script, one KEY=VALUE entry per line (.env file format). Marked sensitive because it commonly carries key material (e.g. SOPS_AGE_KEY)",
-				DeprecationMessage: writeOnlyDeprecation("pre_deploy_env"),
-			},
 			"pre_deploy_env_wo": writeOnlyAttribute("pre_deploy_env", "Environment variables exposed to the pre-deploy script, one KEY=VALUE entry per line (.env file format). "+
 				"Changing `pre_deploy_env_wo_version` while this is unset clears it on the server."),
 			"pre_deploy_env_wo_version": writeOnlyVersionAttribute("pre_deploy_env"),
@@ -320,7 +314,6 @@ type gitOpsSyncModel struct {
 	TargetType            types.String `tfsdk:"target_type"`
 	PreDeployScriptPath   types.String `tfsdk:"pre_deploy_script_path"`
 	PreDeployRunnerImage  types.String `tfsdk:"pre_deploy_runner_image"`
-	PreDeployEnv          types.String `tfsdk:"pre_deploy_env"`
 	PreDeployEnvWO        types.String `tfsdk:"pre_deploy_env_wo"`
 	PreDeployEnvWOVersion types.Int64  `tfsdk:"pre_deploy_env_wo_version"`
 	PreDeployExtraMounts  types.String `tfsdk:"pre_deploy_extra_mounts"`
@@ -451,10 +444,6 @@ func (r *GitOpsSyncResource) Create(ctx context.Context, req resource.CreateRequ
 	if !plan.PreDeployRunnerImage.IsNull() && !plan.PreDeployRunnerImage.IsUnknown() {
 		v := plan.PreDeployRunnerImage.ValueString()
 		body.PreDeployRunnerImage = &v
-	}
-	if !plan.PreDeployEnv.IsNull() && !plan.PreDeployEnv.IsUnknown() {
-		v := plan.PreDeployEnv.ValueString()
-		body.PreDeployEnv = &v
 	}
 	// Write-only: the plan holds null, the value is only in the configuration.
 	if isSetString(config.PreDeployEnvWO) {
@@ -587,7 +576,6 @@ func (r *GitOpsSyncResource) Create(ctx context.Context, req resource.CreateRequ
 	// Read surfaces any server-side divergence as ordinary drift instead.
 	state.PreDeployScriptPath = preDeployString(plan.PreDeployScriptPath, sync.PreDeployScriptPath)
 	state.PreDeployRunnerImage = preDeployString(plan.PreDeployRunnerImage, sync.PreDeployRunnerImage)
-	state.PreDeployEnv = preDeployString(plan.PreDeployEnv, sync.PreDeployEnv)
 	state.PreDeployEnvWOVersion = plan.PreDeployEnvWOVersion
 	state.PreDeployExtraMounts = preDeployString(plan.PreDeployExtraMounts, sync.PreDeployExtraMounts)
 	if plan.PreDeployTimeoutSec.IsUnknown() {
@@ -674,9 +662,6 @@ func (r *GitOpsSyncResource) Read(ctx context.Context, req resource.ReadRequest,
 	}
 	if !state.PreDeployRunnerImage.IsNull() && !state.PreDeployRunnerImage.IsUnknown() {
 		state.PreDeployRunnerImage = types.StringPointerValue(sync.PreDeployRunnerImage)
-	}
-	if !state.PreDeployEnv.IsNull() && !state.PreDeployEnv.IsUnknown() {
-		state.PreDeployEnv = types.StringPointerValue(sync.PreDeployEnv)
 	}
 	if !state.PreDeployExtraMounts.IsNull() && !state.PreDeployExtraMounts.IsUnknown() {
 		state.PreDeployExtraMounts = types.StringPointerValue(sync.PreDeployExtraMounts)
@@ -806,17 +791,9 @@ func (r *GitOpsSyncResource) Update(ctx context.Context, req resource.UpdateRequ
 		v := ""
 		body.PreDeployRunnerImage = &v
 	}
-	if !plan.PreDeployEnv.IsNull() && !plan.PreDeployEnv.IsUnknown() {
-		v := plan.PreDeployEnv.ValueString()
-		body.PreDeployEnv = &v
-	} else if plan.PreDeployEnv.IsNull() && !state.PreDeployEnv.IsNull() {
-		v := ""
-		body.PreDeployEnv = &v
-	}
 	// pre_deploy_env_wo only reaches Arcane when its version changes: the
 	// configured value, or an empty string to clear it when it was removed.
-	// Skipped while pre_deploy_env is in use, which then owns the value.
-	if plan.PreDeployEnv.IsNull() && !plan.PreDeployEnvWOVersion.Equal(state.PreDeployEnvWOVersion) {
+	if !plan.PreDeployEnvWOVersion.Equal(state.PreDeployEnvWOVersion) {
 		v := ""
 		if !config.PreDeployEnvWO.IsNull() && !config.PreDeployEnvWO.IsUnknown() {
 			v = config.PreDeployEnvWO.ValueString()
@@ -956,7 +933,6 @@ func (r *GitOpsSyncResource) Update(ctx context.Context, req resource.UpdateRequ
 	// Read surfaces any server-side divergence as ordinary drift instead.
 	state.PreDeployScriptPath = preDeployString(plan.PreDeployScriptPath, sync.PreDeployScriptPath)
 	state.PreDeployRunnerImage = preDeployString(plan.PreDeployRunnerImage, sync.PreDeployRunnerImage)
-	state.PreDeployEnv = preDeployString(plan.PreDeployEnv, sync.PreDeployEnv)
 	state.PreDeployEnvWOVersion = plan.PreDeployEnvWOVersion
 	state.PreDeployExtraMounts = preDeployString(plan.PreDeployExtraMounts, sync.PreDeployExtraMounts)
 	if plan.PreDeployTimeoutSec.IsUnknown() {

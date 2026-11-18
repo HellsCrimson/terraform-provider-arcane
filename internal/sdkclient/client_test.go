@@ -16,6 +16,9 @@ func TestIsResourceGone(t *testing.T) {
 	const (
 		notFound404 = `arcane API error: 404 Not Found: {"detail":"project not found"}`
 		envNotFound = `arcane API error: 500 Internal Server Error: {"detail":"failed to proxy request to environment: failed to get environment: environment not found"}`
+		// Arcane v3 reports a missing environment as a 404, in two shapes.
+		envNotFoundV3      = `arcane API error: 404 Not Found: {"title":"Not Found","status":404,"detail":"failed to proxy request to environment: failed to get environment: environment not found"}`
+		envNotFoundV3Short = `arcane API error: 404 Not Found: {"success":false,"data":{"error":"Environment not found"}}`
 		// Transient failures also surface as 500s from the proxy, but with
 		// different text. These must never be classified as gone.
 		transientRefused = `arcane API error: 500 Internal Server Error: {"detail":"failed to proxy request to environment: dial tcp 10.0.0.5:3552: connect: connection refused"}`
@@ -37,6 +40,11 @@ func TestIsResourceGone(t *testing.T) {
 		{"env not found stays an error when flag off", false, errors.New(envNotFound), false},
 		{"env not found is gone when flag on", true, errors.New(envNotFound), true},
 		{"env not found match is case-insensitive", true, errors.New("FAILED: Environment Not Found"), true},
+
+		{"v3 env not found 404 stays an error when flag off", false, errors.New(envNotFoundV3), false},
+		{"v3 short env not found 404 stays an error when flag off", false, errors.New(envNotFoundV3Short), false},
+		{"v3 env not found 404 is gone when flag on", true, errors.New(envNotFoundV3), true},
+		{"v3 short env not found 404 is gone when flag on", true, errors.New(envNotFoundV3Short), true},
 
 		{"transient connection refused is not gone, flag on", true, errors.New(transientRefused), false},
 		{"transient timeout is not gone, flag on", true, errors.New(transientTimeout), false},

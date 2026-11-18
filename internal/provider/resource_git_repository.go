@@ -83,22 +83,10 @@ func (r *GitRepositoryResource) Schema(_ context.Context, _ resource.SchemaReque
 				Optional:    true,
 				Description: "SSH host key verification mode",
 			},
-			"ssh_key": resourceschema.StringAttribute{
-				Optional:           true,
-				Sensitive:          true,
-				Description:        "SSH private key for authentication",
-				DeprecationMessage: writeOnlyDeprecation("ssh_key"),
-			},
 			"ssh_key_wo":         writeOnlyAttribute("ssh_key", "SSH private key for authentication."),
 			"ssh_key_wo_version": writeOnlyVersionAttribute("ssh_key"),
-			"token": resourceschema.StringAttribute{
-				Optional:           true,
-				Sensitive:          true,
-				Description:        "Access token for authentication",
-				DeprecationMessage: writeOnlyDeprecation("token"),
-			},
-			"token_wo":         writeOnlyAttribute("token", "Access token for authentication."),
-			"token_wo_version": writeOnlyVersionAttribute("token"),
+			"token_wo":           writeOnlyAttribute("token", "Access token for authentication."),
+			"token_wo_version":   writeOnlyVersionAttribute("token"),
 			"username": resourceschema.StringAttribute{
 				Optional:    true,
 				Description: "Username for authentication",
@@ -137,10 +125,8 @@ type gitRepositoryModel struct {
 	Description            types.String `tfsdk:"description"`
 	Enabled                types.Bool   `tfsdk:"enabled"`
 	SSHHostKeyVerification types.String `tfsdk:"ssh_host_key_verification"`
-	SSHKey                 types.String `tfsdk:"ssh_key"`
 	SSHKeyWO               types.String `tfsdk:"ssh_key_wo"`
 	SSHKeyWOVersion        types.Int64  `tfsdk:"ssh_key_wo_version"`
-	Token                  types.String `tfsdk:"token"`
 	TokenWO                types.String `tfsdk:"token_wo"`
 	TokenWOVersion         types.Int64  `tfsdk:"token_wo_version"`
 	Username               types.String `tfsdk:"username"`
@@ -174,14 +160,6 @@ func (r *GitRepositoryResource) Create(ctx context.Context, req resource.CreateR
 		v := plan.SSHHostKeyVerification.ValueString()
 		body.SSHHostKeyVerification = &v
 	}
-	if !plan.SSHKey.IsNull() && !plan.SSHKey.IsUnknown() && plan.SSHKey.ValueString() != "" {
-		v := plan.SSHKey.ValueString()
-		body.SSHKey = &v
-	}
-	if !plan.Token.IsNull() && !plan.Token.IsUnknown() && plan.Token.ValueString() != "" {
-		v := plan.Token.ValueString()
-		body.Token = &v
-	}
 	// Write-only: the plan holds null, the value is only in the configuration.
 	if isSetString(config.SSHKeyWO) {
 		v := config.SSHKeyWO.ValueString()
@@ -211,9 +189,7 @@ func (r *GitRepositoryResource) Create(ctx context.Context, req resource.CreateR
 		CreatedAt:              types.StringValue(repo.CreatedAt),
 		UpdatedAt:              types.StringValue(repo.UpdatedAt),
 		SSHHostKeyVerification: plan.SSHHostKeyVerification,
-		SSHKey:                 plan.SSHKey,
 		SSHKeyWOVersion:        plan.SSHKeyWOVersion,
-		Token:                  plan.Token,
 		TokenWOVersion:         plan.TokenWOVersion,
 		Description:            plan.Description,
 		Username:               plan.Username,
@@ -262,7 +238,6 @@ func (r *GitRepositoryResource) Read(ctx context.Context, req resource.ReadReque
 	// Keep existing username if API returns empty and we had a value
 
 	// Preserve sensitive fields from state
-	// SSHKey and Token remain unchanged from state
 
 	resp.Diagnostics.Append(resp.State.Set(ctx, &state)...)
 }
@@ -302,14 +277,6 @@ func (r *GitRepositoryResource) Update(ctx context.Context, req resource.UpdateR
 	if !plan.SSHHostKeyVerification.IsNull() && !plan.SSHHostKeyVerification.IsUnknown() && plan.SSHHostKeyVerification.ValueString() != "" {
 		v := plan.SSHHostKeyVerification.ValueString()
 		body.SSHHostKeyVerification = &v
-	}
-	if !plan.SSHKey.IsNull() && !plan.SSHKey.IsUnknown() && plan.SSHKey.ValueString() != "" {
-		v := plan.SSHKey.ValueString()
-		body.SSHKey = &v
-	}
-	if !plan.Token.IsNull() && !plan.Token.IsUnknown() && plan.Token.ValueString() != "" {
-		v := plan.Token.ValueString()
-		body.Token = &v
 	}
 	// Write-only credentials are only re-sent when their version changes.
 	if writeOnlySend(config.SSHKeyWO, plan.SSHKeyWOVersion, state.SSHKeyWOVersion) {
@@ -360,9 +327,7 @@ func (r *GitRepositoryResource) Update(ctx context.Context, req resource.UpdateR
 	}
 
 	// Preserve sensitive fields from plan
-	state.SSHKey = plan.SSHKey
 	state.SSHKeyWOVersion = plan.SSHKeyWOVersion
-	state.Token = plan.Token
 	state.TokenWOVersion = plan.TokenWOVersion
 
 	resp.Diagnostics.Append(resp.State.Set(ctx, &state)...)

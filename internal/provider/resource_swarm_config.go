@@ -145,7 +145,7 @@ func (r *SwarmConfigResource) Read(ctx context.Context, req resource.ReadRequest
 
 	config, err := r.client.GetSwarmConfig(ctx, state.EnvironmentID.ValueString(), state.ID.ValueString())
 	if err != nil {
-		if strings.Contains(strings.ToLower(err.Error()), "404") {
+		if r.client.IsResourceGone(err) {
 			resp.State.RemoveResource(ctx)
 			return
 		}
@@ -198,7 +198,7 @@ func (r *SwarmConfigResource) Delete(ctx context.Context, req resource.DeleteReq
 		return
 	}
 	if err := r.client.DeleteSwarmConfig(ctx, state.EnvironmentID.ValueString(), state.ID.ValueString()); err != nil {
-		if strings.Contains(strings.ToLower(err.Error()), "404") {
+		if r.client.IsResourceGone(err) {
 			return
 		}
 		resp.Diagnostics.AddError("delete swarm config failed", err.Error())

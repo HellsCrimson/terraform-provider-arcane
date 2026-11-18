@@ -57,7 +57,7 @@ func fullStackModel() swarmStackModel {
 		Prune:            types.BoolNull(),
 		ResolveImage:     types.StringNull(),
 		WithRegistryAuth: types.BoolNull(),
-		WorkingDir:       types.StringNull(),
+		OverrideContent:  types.StringNull(),
 		Namespace:        types.StringValue("web"),
 		Services:         types.Int64Value(1),
 		CreatedAt:        types.StringValue("2026-01-01T00:00:00Z"),

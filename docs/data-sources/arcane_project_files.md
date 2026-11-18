@@ -1,6 +1,6 @@
 # arcane_project_files
 
-Reads directory file details for a project.
+Reads the workspace (directory tree) of a project.
 
 ## Example Usage
 
@@ -19,4 +19,4 @@ data "arcane_project_files" "project" {
 ## Attributes Reference
 
 - `id` (String) - Data source ID.
-- `details_json` (String) - Raw ProjectDetails response data as JSON.
+- `details_json` (String) - Raw workspace response data as JSON.

@@ -13,8 +13,7 @@ import (
 // Redeploy trigger modes shared by arcane_project and arcane_project_path.
 //
 //   - never:   never redeploy, whatever changes.
-//   - default: redeploy when the compose/env content changed (the historical
-//     meaning of redeploy_on_update = true).
+//   - default: redeploy when the compose/env content changed.
 //   - update:  redeploy whenever the resource is updated in place, even when the
 //     change does not touch the compose/env content.
 //   - always:  redeploy on every apply. Terraform only calls Update when the plan
@@ -43,12 +42,7 @@ const lastRedeployDescription = "Timestamp (RFC3339) of the last redeploy perfor
 // resolveRedeployTrigger returns the effective redeploy trigger for a plan,
 // reading the *configuration* rather than the plan so an unset attribute can be
 // told apart from one explicitly set to its default value.
-//
-// legacyBoolAttr is the name of the deprecated boolean attribute that used to
-// carry this behaviour (redeploy_on_update); pass an empty string for resources
-// that never had one. It is only consulted when redeploy_trigger is absent from
-// the configuration, so the new attribute always wins.
-func resolveRedeployTrigger(ctx context.Context, config tfsdk.Config, legacyBoolAttr string) (string, diag.Diagnostics) {
+func resolveRedeployTrigger(ctx context.Context, config tfsdk.Config) (string, diag.Diagnostics) {
 	var diags diag.Diagnostics
 
 	var trigger types.String
@@ -59,46 +53,22 @@ func resolveRedeployTrigger(ctx context.Context, config tfsdk.Config, legacyBool
 	if !trigger.IsNull() && !trigger.IsUnknown() {
 		return trigger.ValueString(), diags
 	}
-
-	if legacyBoolAttr != "" {
-		var legacy types.Bool
-		diags.Append(config.GetAttribute(ctx, path.Root(legacyBoolAttr), &legacy)...)
-		if diags.HasError() {
-			return redeployTriggerDefault, diags
-		}
-		if !legacy.IsNull() && !legacy.IsUnknown() && !legacy.ValueBool() {
-			return redeployTriggerNever, diags
-		}
-	}
-
 	return redeployTriggerDefault, diags
 }
 
-// resolvedRedeployAttrs returns the redeploy attribute values to store, filling
-// in any the plan left unknown because its configuration could not be evaluated
-// during plan (a value derived from another resource, say). Configuration is
-// always known by the time Create/Update run.
-//
-// Resources without a deprecated boolean pass a null planLegacy and ignore the
-// second return value.
-func resolvedRedeployAttrs(ctx context.Context, config tfsdk.Config, legacyBoolAttr string, planTrigger types.String, planLegacy types.Bool) (types.String, types.Bool, diag.Diagnostics) {
-	var diags diag.Diagnostics
-	if !planTrigger.IsUnknown() && !planLegacy.IsUnknown() {
-		return planTrigger, planLegacy, diags
+// resolvedRedeployTrigger returns the redeploy trigger to store, filling it in
+// when the plan left it unknown because its configuration could not be
+// evaluated during plan (a value derived from another resource, say).
+// Configuration is always known by the time Create/Update run.
+func resolvedRedeployTrigger(ctx context.Context, config tfsdk.Config, planTrigger types.String) (types.String, diag.Diagnostics) {
+	if !planTrigger.IsUnknown() {
+		return planTrigger, nil
 	}
-
-	resolved, d := resolveRedeployTrigger(ctx, config, legacyBoolAttr)
-	diags.Append(d...)
+	resolved, diags := resolveRedeployTrigger(ctx, config)
 	if diags.HasError() {
-		return planTrigger, planLegacy, diags
+		return planTrigger, diags
 	}
-	if planTrigger.IsUnknown() {
-		planTrigger = types.StringValue(resolved)
-	}
-	if planLegacy.IsUnknown() {
-		planLegacy = types.BoolValue(resolved != redeployTriggerNever)
-	}
-	return planTrigger, planLegacy, diags
+	return types.StringValue(resolved), diags
 }
 
 // shouldRedeploy reports whether an in-place update must redeploy the project.

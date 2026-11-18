@@ -33,22 +33,23 @@ type Client struct {
 }
 
 // IsResourceGone reports whether an API error means the target resource should be
-// treated as gone (removed from state). A direct 404 always qualifies. When
-// ForgetMissingEnvironments is enabled, the manager's "environment not found"
-// proxy error also qualifies — this is scoped to that exact phrase so transient
-// proxy/connectivity 500s do not wrongly drop resources from state.
+// treated as gone (removed from state).
+//
+// A missing *environment* ("environment not found") is gone only when
+// ForgetMissingEnvironments is enabled, whatever the status: Arcane v2 reported
+// it as a 500 from its proxy, Arcane v3 as a 404. Without the flag it stays an
+// error, so a deleted or unreachable environment never silently wipes the
+// resources that live in it from state. Any other 404 always qualifies. The
+// phrase match is narrow so transient proxy/connectivity 500s are never gone.
 func (c *Client) IsResourceGone(err error) bool {
 	if err == nil {
 		return false
 	}
 	msg := strings.ToLower(err.Error())
-	if strings.Contains(msg, "404") {
-		return true
+	if strings.Contains(msg, "environment not found") {
+		return c.ForgetMissingEnvironments
 	}
-	if c.ForgetMissingEnvironments {
-		return strings.Contains(msg, "environment not found")
-	}
-	return false
+	return strings.Contains(msg, "404")
 }
 
 func NewClient(endpoint, apiKey string) *Client {
@@ -139,6 +140,17 @@ func (c *Client) newRequest(ctx context.Context, method, p string, body any) (*h
 	}
 	req.Header.Set("Accept", "application/json")
 	req.Header.Set("X-API-Key", c.APIKey)
+	return req, nil
+}
+
+// newRequestWithQuery is newRequest with URL query parameters. Arcane v3
+// models most non-CRUD operations as `POST /resource?action=<name>`.
+func (c *Client) newRequestWithQuery(ctx context.Context, method, p string, query url.Values, body any) (*http.Request, error) {
+	req, err := c.newRequest(ctx, method, p, body)
+	if err != nil {
+		return nil, err
+	}
+	req.URL.RawQuery = query.Encode()
 	return req, nil
 }
 
@@ -344,7 +356,7 @@ func (c *Client) GetUser(ctx context.Context, id string) (*User, error) {
 
 // UpdateUser PUT /users/{id}
 func (c *Client) UpdateUser(ctx context.Context, id string, body UpdateUserRequest) (*User, error) {
-	req, err := c.newRequest(ctx, http.MethodPut, path.Join("users", id), body)
+	req, err := c.newRequest(ctx, http.MethodPatch, path.Join("users", id), body)
 	if err != nil {
 		return nil, err
 	}
@@ -364,7 +376,7 @@ func (c *Client) DeleteUser(ctx context.Context, id string) error {
 	return c.do(req, nil)
 }
 
-// SetUserRoleAssignments PUT /users/{id}/role-assignments
+// SetUserRoleAssignments PUT /users/{id}/roles
 // Replaces every source="manual" assignment for the user; source="oidc"
 // assignments are left untouched by the server.
 func (c *Client) SetUserRoleAssignments(ctx context.Context, userID string, assignments []RoleAssignmentInput) error {
@@ -372,7 +384,7 @@ func (c *Client) SetUserRoleAssignments(ctx context.Context, userID string, assi
 		assignments = []RoleAssignmentInput{}
 	}
 	body := setUserAssignmentsRequest{Assignments: assignments}
-	req, err := c.newRequest(ctx, http.MethodPut, path.Join("users", userID, "role-assignments"), body)
+	req, err := c.newRequest(ctx, http.MethodPut, path.Join("users", userID, "roles"), body)
 	if err != nil {
 		return err
 	}
@@ -445,7 +457,7 @@ func (c *Client) GetRole(ctx context.Context, id string) (*Role, error) {
 
 // UpdateRole PUT /roles/{id}
 func (c *Client) UpdateRole(ctx context.Context, id string, body RoleUpdateRequest) (*Role, error) {
-	req, err := c.newRequest(ctx, http.MethodPut, path.Join("roles", id), body)
+	req, err := c.newRequest(ctx, http.MethodPatch, path.Join("roles", id), body)
 	if err != nil {
 		return nil, err
 	}
@@ -526,9 +538,9 @@ type permissionsManifestEnvelope struct {
 	Data    PermissionsManifest `json:"data"`
 }
 
-// GetPermissionsManifest GET /roles/available-permissions
+// GetPermissionsManifest GET /roles/permissions
 func (c *Client) GetPermissionsManifest(ctx context.Context) (*PermissionsManifest, error) {
-	req, err := c.newRequest(ctx, http.MethodGet, "roles/available-permissions", nil)
+	req, err := c.newRequest(ctx, http.MethodGet, "roles/permissions", nil)
 	if err != nil {
 		return nil, err
 	}
@@ -575,9 +587,9 @@ type oidcRoleMappingListEnvelope struct {
 	Data    []OidcRoleMapping `json:"data"`
 }
 
-// CreateOidcRoleMapping POST /oidc/role-mappings
+// CreateOidcRoleMapping POST /oidc/mappings
 func (c *Client) CreateOidcRoleMapping(ctx context.Context, body OidcRoleMappingCreateRequest) (*OidcRoleMapping, error) {
-	req, err := c.newRequest(ctx, http.MethodPost, "oidc/role-mappings", body)
+	req, err := c.newRequest(ctx, http.MethodPost, "oidc/mappings", body)
 	if err != nil {
 		return nil, err
 	}
@@ -588,9 +600,9 @@ func (c *Client) CreateOidcRoleMapping(ctx context.Context, body OidcRoleMapping
 	return &out.Data, nil
 }
 
-// ListOidcRoleMappings GET /oidc/role-mappings (there is no get-by-id endpoint)
+// ListOidcRoleMappings GET /oidc/mappings (there is no get-by-id endpoint)
 func (c *Client) ListOidcRoleMappings(ctx context.Context) ([]OidcRoleMapping, error) {
-	req, err := c.newRequest(ctx, http.MethodGet, "oidc/role-mappings", nil)
+	req, err := c.newRequest(ctx, http.MethodGet, "oidc/mappings", nil)
 	if err != nil {
 		return nil, err
 	}
@@ -601,9 +613,9 @@ func (c *Client) ListOidcRoleMappings(ctx context.Context) ([]OidcRoleMapping, e
 	return out.Data, nil
 }
 
-// UpdateOidcRoleMapping PUT /oidc/role-mappings/{id}
+// UpdateOidcRoleMapping PUT /oidc/mappings/{id}
 func (c *Client) UpdateOidcRoleMapping(ctx context.Context, id string, body OidcRoleMappingUpdateRequest) (*OidcRoleMapping, error) {
-	req, err := c.newRequest(ctx, http.MethodPut, path.Join("oidc", "role-mappings", id), body)
+	req, err := c.newRequest(ctx, http.MethodPatch, path.Join("oidc", "mappings", id), body)
 	if err != nil {
 		return nil, err
 	}
@@ -614,9 +626,9 @@ func (c *Client) UpdateOidcRoleMapping(ctx context.Context, id string, body Oidc
 	return &out.Data, nil
 }
 
-// DeleteOidcRoleMapping DELETE /oidc/role-mappings/{id}
+// DeleteOidcRoleMapping DELETE /oidc/mappings/{id}
 func (c *Client) DeleteOidcRoleMapping(ctx context.Context, id string) error {
-	req, err := c.newRequest(ctx, http.MethodDelete, path.Join("oidc", "role-mappings", id), nil)
+	req, err := c.newRequest(ctx, http.MethodDelete, path.Join("oidc", "mappings", id), nil)
 	if err != nil {
 		return err
 	}
@@ -685,9 +697,9 @@ type federatedCredentialEnvelope struct {
 	Data    FederatedCredential `json:"data"`
 }
 
-// CreateFederatedCredential POST /federated-credentials
+// CreateFederatedCredential POST /federated/credentials
 func (c *Client) CreateFederatedCredential(ctx context.Context, body FederatedCredentialCreateRequest) (*FederatedCredential, error) {
-	req, err := c.newRequest(ctx, http.MethodPost, "federated-credentials", body)
+	req, err := c.newRequest(ctx, http.MethodPost, "federated/credentials", body)
 	if err != nil {
 		return nil, err
 	}
@@ -698,9 +710,9 @@ func (c *Client) CreateFederatedCredential(ctx context.Context, body FederatedCr
 	return &out.Data, nil
 }
 
-// GetFederatedCredential GET /federated-credentials/{id}
+// GetFederatedCredential GET /federated/credentials/{id}
 func (c *Client) GetFederatedCredential(ctx context.Context, id string) (*FederatedCredential, error) {
-	req, err := c.newRequest(ctx, http.MethodGet, path.Join("federated-credentials", id), nil)
+	req, err := c.newRequest(ctx, http.MethodGet, path.Join("federated/credentials", id), nil)
 	if err != nil {
 		return nil, err
 	}
@@ -711,9 +723,9 @@ func (c *Client) GetFederatedCredential(ctx context.Context, id string) (*Federa
 	return &out.Data, nil
 }
 
-// UpdateFederatedCredential PUT /federated-credentials/{id}
+// UpdateFederatedCredential PUT /federated/credentials/{id}
 func (c *Client) UpdateFederatedCredential(ctx context.Context, id string, body FederatedCredentialUpdateRequest) (*FederatedCredential, error) {
-	req, err := c.newRequest(ctx, http.MethodPut, path.Join("federated-credentials", id), body)
+	req, err := c.newRequest(ctx, http.MethodPatch, path.Join("federated/credentials", id), body)
 	if err != nil {
 		return nil, err
 	}
@@ -724,9 +736,9 @@ func (c *Client) UpdateFederatedCredential(ctx context.Context, id string, body 
 	return &out.Data, nil
 }
 
-// DeleteFederatedCredential DELETE /federated-credentials/{id}
+// DeleteFederatedCredential DELETE /federated/credentials/{id}
 func (c *Client) DeleteFederatedCredential(ctx context.Context, id string) error {
-	req, err := c.newRequest(ctx, http.MethodDelete, path.Join("federated-credentials", id), nil)
+	req, err := c.newRequest(ctx, http.MethodDelete, path.Join("federated/credentials", id), nil)
 	if err != nil {
 		return err
 	}
@@ -734,46 +746,135 @@ func (c *Client) DeleteFederatedCredential(ctx context.Context, id string) error
 }
 
 // -------- Settings --------
-// components/schemas/SettingsPublicSetting
+// SettingsPublicSetting is a single key/value setting.
 type SettingsPublicSetting struct {
 	Key   string `json:"key"`
 	Type  string `json:"type"`
 	Value string `json:"value"`
 }
 
-// UpdateSettings PUT /environments/{id}/settings
-func (c *Client) UpdateSettings(ctx context.Context, envID string, values map[string]string) ([]SettingsPublicSetting, error) {
-	// Send raw map[string]string matching SettingsUpdate fields
-	req, err := c.newRequest(ctx, http.MethodPut, path.Join("environments", envID, "settings"), values)
+// SettingState is one setting as Arcane v3 reports it
+// (components/schemas/SettingState).
+type SettingState struct {
+	Key       string `json:"key"`
+	Value     string `json:"value"`
+	Type      string `json:"type"`
+	Default   string `json:"default"`
+	Source    string `json:"source"` // default, db or env
+	Scope     string `json:"scope"`  // manager, authentication or environment
+	Locked    bool   `json:"locked"`
+	Sensitive bool   `json:"sensitive"`
+}
+
+// SettingsSnapshot is the (unwrapped) response of every v3 settings endpoint.
+type SettingsSnapshot struct {
+	Settings []SettingState `json:"settings"`
+	ReadOnly bool           `json:"readOnly"`
+}
+
+// Settings scopes. Arcane v3 splits settings across three endpoints and each
+// rejects keys that belong to another scope.
+const (
+	SettingsScopeEnvironment    = "environment"
+	SettingsScopeManager        = "manager"
+	SettingsScopeAuthentication = "authentication"
+)
+
+func settingsPath(envID, scope string) string {
+	switch scope {
+	case SettingsScopeManager:
+		return "settings"
+	case SettingsScopeAuthentication:
+		return "settings/authentication"
+	default:
+		return path.Join("agents", envID, "settings")
+	}
+}
+
+func (c *Client) getSettingsSnapshot(ctx context.Context, p string) (*SettingsSnapshot, error) {
+	req, err := c.newRequest(ctx, http.MethodGet, p, nil)
 	if err != nil {
 		return nil, err
 	}
-	// Response: BaseApiResponseListSettingDto -> data: []SettingsSettingDto or public
-	var out struct {
-		Success bool                    `json:"success"`
-		Data    []SettingsPublicSetting `json:"data"`
-	}
+	var out SettingsSnapshot
 	if err := c.do(req, &out); err != nil {
 		return nil, err
 	}
-	return out.Data, nil
+	return &out, nil
 }
 
-// GetSettings GET /environments/{id}/settings
+// GetSettingStates returns the environment settings of envID together with
+// the app-wide (manager) and authentication settings, which are global.
+func (c *Client) GetSettingStates(ctx context.Context, envID string) ([]SettingState, error) {
+	var all []SettingState
+	for _, scope := range []string{SettingsScopeEnvironment, SettingsScopeManager, SettingsScopeAuthentication} {
+		snap, err := c.getSettingsSnapshot(ctx, settingsPath(envID, scope))
+		if err != nil {
+			return nil, err
+		}
+		all = append(all, snap.Settings...)
+	}
+	return all, nil
+}
+
+// GetSettings returns every setting visible for envID (environment, manager
+// and authentication scopes) as key -> value.
 func (c *Client) GetSettings(ctx context.Context, envID string) (map[string]string, error) {
-	req, err := c.newRequest(ctx, http.MethodGet, path.Join("environments", envID, "settings"), nil)
+	states, err := c.GetSettingStates(ctx, envID)
 	if err != nil {
 		return nil, err
 	}
-	var arr []SettingsPublicSetting
-	if err := c.do(req, &arr); err != nil {
-		return nil, err
-	}
-	res := make(map[string]string, len(arr))
-	for _, s := range arr {
+	res := make(map[string]string, len(states))
+	for _, s := range states {
 		res[s.Key] = s.Value
 	}
 	return res, nil
+}
+
+// UpdateSettings writes values, routing each key to the endpoint of its scope:
+// PATCH /agents/{id}/settings (environment), PATCH /settings (manager) or
+// PATCH /settings/authentication. Keys Arcane does not report are sent to the
+// environment endpoint, which rejects them with a descriptive error.
+func (c *Client) UpdateSettings(ctx context.Context, envID string, values map[string]string) ([]SettingState, error) {
+	if len(values) == 0 {
+		return nil, nil
+	}
+	states, err := c.GetSettingStates(ctx, envID)
+	if err != nil {
+		return nil, err
+	}
+	scopeOf := make(map[string]string, len(states))
+	for _, s := range states {
+		scopeOf[s.Key] = s.Scope
+	}
+	groups := map[string]map[string]string{}
+	for k, v := range values {
+		scope := scopeOf[k]
+		if scope == "" {
+			scope = SettingsScopeEnvironment
+		}
+		if groups[scope] == nil {
+			groups[scope] = map[string]string{}
+		}
+		groups[scope][k] = v
+	}
+	var out []SettingState
+	for _, scope := range []string{SettingsScopeEnvironment, SettingsScopeManager, SettingsScopeAuthentication} {
+		group, ok := groups[scope]
+		if !ok {
+			continue
+		}
+		req, err := c.newRequest(ctx, http.MethodPatch, settingsPath(envID, scope), group)
+		if err != nil {
+			return nil, err
+		}
+		var snap SettingsSnapshot
+		if err := c.do(req, &snap); err != nil {
+			return nil, fmt.Errorf("update %s settings: %w", scope, err)
+		}
+		out = append(out, snap.Settings...)
+	}
+	return out, nil
 }
 
 // -------- Projects --------
@@ -850,16 +951,18 @@ type ProjectDestroyOptions struct {
 // ProjectDeployOptions is the optional request body for the project "up"
 // (deploy) and "redeploy" endpoints. components/schemas/ProjectDeployOptions
 type ProjectDeployOptions struct {
-	ForceRecreate *bool   `json:"forceRecreate,omitempty"`
-	PullPolicy    *string `json:"pullPolicy,omitempty"`
-	RemoveOrphans *bool   `json:"removeOrphans,omitempty"`
+	Build           *bool   `json:"build,omitempty"`
+	RecreateVolumes *bool   `json:"recreateVolumes,omitempty"`
+	ForceRecreate   *bool   `json:"forceRecreate,omitempty"`
+	PullPolicy      *string `json:"pullPolicy,omitempty"`
+	RemoveOrphans   *bool   `json:"removeOrphans,omitempty"`
 }
 
 func (c *Client) CreateProject(ctx context.Context, envID string, body ProjectCreateRequest) (*ProjectCreateResponse, error) {
 	// Project creation is multipart/form-data: a JSON "project" part with the
 	// configuration and a JSON "manifest" part with the initial workspace file
 	// changes. Both parts are required.
-	req, err := c.newMultipartJSONRequest(ctx, http.MethodPost, path.Join("environments", envID, "projects"),
+	req, err := c.newMultipartJSONRequest(ctx, http.MethodPost, path.Join("agents", envID, "projects"),
 		multipartJSONPart{Name: "project", Value: body},
 		multipartJSONPart{Name: "manifest", Value: createProjectManifest{FileChanges: []any{}}},
 	)
@@ -874,7 +977,7 @@ func (c *Client) CreateProject(ctx context.Context, envID string, body ProjectCr
 }
 
 func (c *Client) GetProject(ctx context.Context, envID, projectID string) (*ProjectDetails, error) {
-	req, err := c.newRequest(ctx, http.MethodGet, path.Join("environments", envID, "projects", projectID), nil)
+	req, err := c.newRequest(ctx, http.MethodGet, path.Join("agents", envID, "projects", projectID), nil)
 	if err != nil {
 		return nil, err
 	}
@@ -886,7 +989,7 @@ func (c *Client) GetProject(ctx context.Context, envID, projectID string) (*Proj
 }
 
 func (c *Client) UpdateProject(ctx context.Context, envID, projectID string, body ProjectUpdateRequest) (*ProjectDetails, error) {
-	req, err := c.newRequest(ctx, http.MethodPut, path.Join("environments", envID, "projects", projectID), body)
+	req, err := c.newRequest(ctx, http.MethodPatch, path.Join("agents", envID, "projects", projectID), body)
 	if err != nil {
 		return nil, err
 	}
@@ -897,17 +1000,41 @@ func (c *Client) UpdateProject(ctx context.Context, envID, projectID string, bod
 	return &env.Data, nil
 }
 
-// DeployProject POST /environments/{id}/projects/{projectId}/up
+// DeployProject POST /agents/{id}/projects/{projectId}/deploy?action=up
 func (c *Client) DeployProject(ctx context.Context, envID, projectID string) error {
-	req, err := c.newRequest(ctx, http.MethodPost, path.Join("environments", envID, "projects", projectID, "up"), nil)
+	return c.UpProject(ctx, envID, projectID, nil)
+}
+
+// projectDeployAction runs one of the streamed deploy actions (up, redeploy,
+// pull) via POST /agents/{id}/projects/{projectId}/deploy?action=<action>.
+func (c *Client) projectDeployAction(ctx context.Context, envID, projectID, action string, opts *ProjectDeployOptions) error {
+	var body any
+	if opts != nil {
+		body = opts
+	}
+	req, err := c.newRequestWithQuery(ctx, http.MethodPost, path.Join("agents", envID, "projects", projectID, "deploy"),
+		url.Values{"action": {action}}, body)
 	if err != nil {
 		return err
 	}
 	return c.doStream(req)
 }
 
+// projectAction runs one of the non-streamed project actions (down, restart,
+// archive, unarchive, updateservices) via
+// POST /agents/{id}/projects/{projectId}?action=<action>.
+func (c *Client) projectAction(ctx context.Context, envID, projectID, action string) error {
+	req, err := c.newRequestWithQuery(ctx, http.MethodPost, path.Join("agents", envID, "projects", projectID),
+		url.Values{"action": {action}}, nil)
+	if err != nil {
+		return err
+	}
+	return c.do(req, nil)
+}
+
+// DestroyProject DELETE /agents/{id}/projects/{projectId}
 func (c *Client) DestroyProject(ctx context.Context, envID, projectID string, opts ProjectDestroyOptions) error {
-	req, err := c.newRequest(ctx, http.MethodDelete, path.Join("environments", envID, "projects", projectID, "destroy"), opts)
+	req, err := c.newRequest(ctx, http.MethodDelete, path.Join("agents", envID, "projects", projectID), opts)
 	if err != nil {
 		return err
 	}
@@ -937,7 +1064,7 @@ func (c *Client) ListProjects(ctx context.Context, envID string) ([]ProjectDetai
 	start := 0
 	for {
 		u := *c.BaseURL
-		u.Path = path.Join(c.BaseURL.Path, "environments", envID, "projects")
+		u.Path = path.Join(c.BaseURL.Path, "agents", envID, "projects")
 		q := u.Query()
 		q.Set("limit", strconv.Itoa(pageSize))
 		q.Set("start", strconv.Itoa(start))
@@ -970,7 +1097,7 @@ type SwarmStackDeployRequest struct {
 	Prune            *bool   `json:"prune,omitempty"`
 	ResolveImage     *string `json:"resolveImage,omitempty"`
 	WithRegistryAuth *bool   `json:"withRegistryAuth,omitempty"`
-	WorkingDir       *string `json:"workingDir,omitempty"`
+	OverrideContent  *string `json:"overrideContent,omitempty"`
 }
 
 type SwarmStackDeployResponse struct {
@@ -991,15 +1118,17 @@ type SwarmSyncFile struct {
 }
 
 type SwarmStackSource struct {
-	Name           string          `json:"name"`
-	ComposeContent string          `json:"composeContent"`
-	EnvContent     string          `json:"envContent,omitempty"`
-	Files          []SwarmSyncFile `json:"files,omitempty"`
+	Name            string          `json:"name"`
+	ComposeContent  string          `json:"composeContent"`
+	EnvContent      string          `json:"envContent,omitempty"`
+	OverrideContent string          `json:"overrideContent,omitempty"`
+	Files           []SwarmSyncFile `json:"files,omitempty"`
 }
 
 type SwarmStackSourceUpdateRequest struct {
-	ComposeContent string  `json:"composeContent"`
-	EnvContent     *string `json:"envContent,omitempty"`
+	ComposeContent  string  `json:"composeContent"`
+	EnvContent      *string `json:"envContent,omitempty"`
+	OverrideContent *string `json:"overrideContent,omitempty"`
 }
 
 type DockerSwarmVersion struct {
@@ -1007,9 +1136,10 @@ type DockerSwarmVersion struct {
 }
 
 type DockerSwarmSecretSpec struct {
-	Name   string            `json:"Name,omitempty"`
-	Data   string            `json:"Data,omitempty"`
-	Labels map[string]string `json:"Labels,omitempty"`
+	Name string `json:"Name,omitempty"`
+	Data string `json:"Data,omitempty"`
+	// Labels is required by Arcane v3 (an empty object is fine).
+	Labels map[string]string `json:"Labels"`
 }
 
 type SwarmSecretSummary struct {
@@ -1045,7 +1175,7 @@ type swarmSecretEnvelope struct {
 }
 
 func (c *Client) DeploySwarmStack(ctx context.Context, envID string, body SwarmStackDeployRequest) (*SwarmStackDeployResponse, error) {
-	req, err := c.newRequest(ctx, http.MethodPost, path.Join("environments", envID, "swarm", "stacks"), body)
+	req, err := c.newRequest(ctx, http.MethodPost, path.Join("agents", envID, "swarm", "stacks"), body)
 	if err != nil {
 		return nil, err
 	}
@@ -1057,7 +1187,7 @@ func (c *Client) DeploySwarmStack(ctx context.Context, envID string, body SwarmS
 }
 
 func (c *Client) GetSwarmStack(ctx context.Context, envID, stackName string) (*SwarmStackInspect, error) {
-	req, err := c.newRequest(ctx, http.MethodGet, path.Join("environments", envID, "swarm", "stacks", stackName), nil)
+	req, err := c.newRequest(ctx, http.MethodGet, path.Join("agents", envID, "swarm", "stacks", stackName), nil)
 	if err != nil {
 		return nil, err
 	}
@@ -1069,7 +1199,7 @@ func (c *Client) GetSwarmStack(ctx context.Context, envID, stackName string) (*S
 }
 
 func (c *Client) GetSwarmStackSource(ctx context.Context, envID, stackName string) (*SwarmStackSource, error) {
-	req, err := c.newRequest(ctx, http.MethodGet, path.Join("environments", envID, "swarm", "stacks", stackName, "source"), nil)
+	req, err := c.newRequest(ctx, http.MethodGet, path.Join("agents", envID, "swarm", "stacks", stackName, "source"), nil)
 	if err != nil {
 		return nil, err
 	}
@@ -1081,7 +1211,7 @@ func (c *Client) GetSwarmStackSource(ctx context.Context, envID, stackName strin
 }
 
 func (c *Client) UpdateSwarmStackSource(ctx context.Context, envID, stackName string, body SwarmStackSourceUpdateRequest) (*SwarmStackSource, error) {
-	req, err := c.newRequest(ctx, http.MethodPut, path.Join("environments", envID, "swarm", "stacks", stackName, "source"), body)
+	req, err := c.newRequest(ctx, http.MethodPatch, path.Join("agents", envID, "swarm", "stacks", stackName, "source"), body)
 	if err != nil {
 		return nil, err
 	}
@@ -1093,7 +1223,7 @@ func (c *Client) UpdateSwarmStackSource(ctx context.Context, envID, stackName st
 }
 
 func (c *Client) DeleteSwarmStack(ctx context.Context, envID, stackName string) error {
-	req, err := c.newRequest(ctx, http.MethodDelete, path.Join("environments", envID, "swarm", "stacks", stackName), nil)
+	req, err := c.newRequest(ctx, http.MethodDelete, path.Join("agents", envID, "swarm", "stacks", stackName), nil)
 	if err != nil {
 		return err
 	}
@@ -1105,7 +1235,10 @@ func EncodeSwarmSecretData(raw string) string {
 }
 
 func (c *Client) CreateSwarmSecret(ctx context.Context, envID string, body SwarmSecretCreateRequest) (*SwarmSecretSummary, error) {
-	req, err := c.newRequest(ctx, http.MethodPost, path.Join("environments", envID, "swarm", "secrets"), body)
+	if body.Spec.Labels == nil {
+		body.Spec.Labels = map[string]string{}
+	}
+	req, err := c.newRequest(ctx, http.MethodPost, path.Join("agents", envID, "swarm", "secrets"), body)
 	if err != nil {
 		return nil, err
 	}
@@ -1117,7 +1250,7 @@ func (c *Client) CreateSwarmSecret(ctx context.Context, envID string, body Swarm
 }
 
 func (c *Client) GetSwarmSecret(ctx context.Context, envID, secretID string) (*SwarmSecretSummary, error) {
-	req, err := c.newRequest(ctx, http.MethodGet, path.Join("environments", envID, "swarm", "secrets", secretID), nil)
+	req, err := c.newRequest(ctx, http.MethodGet, path.Join("agents", envID, "swarm", "secrets", secretID), nil)
 	if err != nil {
 		return nil, err
 	}
@@ -1129,7 +1262,7 @@ func (c *Client) GetSwarmSecret(ctx context.Context, envID, secretID string) (*S
 }
 
 func (c *Client) DeleteSwarmSecret(ctx context.Context, envID, secretID string) error {
-	req, err := c.newRequest(ctx, http.MethodDelete, path.Join("environments", envID, "swarm", "secrets", secretID), nil)
+	req, err := c.newRequest(ctx, http.MethodDelete, path.Join("agents", envID, "swarm", "secrets", secretID), nil)
 	if err != nil {
 		return err
 	}
@@ -1137,9 +1270,10 @@ func (c *Client) DeleteSwarmSecret(ctx context.Context, envID, secretID string) 
 }
 
 type DockerSwarmConfigSpec struct {
-	Name   string            `json:"Name,omitempty"`
-	Data   string            `json:"Data,omitempty"`
-	Labels map[string]string `json:"Labels,omitempty"`
+	Name string `json:"Name,omitempty"`
+	Data string `json:"Data,omitempty"`
+	// Labels is required by Arcane v3 (an empty object is fine).
+	Labels map[string]string `json:"Labels"`
 }
 
 type SwarmConfigSummary struct {
@@ -1174,9 +1308,12 @@ func DecodeSwarmConfigData(encoded string) (string, error) {
 	return string(raw), nil
 }
 
-// CreateSwarmConfig POST /environments/{id}/swarm/configs
+// CreateSwarmConfig POST /agents/{id}/swarm/configs
 func (c *Client) CreateSwarmConfig(ctx context.Context, envID string, body SwarmConfigCreateRequest) (*SwarmConfigSummary, error) {
-	req, err := c.newRequest(ctx, http.MethodPost, path.Join("environments", envID, "swarm", "configs"), body)
+	if body.Spec.Labels == nil {
+		body.Spec.Labels = map[string]string{}
+	}
+	req, err := c.newRequest(ctx, http.MethodPost, path.Join("agents", envID, "swarm", "configs"), body)
 	if err != nil {
 		return nil, err
 	}
@@ -1187,9 +1324,9 @@ func (c *Client) CreateSwarmConfig(ctx context.Context, envID string, body Swarm
 	return &env.Data, nil
 }
 
-// GetSwarmConfig GET /environments/{id}/swarm/configs/{configId}
+// GetSwarmConfig GET /agents/{id}/swarm/configs/{configId}
 func (c *Client) GetSwarmConfig(ctx context.Context, envID, configID string) (*SwarmConfigSummary, error) {
-	req, err := c.newRequest(ctx, http.MethodGet, path.Join("environments", envID, "swarm", "configs", configID), nil)
+	req, err := c.newRequest(ctx, http.MethodGet, path.Join("agents", envID, "swarm", "configs", configID), nil)
 	if err != nil {
 		return nil, err
 	}
@@ -1200,9 +1337,9 @@ func (c *Client) GetSwarmConfig(ctx context.Context, envID, configID string) (*S
 	return &env.Data, nil
 }
 
-// DeleteSwarmConfig DELETE /environments/{id}/swarm/configs/{configId}
+// DeleteSwarmConfig DELETE /agents/{id}/swarm/configs/{configId}
 func (c *Client) DeleteSwarmConfig(ctx context.Context, envID, configID string) error {
-	req, err := c.newRequest(ctx, http.MethodDelete, path.Join("environments", envID, "swarm", "configs", configID), nil)
+	req, err := c.newRequest(ctx, http.MethodDelete, path.Join("agents", envID, "swarm", "configs", configID), nil)
 	if err != nil {
 		return err
 	}
@@ -1223,8 +1360,11 @@ type NotificationResponse struct {
 	Config   map[string]any `json:"config"`
 }
 
-func (c *Client) UpsertNotification(ctx context.Context, envID string, body NotificationUpdate) (*NotificationResponse, error) {
-	req, err := c.newRequest(ctx, http.MethodPost, path.Join("environments", envID, "notifications", "settings"), body)
+// Notifications are app-wide in Arcane v3 (no environment).
+
+// UpsertNotification POST /notifications/settings
+func (c *Client) UpsertNotification(ctx context.Context, body NotificationUpdate) (*NotificationResponse, error) {
+	req, err := c.newRequest(ctx, http.MethodPost, "notifications/settings", body)
 	if err != nil {
 		return nil, err
 	}
@@ -1235,8 +1375,9 @@ func (c *Client) UpsertNotification(ctx context.Context, envID string, body Noti
 	return &out, nil
 }
 
-func (c *Client) GetNotification(ctx context.Context, envID, provider string) (*NotificationResponse, error) {
-	req, err := c.newRequest(ctx, http.MethodGet, path.Join("environments", envID, "notifications", "settings", provider), nil)
+// GetNotification GET /notifications/settings/{provider}
+func (c *Client) GetNotification(ctx context.Context, provider string) (*NotificationResponse, error) {
+	req, err := c.newRequest(ctx, http.MethodGet, path.Join("notifications", "settings", provider), nil)
 	if err != nil {
 		return nil, err
 	}
@@ -1247,8 +1388,9 @@ func (c *Client) GetNotification(ctx context.Context, envID, provider string) (*
 	return &out, nil
 }
 
-func (c *Client) DeleteNotification(ctx context.Context, envID, provider string) error {
-	req, err := c.newRequest(ctx, http.MethodDelete, path.Join("environments", envID, "notifications", "settings", provider), nil)
+// DeleteNotification DELETE /notifications/settings/{provider}
+func (c *Client) DeleteNotification(ctx context.Context, provider string) error {
+	req, err := c.newRequest(ctx, http.MethodDelete, path.Join("notifications", "settings", provider), nil)
 	if err != nil {
 		return err
 	}
@@ -1256,21 +1398,16 @@ func (c *Client) DeleteNotification(ctx context.Context, envID, provider string)
 }
 
 // TestNotification triggers Arcane to send a test message through the configured
-// provider. The notifyType maps to the API "type" query parameter (e.g. "simple").
-func (c *Client) TestNotification(ctx context.Context, envID, provider, notifyType string) error {
-	u := *c.BaseURL
-	u.Path = path.Join(c.BaseURL.Path, "environments", envID, "notifications", "test", provider)
-	q := u.Query()
+// provider: POST /notifications/settings/{provider}?action=test&type=<notifyType>.
+func (c *Client) TestNotification(ctx context.Context, provider, notifyType string) error {
+	q := url.Values{"action": {"test"}}
 	if notifyType != "" {
 		q.Set("type", notifyType)
 	}
-	u.RawQuery = q.Encode()
-	req, err := http.NewRequestWithContext(ctx, http.MethodPost, u.String(), nil)
+	req, err := c.newRequestWithQuery(ctx, http.MethodPost, path.Join("notifications", "settings", provider), q, nil)
 	if err != nil {
 		return err
 	}
-	req.Header.Set("Accept", "application/json")
-	req.Header.Set("X-API-Key", c.APIKey)
 	return c.do(req, nil)
 }
 
@@ -1331,7 +1468,7 @@ type containerDetailsEnvelope struct {
 }
 
 func (c *Client) CreateContainer(ctx context.Context, envID string, body ContainerCreateRequest) (*ContainerCreated, error) {
-	req, err := c.newRequest(ctx, http.MethodPost, path.Join("environments", envID, "containers"), body)
+	req, err := c.newRequest(ctx, http.MethodPost, path.Join("agents", envID, "containers"), body)
 	if err != nil {
 		return nil, err
 	}
@@ -1343,7 +1480,7 @@ func (c *Client) CreateContainer(ctx context.Context, envID string, body Contain
 }
 
 func (c *Client) GetContainer(ctx context.Context, envID, containerID string) (*ContainerDetails, error) {
-	req, err := c.newRequest(ctx, http.MethodGet, path.Join("environments", envID, "containers", containerID), nil)
+	req, err := c.newRequest(ctx, http.MethodGet, path.Join("agents", envID, "containers", containerID), nil)
 	if err != nil {
 		return nil, err
 	}
@@ -1356,7 +1493,7 @@ func (c *Client) GetContainer(ctx context.Context, envID, containerID string) (*
 
 func (c *Client) DeleteContainer(ctx context.Context, envID, containerID string, force, volumes bool) error {
 	// These are query parameters per OpenAPI
-	p := path.Join("environments", envID, "containers", containerID)
+	p := path.Join("agents", envID, "containers", containerID)
 	u := *c.BaseURL
 	u.Path = path.Join(c.BaseURL.Path, p)
 	q := u.Query()
@@ -1399,7 +1536,7 @@ func (c *Client) ListContainers(ctx context.Context, envID string) ([]ContainerS
 	start := 0
 	for {
 		u := *c.BaseURL
-		u.Path = path.Join(c.BaseURL.Path, "environments", envID, "containers")
+		u.Path = path.Join(c.BaseURL.Path, "agents", envID, "containers")
 		q := u.Query()
 		q.Set("limit", strconv.Itoa(pageSize))
 		q.Set("start", strconv.Itoa(start))
@@ -1479,7 +1616,7 @@ func (c *Client) CreateContainerRegistry(ctx context.Context, body CreateContain
 	if body.RepositoryNames == nil {
 		body.RepositoryNames = []string{}
 	}
-	req, err := c.newRequest(ctx, http.MethodPost, "container-registries", body)
+	req, err := c.newRequest(ctx, http.MethodPost, "registries", body)
 	if err != nil {
 		return nil, err
 	}
@@ -1491,7 +1628,7 @@ func (c *Client) CreateContainerRegistry(ctx context.Context, body CreateContain
 }
 
 func (c *Client) GetContainerRegistry(ctx context.Context, id string) (*ContainerRegistry, error) {
-	req, err := c.newRequest(ctx, http.MethodGet, path.Join("container-registries", id), nil)
+	req, err := c.newRequest(ctx, http.MethodGet, path.Join("registries", id), nil)
 	if err != nil {
 		return nil, err
 	}
@@ -1503,7 +1640,7 @@ func (c *Client) GetContainerRegistry(ctx context.Context, id string) (*Containe
 }
 
 func (c *Client) UpdateContainerRegistry(ctx context.Context, id string, body UpdateContainerRegistryRequest) (*ContainerRegistry, error) {
-	req, err := c.newRequest(ctx, http.MethodPut, path.Join("container-registries", id), body)
+	req, err := c.newRequest(ctx, http.MethodPatch, path.Join("registries", id), body)
 	if err != nil {
 		return nil, err
 	}
@@ -1515,7 +1652,7 @@ func (c *Client) UpdateContainerRegistry(ctx context.Context, id string, body Up
 }
 
 func (c *Client) DeleteContainerRegistry(ctx context.Context, id string) error {
-	req, err := c.newRequest(ctx, http.MethodDelete, path.Join("container-registries", id), nil)
+	req, err := c.newRequest(ctx, http.MethodDelete, path.Join("registries", id), nil)
 	if err != nil {
 		return err
 	}
@@ -1541,7 +1678,7 @@ type ContainerRegistryPullUsage struct {
 }
 
 func (c *Client) GetContainerRegistryPullUsage(ctx context.Context) ([]ContainerRegistryPullUsage, error) {
-	req, err := c.newRequest(ctx, http.MethodGet, "container-registries/pull-usage", nil)
+	req, err := c.newRequest(ctx, http.MethodGet, "registries/usage", nil)
 	if err != nil {
 		return nil, err
 	}
@@ -1558,24 +1695,23 @@ func (c *Client) GetContainerRegistryPullUsage(ctx context.Context) ([]Container
 }
 
 // -------- Environments --------
+// Arcane v3 environments are agent-based: only name and enabled are writable.
+// The API URL is derived by the server (agent://<name>) and agents join with an
+// enrollment token minted by POST /agents/{id}/deployment. Unknown body
+// properties are rejected with 422, so the v2 fields (apiUrl, accessToken,
+// isEdge, useApiKey, regenerateApiKey) must not be sent.
 type EnvironmentCreateRequest struct {
-	APIURL      string  `json:"apiUrl"`
-	Name        *string `json:"name,omitempty"`
-	AccessToken *string `json:"accessToken,omitempty"`
-	Enabled     *bool   `json:"enabled,omitempty"`
-	IsEdge      *bool   `json:"isEdge,omitempty"`
-	UseAPIKey   *bool   `json:"useApiKey,omitempty"`
+	Name    *string `json:"name,omitempty"`
+	Enabled *bool   `json:"enabled,omitempty"`
 }
 
 type EnvironmentUpdateRequest struct {
-	APIURL           *string `json:"apiUrl,omitempty"`
-	Name             *string `json:"name,omitempty"`
-	AccessToken      *string `json:"accessToken,omitempty"`
-	Enabled          *bool   `json:"enabled,omitempty"`
-	RegenerateAPIKey *bool   `json:"regenerateApiKey,omitempty"`
+	Name    *string `json:"name,omitempty"`
+	Enabled *bool   `json:"enabled,omitempty"`
 }
 
-type EnvironmentEdgeMTLSCertificate struct {
+// EnvironmentAgentMTLSCertificate is components/schemas/AgentMTLSCertificate.
+type EnvironmentAgentMTLSCertificate struct {
 	CommonName    string `json:"commonName,omitempty"`
 	DaysRemaining int64  `json:"daysRemaining,omitempty"`
 	Expired       bool   `json:"expired"`
@@ -1584,18 +1720,18 @@ type EnvironmentEdgeMTLSCertificate struct {
 }
 
 type Environment struct {
-	ID                  string                          `json:"id"`
-	APIURL              string                          `json:"apiUrl"`
-	Name                string                          `json:"name"`
-	Status              string                          `json:"status"`
-	Enabled             bool                            `json:"enabled"`
-	IsEdge              bool                            `json:"isEdge"`
-	APIKey              string                          `json:"apiKey,omitempty"`
-	EdgeAgentInstance   string                          `json:"edgeAgentInstance,omitempty"`
-	EdgeCapabilities    []string                        `json:"edgeCapabilities,omitempty"`
-	EdgeMTLSCertificate *EnvironmentEdgeMTLSCertificate `json:"edgeMTLSCertificate,omitempty"`
-	EdgeSecurityMode    string                          `json:"edgeSecurityMode,omitempty"`
-	EdgeSessionID       string                          `json:"edgeSessionId,omitempty"`
+	ID                   string                           `json:"id"`
+	APIURL               string                           `json:"apiUrl"`
+	Name                 string                           `json:"name"`
+	Status               string                           `json:"status"`
+	Enabled              bool                             `json:"enabled"`
+	Connected            bool                             `json:"connected"`
+	AgentInstance        string                           `json:"agentInstance,omitempty"`
+	AgentCapabilities    []string                         `json:"agentCapabilities,omitempty"`
+	AgentMTLSCertificate *EnvironmentAgentMTLSCertificate `json:"agentMTLSCertificate,omitempty"`
+	AgentSecurityMode    string                           `json:"agentSecurityMode,omitempty"`
+	AgentSessionID       string                           `json:"agentSessionId,omitempty"`
+	AgentTransport       string                           `json:"agentTransport,omitempty"`
 }
 
 type environmentEnvelope struct {
@@ -1603,21 +1739,8 @@ type environmentEnvelope struct {
 	Data    Environment `json:"data"`
 }
 
-type EnvironmentAgentPairRequest struct {
-	Rotate bool `json:"rotate"`
-}
-
-type EnvironmentAgentPairResponse struct {
-	Token string `json:"token"`
-}
-
-type agentPairEnvelope struct {
-	Success bool                         `json:"success"`
-	Data    EnvironmentAgentPairResponse `json:"data"`
-}
-
 func (c *Client) CreateEnvironment(ctx context.Context, body EnvironmentCreateRequest) (*Environment, error) {
-	req, err := c.newRequest(ctx, http.MethodPost, "environments", body)
+	req, err := c.newRequest(ctx, http.MethodPost, "agents", body)
 	if err != nil {
 		return nil, err
 	}
@@ -1629,7 +1752,7 @@ func (c *Client) CreateEnvironment(ctx context.Context, body EnvironmentCreateRe
 }
 
 func (c *Client) GetEnvironment(ctx context.Context, id string) (*Environment, error) {
-	req, err := c.newRequest(ctx, http.MethodGet, path.Join("environments", id), nil)
+	req, err := c.newRequest(ctx, http.MethodGet, path.Join("agents", id), nil)
 	if err != nil {
 		return nil, err
 	}
@@ -1641,7 +1764,7 @@ func (c *Client) GetEnvironment(ctx context.Context, id string) (*Environment, e
 }
 
 func (c *Client) UpdateEnvironment(ctx context.Context, id string, body EnvironmentUpdateRequest) (*Environment, error) {
-	req, err := c.newRequest(ctx, http.MethodPut, path.Join("environments", id), body)
+	req, err := c.newRequest(ctx, http.MethodPatch, path.Join("agents", id), body)
 	if err != nil {
 		return nil, err
 	}
@@ -1653,28 +1776,16 @@ func (c *Client) UpdateEnvironment(ctx context.Context, id string, body Environm
 }
 
 func (c *Client) DeleteEnvironment(ctx context.Context, id string) error {
-	req, err := c.newRequest(ctx, http.MethodDelete, path.Join("environments", id), nil)
+	req, err := c.newRequest(ctx, http.MethodDelete, path.Join("agents", id), nil)
 	if err != nil {
 		return err
 	}
 	return c.do(req, nil)
 }
 
-func (c *Client) PairEnvironment(ctx context.Context, envID string, rotate bool) (string, error) {
-	body := EnvironmentAgentPairRequest{Rotate: rotate}
-	req, err := c.newRequest(ctx, http.MethodPost, path.Join("environments", envID, "agent", "pair"), body)
-	if err != nil {
-		return "", err
-	}
-	var env agentPairEnvelope
-	if err := c.do(req, &env); err != nil {
-		return "", err
-	}
-	return env.Data.Token, nil
-}
-
+// DownloadEdgeMTLSCA GET /agent/mtls/ca
 func (c *Client) DownloadEdgeMTLSCA(ctx context.Context) ([]byte, error) {
-	req, err := c.newRequest(ctx, http.MethodGet, "edge-mtls/ca", nil)
+	req, err := c.newRequest(ctx, http.MethodGet, "agent/mtls/ca", nil)
 	if err != nil {
 		return nil, err
 	}
@@ -1682,7 +1793,7 @@ func (c *Client) DownloadEdgeMTLSCA(ctx context.Context) ([]byte, error) {
 }
 
 func (c *Client) DownloadEnvironmentMTLSBundle(ctx context.Context, envID string) ([]byte, error) {
-	req, err := c.newRequest(ctx, http.MethodGet, path.Join("environments", envID, "deployment", "mtls", "bundle"), nil)
+	req, err := c.newRequest(ctx, http.MethodGet, path.Join("agents", envID, "deployment", "mtls", "bundle"), nil)
 	if err != nil {
 		return nil, err
 	}
@@ -1690,75 +1801,48 @@ func (c *Client) DownloadEnvironmentMTLSBundle(ctx context.Context, envID string
 }
 
 func (c *Client) DownloadEnvironmentMTLSFile(ctx context.Context, envID, fileName string) ([]byte, error) {
-	req, err := c.newRequest(ctx, http.MethodGet, path.Join("environments", envID, "deployment", "mtls", fileName), nil)
+	req, err := c.newRequest(ctx, http.MethodGet, path.Join("agents", envID, "deployment", "mtls", fileName), nil)
 	if err != nil {
 		return nil, err
 	}
 	return c.doBytes(req)
 }
 
-// Project lifecycle: up/down/restart/redeploy
+// Project lifecycle: up/down/redeploy/pull/archive/unarchive
+
+// UpProject POST /agents/{id}/projects/{projectId}/deploy?action=up (streamed).
 func (c *Client) UpProject(ctx context.Context, envID, projectID string, opts *ProjectDeployOptions) error {
-	var body any
-	if opts != nil {
-		body = opts
-	}
-	req, err := c.newRequest(ctx, http.MethodPost, path.Join("environments", envID, "projects", projectID, "up"), body)
-	if err != nil {
-		return err
-	}
-	return c.doStream(req)
+	return c.projectDeployAction(ctx, envID, projectID, "up", opts)
 }
 
+// DownProject POST /agents/{id}/projects/{projectId}?action=down
 func (c *Client) DownProject(ctx context.Context, envID, projectID string) error {
-	req, err := c.newRequest(ctx, http.MethodPost, path.Join("environments", envID, "projects", projectID, "down"), nil)
-	if err != nil {
-		return err
-	}
-	return c.do(req, nil)
+	return c.projectAction(ctx, envID, projectID, "down")
 }
 
-// RedeployProject POST /environments/{id}/projects/{projectId}/redeploy. It
-// takes the same optional body as UpProject.
+// RedeployProject POST /agents/{id}/projects/{projectId}/deploy?action=redeploy.
+// It takes the same optional body as UpProject and, like it, is streamed in v3.
 func (c *Client) RedeployProject(ctx context.Context, envID, projectID string, opts *ProjectDeployOptions) error {
-	var body any
-	if opts != nil {
-		body = opts
-	}
-	req, err := c.newRequest(ctx, http.MethodPost, path.Join("environments", envID, "projects", projectID, "redeploy"), body)
-	if err != nil {
-		return err
-	}
-	return c.doStream(req)
+	return c.projectDeployAction(ctx, envID, projectID, "redeploy", opts)
 }
 
-// PullProjectImages POST /environments/{id}/projects/{projectId}/pull
+// PullProjectImages POST /agents/{id}/projects/{projectId}/deploy?action=pull
 func (c *Client) PullProjectImages(ctx context.Context, envID, projectID string) error {
-	req, err := c.newRequest(ctx, http.MethodPost, path.Join("environments", envID, "projects", projectID, "pull"), nil)
-	if err != nil {
-		return err
-	}
-	return c.doStream(req)
+	return c.projectDeployAction(ctx, envID, projectID, "pull", nil)
 }
 
+// ArchiveProject POST /agents/{id}/projects/{projectId}?action=archive
 func (c *Client) ArchiveProject(ctx context.Context, envID, projectID string) error {
-	req, err := c.newRequest(ctx, http.MethodPost, path.Join("environments", envID, "projects", projectID, "archive"), nil)
-	if err != nil {
-		return err
-	}
-	return c.do(req, nil)
+	return c.projectAction(ctx, envID, projectID, "archive")
 }
 
+// UnarchiveProject POST /agents/{id}/projects/{projectId}?action=unarchive
 func (c *Client) UnarchiveProject(ctx context.Context, envID, projectID string) error {
-	req, err := c.newRequest(ctx, http.MethodPost, path.Join("environments", envID, "projects", projectID, "unarchive"), nil)
-	if err != nil {
-		return err
-	}
-	return c.do(req, nil)
+	return c.projectAction(ctx, envID, projectID, "unarchive")
 }
 
 func (c *Client) GetProjectSectionData(ctx context.Context, envID, projectID, section string) (map[string]any, error) {
-	req, err := c.newRequest(ctx, http.MethodGet, path.Join("environments", envID, "projects", projectID, section), nil)
+	req, err := c.newRequest(ctx, http.MethodGet, path.Join("agents", envID, "projects", projectID, section), nil)
 	if err != nil {
 		return nil, err
 	}
@@ -1818,7 +1902,7 @@ type gitRepositoryEnvelope struct {
 }
 
 func (c *Client) CreateGitRepository(ctx context.Context, body GitRepositoryCreateRequest) (*GitRepository, error) {
-	req, err := c.newRequest(ctx, http.MethodPost, "customize/git-repositories", body)
+	req, err := c.newRequest(ctx, http.MethodPost, "gitops/repositories", body)
 	if err != nil {
 		return nil, err
 	}
@@ -1830,7 +1914,7 @@ func (c *Client) CreateGitRepository(ctx context.Context, body GitRepositoryCrea
 }
 
 func (c *Client) GetGitRepository(ctx context.Context, id string) (*GitRepository, error) {
-	req, err := c.newRequest(ctx, http.MethodGet, path.Join("customize/git-repositories", id), nil)
+	req, err := c.newRequest(ctx, http.MethodGet, path.Join("gitops/repositories", id), nil)
 	if err != nil {
 		return nil, err
 	}
@@ -1842,7 +1926,7 @@ func (c *Client) GetGitRepository(ctx context.Context, id string) (*GitRepositor
 }
 
 func (c *Client) UpdateGitRepository(ctx context.Context, id string, body GitRepositoryUpdateRequest) (*GitRepository, error) {
-	req, err := c.newRequest(ctx, http.MethodPut, path.Join("customize/git-repositories", id), body)
+	req, err := c.newRequest(ctx, http.MethodPatch, path.Join("gitops/repositories", id), body)
 	if err != nil {
 		return nil, err
 	}
@@ -1854,7 +1938,7 @@ func (c *Client) UpdateGitRepository(ctx context.Context, id string, body GitRep
 }
 
 func (c *Client) DeleteGitRepository(ctx context.Context, id string) error {
-	req, err := c.newRequest(ctx, http.MethodDelete, path.Join("customize/git-repositories", id), nil)
+	req, err := c.newRequest(ctx, http.MethodDelete, path.Join("gitops/repositories", id), nil)
 	if err != nil {
 		return err
 	}
@@ -1922,9 +2006,9 @@ type apiKeyCreatedEnvelope struct {
 	Data    ApiKeyCreated `json:"data"`
 }
 
-// CreateApiKey POST /api-keys
+// CreateApiKey POST /apikeys
 func (c *Client) CreateApiKey(ctx context.Context, body CreateApiKeyRequest) (*ApiKeyCreated, error) {
-	req, err := c.newRequest(ctx, http.MethodPost, "api-keys", body)
+	req, err := c.newRequest(ctx, http.MethodPost, "apikeys", body)
 	if err != nil {
 		return nil, err
 	}
@@ -1935,9 +2019,9 @@ func (c *Client) CreateApiKey(ctx context.Context, body CreateApiKeyRequest) (*A
 	return &env.Data, nil
 }
 
-// GetApiKey GET /api-keys/{id}
+// GetApiKey GET /apikeys/{id}
 func (c *Client) GetApiKey(ctx context.Context, id string) (*ApiKey, error) {
-	req, err := c.newRequest(ctx, http.MethodGet, path.Join("api-keys", id), nil)
+	req, err := c.newRequest(ctx, http.MethodGet, path.Join("apikeys", id), nil)
 	if err != nil {
 		return nil, err
 	}
@@ -1948,9 +2032,9 @@ func (c *Client) GetApiKey(ctx context.Context, id string) (*ApiKey, error) {
 	return &env.Data, nil
 }
 
-// UpdateApiKey PUT /api-keys/{id}
+// UpdateApiKey PATCH /apikeys/{id}
 func (c *Client) UpdateApiKey(ctx context.Context, id string, body UpdateApiKeyRequest) (*ApiKey, error) {
-	req, err := c.newRequest(ctx, http.MethodPut, path.Join("api-keys", id), body)
+	req, err := c.newRequest(ctx, http.MethodPatch, path.Join("apikeys", id), body)
 	if err != nil {
 		return nil, err
 	}
@@ -1961,9 +2045,9 @@ func (c *Client) UpdateApiKey(ctx context.Context, id string, body UpdateApiKeyR
 	return &env.Data, nil
 }
 
-// DeleteApiKey DELETE /api-keys/{id}
+// DeleteApiKey DELETE /apikeys/{id}
 func (c *Client) DeleteApiKey(ctx context.Context, id string) error {
-	req, err := c.newRequest(ctx, http.MethodDelete, path.Join("api-keys", id), nil)
+	req, err := c.newRequest(ctx, http.MethodDelete, path.Join("apikeys", id), nil)
 	if err != nil {
 		return err
 	}
@@ -2027,9 +2111,9 @@ func (c *Client) GetTemplate(ctx context.Context, id string) (*Template, error) 
 	return &env.Data, nil
 }
 
-// UpdateTemplate PUT /templates/{id}
+// UpdateTemplate PATCH /templates/{id}
 func (c *Client) UpdateTemplate(ctx context.Context, id string, body UpdateTemplateRequest) (*Template, error) {
-	req, err := c.newRequest(ctx, http.MethodPut, path.Join("templates", id), body)
+	req, err := c.newRequest(ctx, http.MethodPatch, path.Join("templates", id), body)
 	if err != nil {
 		return nil, err
 	}
@@ -2053,7 +2137,7 @@ func (c *Client) DeleteTemplate(ctx context.Context, id string) error {
 type CreateVolumeRequest struct {
 	Name       string            `json:"name"`
 	Driver     *string           `json:"driver,omitempty"`
-	DriverOpts map[string]string `json:"driverOpts,omitempty"`
+	DriverOpts map[string]string `json:"options,omitempty"` // v3: renamed driverOpts -> options
 	Labels     map[string]string `json:"labels,omitempty"`
 }
 
@@ -2076,9 +2160,9 @@ type volumeEnvelope struct {
 	Data    Volume `json:"data"`
 }
 
-// CreateVolume POST /environments/{id}/volumes
+// CreateVolume POST /agents/{id}/volumes
 func (c *Client) CreateVolume(ctx context.Context, envID string, body CreateVolumeRequest) (*Volume, error) {
-	req, err := c.newRequest(ctx, http.MethodPost, path.Join("environments", envID, "volumes"), body)
+	req, err := c.newRequest(ctx, http.MethodPost, path.Join("agents", envID, "volumes"), body)
 	if err != nil {
 		return nil, err
 	}
@@ -2089,9 +2173,9 @@ func (c *Client) CreateVolume(ctx context.Context, envID string, body CreateVolu
 	return &env.Data, nil
 }
 
-// GetVolume GET /environments/{id}/volumes/{volumeName}
+// GetVolume GET /agents/{id}/volumes/{volumeName}
 func (c *Client) GetVolume(ctx context.Context, envID, volumeName string) (*Volume, error) {
-	req, err := c.newRequest(ctx, http.MethodGet, path.Join("environments", envID, "volumes", volumeName), nil)
+	req, err := c.newRequest(ctx, http.MethodGet, path.Join("agents", envID, "volumes", volumeName), nil)
 	if err != nil {
 		return nil, err
 	}
@@ -2102,9 +2186,9 @@ func (c *Client) GetVolume(ctx context.Context, envID, volumeName string) (*Volu
 	return &env.Data, nil
 }
 
-// DeleteVolume DELETE /environments/{id}/volumes/{volumeName}
+// DeleteVolume DELETE /agents/{id}/volumes/{volumeName}
 func (c *Client) DeleteVolume(ctx context.Context, envID, volumeName string) error {
-	req, err := c.newRequest(ctx, http.MethodDelete, path.Join("environments", envID, "volumes", volumeName), nil)
+	req, err := c.newRequest(ctx, http.MethodDelete, path.Join("agents", envID, "volumes", volumeName), nil)
 	if err != nil {
 		return err
 	}
@@ -2139,9 +2223,9 @@ type volumeBackupListEnvelope struct {
 	Pagination Pagination     `json:"pagination"`
 }
 
-// CreateVolumeBackup POST /environments/{id}/volumes/{volumeName}/backups
+// CreateVolumeBackup POST /agents/{id}/volumes/{volumeName}/backups
 func (c *Client) CreateVolumeBackup(ctx context.Context, envID, volumeName string) (*VolumeBackup, error) {
-	req, err := c.newRequest(ctx, http.MethodPost, path.Join("environments", envID, "volumes", volumeName, "backups"), nil)
+	req, err := c.newRequest(ctx, http.MethodPost, path.Join("agents", envID, "volumes", volumeName, "backups"), nil)
 	if err != nil {
 		return nil, err
 	}
@@ -2152,9 +2236,9 @@ func (c *Client) CreateVolumeBackup(ctx context.Context, envID, volumeName strin
 	return &env.Data, nil
 }
 
-// ListVolumeBackups GET /environments/{id}/volumes/{volumeName}/backups
+// ListVolumeBackups GET /agents/{id}/volumes/{volumeName}/backups
 func (c *Client) ListVolumeBackups(ctx context.Context, envID, volumeName string) ([]VolumeBackup, error) {
-	req, err := c.newRequest(ctx, http.MethodGet, path.Join("environments", envID, "volumes", volumeName, "backups"), nil)
+	req, err := c.newRequest(ctx, http.MethodGet, path.Join("agents", envID, "volumes", volumeName, "backups"), nil)
 	if err != nil {
 		return nil, err
 	}
@@ -2165,9 +2249,9 @@ func (c *Client) ListVolumeBackups(ctx context.Context, envID, volumeName string
 	return env.Data, nil
 }
 
-// DeleteVolumeBackup DELETE /environments/{id}/volumes/backups/{backupId}
+// DeleteVolumeBackup DELETE /agents/{id}/volumes/backups/{backupId}
 func (c *Client) DeleteVolumeBackup(ctx context.Context, envID, backupID string) error {
-	req, err := c.newRequest(ctx, http.MethodDelete, path.Join("environments", envID, "volumes", "backups", backupID), nil)
+	req, err := c.newRequest(ctx, http.MethodDelete, path.Join("agents", envID, "volumes", "backups", backupID), nil)
 	if err != nil {
 		return err
 	}
@@ -2221,9 +2305,9 @@ type networkInspectEnvelope struct {
 	Data    NetworkInspect `json:"data"`
 }
 
-// CreateNetwork POST /environments/{id}/networks
+// CreateNetwork POST /agents/{id}/networks
 func (c *Client) CreateNetwork(ctx context.Context, envID string, body NetworkCreateRequest) (*NetworkCreateResponse, error) {
-	req, err := c.newRequest(ctx, http.MethodPost, path.Join("environments", envID, "networks"), body)
+	req, err := c.newRequest(ctx, http.MethodPost, path.Join("agents", envID, "networks"), body)
 	if err != nil {
 		return nil, err
 	}
@@ -2234,9 +2318,9 @@ func (c *Client) CreateNetwork(ctx context.Context, envID string, body NetworkCr
 	return &env.Data, nil
 }
 
-// GetNetwork GET /environments/{id}/networks/{networkId}
+// GetNetwork GET /agents/{id}/networks/{networkId}
 func (c *Client) GetNetwork(ctx context.Context, envID, networkID string) (*NetworkInspect, error) {
-	req, err := c.newRequest(ctx, http.MethodGet, path.Join("environments", envID, "networks", networkID), nil)
+	req, err := c.newRequest(ctx, http.MethodGet, path.Join("agents", envID, "networks", networkID), nil)
 	if err != nil {
 		return nil, err
 	}
@@ -2247,9 +2331,9 @@ func (c *Client) GetNetwork(ctx context.Context, envID, networkID string) (*Netw
 	return &env.Data, nil
 }
 
-// DeleteNetwork DELETE /environments/{id}/networks/{networkId}
+// DeleteNetwork DELETE /agents/{id}/networks/{networkId}
 func (c *Client) DeleteNetwork(ctx context.Context, envID, networkID string) error {
-	req, err := c.newRequest(ctx, http.MethodDelete, path.Join("environments", envID, "networks", networkID), nil)
+	req, err := c.newRequest(ctx, http.MethodDelete, path.Join("agents", envID, "networks", networkID), nil)
 	if err != nil {
 		return err
 	}
@@ -2321,9 +2405,9 @@ func (c *Client) GetTemplateRegistry(ctx context.Context, id string) (*TemplateR
 	return nil, fmt.Errorf("arcane API error: 404 Not Found: template registry %q not found", id)
 }
 
-// UpdateTemplateRegistry PUT /templates/registries/{id}
+// UpdateTemplateRegistry PATCH /templates/registries/{id}
 func (c *Client) UpdateTemplateRegistry(ctx context.Context, id string, body UpdateTemplateRegistryRequest) (*TemplateRegistry, error) {
-	req, err := c.newRequest(ctx, http.MethodPut, path.Join("templates/registries", id), body)
+	req, err := c.newRequest(ctx, http.MethodPatch, path.Join("templates/registries", id), body)
 	if err != nil {
 		return nil, err
 	}
@@ -2343,37 +2427,38 @@ func (c *Client) DeleteTemplateRegistry(ctx context.Context, id string) error {
 }
 
 // -------- Job Schedules --------
+// UpdateJobSchedulesRequest is components/schemas/JobScheduleConfig. v3
+// dropped analyticsHeartbeatInterval and gitopsSyncInterval (sending them is a
+// 422) and added imageAutoPatchInterval.
 type UpdateJobSchedulesRequest struct {
-	AnalyticsHeartbeatInterval     *string `json:"analyticsHeartbeatInterval,omitempty"`
 	AutoHealInterval               *string `json:"autoHealInterval,omitempty"`
 	AutoUpdateInterval             *string `json:"autoUpdateInterval,omitempty"`
 	DockerClientRefreshInterval    *string `json:"dockerClientRefreshInterval,omitempty"`
 	EnvironmentHealthInterval      *string `json:"environmentHealthInterval,omitempty"`
 	EventCleanupInterval           *string `json:"eventCleanupInterval,omitempty"`
 	ExpiredSessionsCleanupInterval *string `json:"expiredSessionsCleanupInterval,omitempty"`
-	GitOpsSyncInterval             *string `json:"gitopsSyncInterval,omitempty"`
+	ImageAutoPatchInterval         *string `json:"imageAutoPatchInterval,omitempty"`
 	PollingInterval                *string `json:"pollingInterval,omitempty"`
 	ScheduledPruneInterval         *string `json:"scheduledPruneInterval,omitempty"`
 	VulnerabilityScanInterval      *string `json:"vulnerabilityScanInterval,omitempty"`
 }
 
 type JobSchedulesConfig struct {
-	AnalyticsHeartbeatInterval     string `json:"analyticsHeartbeatInterval"`
 	AutoHealInterval               string `json:"autoHealInterval"`
 	AutoUpdateInterval             string `json:"autoUpdateInterval"`
 	DockerClientRefreshInterval    string `json:"dockerClientRefreshInterval"`
 	EnvironmentHealthInterval      string `json:"environmentHealthInterval"`
 	EventCleanupInterval           string `json:"eventCleanupInterval"`
 	ExpiredSessionsCleanupInterval string `json:"expiredSessionsCleanupInterval"`
-	GitOpsSyncInterval             string `json:"gitopsSyncInterval"`
+	ImageAutoPatchInterval         string `json:"imageAutoPatchInterval"`
 	PollingInterval                string `json:"pollingInterval"`
 	ScheduledPruneInterval         string `json:"scheduledPruneInterval"`
 	VulnerabilityScanInterval      string `json:"vulnerabilityScanInterval"`
 }
 
-// UpdateJobSchedules PUT /environments/{id}/job-schedules
+// UpdateJobSchedules PUT /agents/{id}/job-schedules
 func (c *Client) UpdateJobSchedules(ctx context.Context, envID string, body UpdateJobSchedulesRequest) (*JobSchedulesConfig, error) {
-	req, err := c.newRequest(ctx, http.MethodPut, path.Join("environments", envID, "job-schedules"), body)
+	req, err := c.newRequest(ctx, http.MethodPatch, path.Join("agents", envID, "jobs", "schedules"), body)
 	if err != nil {
 		return nil, err
 	}
@@ -2387,9 +2472,9 @@ func (c *Client) UpdateJobSchedules(ctx context.Context, envID string, body Upda
 	return &out.Data, nil
 }
 
-// GetJobSchedules GET /environments/{id}/job-schedules
+// GetJobSchedules GET /agents/{id}/job-schedules
 func (c *Client) GetJobSchedules(ctx context.Context, envID string) (*JobSchedulesConfig, error) {
-	req, err := c.newRequest(ctx, http.MethodGet, path.Join("environments", envID, "job-schedules"), nil)
+	req, err := c.newRequest(ctx, http.MethodGet, path.Join("agents", envID, "jobs", "schedules"), nil)
 	if err != nil {
 		return nil, err
 	}
@@ -2495,7 +2580,7 @@ type gitOpsSyncEnvelope struct {
 }
 
 func (c *Client) CreateGitOpsSync(ctx context.Context, envID string, body GitOpsSyncCreateRequest) (*GitOpsSync, error) {
-	req, err := c.newRequest(ctx, http.MethodPost, path.Join("environments", envID, "gitops-syncs"), body)
+	req, err := c.newRequest(ctx, http.MethodPost, path.Join("agents", envID, "gitops", "syncs"), body)
 	if err != nil {
 		return nil, err
 	}
@@ -2508,7 +2593,7 @@ func (c *Client) CreateGitOpsSync(ctx context.Context, envID string, body GitOps
 }
 
 func (c *Client) GetGitOpsSync(ctx context.Context, envID, syncID string) (*GitOpsSync, error) {
-	req, err := c.newRequest(ctx, http.MethodGet, path.Join("environments", envID, "gitops-syncs", syncID), nil)
+	req, err := c.newRequest(ctx, http.MethodGet, path.Join("agents", envID, "gitops", "syncs", syncID), nil)
 	if err != nil {
 		return nil, err
 	}
@@ -2521,7 +2606,7 @@ func (c *Client) GetGitOpsSync(ctx context.Context, envID, syncID string) (*GitO
 }
 
 func (c *Client) UpdateGitOpsSync(ctx context.Context, envID, syncID string, body GitOpsSyncUpdateRequest) (*GitOpsSync, error) {
-	req, err := c.newRequest(ctx, http.MethodPut, path.Join("environments", envID, "gitops-syncs", syncID), body)
+	req, err := c.newRequest(ctx, http.MethodPatch, path.Join("agents", envID, "gitops", "syncs", syncID), body)
 	if err != nil {
 		return nil, err
 	}
@@ -2534,7 +2619,7 @@ func (c *Client) UpdateGitOpsSync(ctx context.Context, envID, syncID string, bod
 }
 
 func (c *Client) DeleteGitOpsSync(ctx context.Context, envID, syncID string) error {
-	req, err := c.newRequest(ctx, http.MethodDelete, path.Join("environments", envID, "gitops-syncs", syncID), nil)
+	req, err := c.newRequest(ctx, http.MethodDelete, path.Join("agents", envID, "gitops", "syncs", syncID), nil)
 	if err != nil {
 		return err
 	}
@@ -2555,7 +2640,7 @@ func (c *Client) ListGitOpsSyncs(ctx context.Context, envID string) ([]GitOpsSyn
 	start := 0
 	for {
 		u := *c.BaseURL
-		u.Path = path.Join(c.BaseURL.Path, "environments", envID, "gitops-syncs")
+		u.Path = path.Join(c.BaseURL.Path, "agents", envID, "gitops", "syncs")
 		q := u.Query()
 		q.Set("limit", strconv.Itoa(pageSize))
 		q.Set("start", strconv.Itoa(start))
@@ -2612,9 +2697,9 @@ type ignoredVulnerabilityListEnvelope struct {
 	Pagination Pagination             `json:"pagination"`
 }
 
-// IgnoreVulnerability POST /environments/{id}/vulnerabilities/ignore
+// IgnoreVulnerability POST /agents/{id}/vulnerabilities/ignore
 func (c *Client) IgnoreVulnerability(ctx context.Context, envID string, body VulnerabilityIgnorePayload) (*IgnoredVulnerability, error) {
-	req, err := c.newRequest(ctx, http.MethodPost, path.Join("environments", envID, "vulnerabilities", "ignore"), body)
+	req, err := c.newRequest(ctx, http.MethodPost, path.Join("agents", envID, "vulnerabilities", "ignored"), body)
 	if err != nil {
 		return nil, err
 	}
@@ -2625,9 +2710,9 @@ func (c *Client) IgnoreVulnerability(ctx context.Context, envID string, body Vul
 	return &env.Data, nil
 }
 
-// ListIgnoredVulnerabilities GET /environments/{id}/vulnerabilities/ignored
+// ListIgnoredVulnerabilities GET /agents/{id}/vulnerabilities/ignored
 func (c *Client) ListIgnoredVulnerabilities(ctx context.Context, envID string) ([]IgnoredVulnerability, error) {
-	req, err := c.newRequest(ctx, http.MethodGet, path.Join("environments", envID, "vulnerabilities", "ignored"), nil)
+	req, err := c.newRequest(ctx, http.MethodGet, path.Join("agents", envID, "vulnerabilities", "ignored"), nil)
 	if err != nil {
 		return nil, err
 	}
@@ -2638,9 +2723,9 @@ func (c *Client) ListIgnoredVulnerabilities(ctx context.Context, envID string) (
 	return env.Data, nil
 }
 
-// UnignoreVulnerability DELETE /environments/{id}/vulnerabilities/ignore/{ignoreId}
+// UnignoreVulnerability DELETE /agents/{id}/vulnerabilities/ignore/{ignoreId}
 func (c *Client) UnignoreVulnerability(ctx context.Context, envID, ignoreID string) error {
-	req, err := c.newRequest(ctx, http.MethodDelete, path.Join("environments", envID, "vulnerabilities", "ignore", ignoreID), nil)
+	req, err := c.newRequest(ctx, http.MethodDelete, path.Join("agents", envID, "vulnerabilities", "ignored", ignoreID), nil)
 	if err != nil {
 		return err
 	}
@@ -2649,9 +2734,10 @@ func (c *Client) UnignoreVulnerability(ctx context.Context, envID, ignoreID stri
 
 // -------- Additional Read Models (Data Sources) --------
 type DeploymentSnippet struct {
-	DockerRun     string                 `json:"dockerRun"`
-	DockerCompose string                 `json:"dockerCompose"`
-	MTLS          *DeploymentSnippetMTLS `json:"mtls,omitempty"`
+	DockerRun       string                 `json:"dockerRun"`
+	DockerCompose   string                 `json:"dockerCompose"`
+	EnrollmentToken string                 `json:"enrollmentToken"`
+	MTLS            *DeploymentSnippetMTLS `json:"mtls,omitempty"`
 }
 
 type DeploymentSnippetMTLS struct {
@@ -2675,8 +2761,10 @@ type deploymentSnippetEnvelope struct {
 	Data    DeploymentSnippet `json:"data"`
 }
 
+// GetDeploymentSnippet POST /agents/{id}/deployment. In v3 every call mints a
+// new single-use enrollment token that the returned snippets embed.
 func (c *Client) GetDeploymentSnippet(ctx context.Context, envID string) (*DeploymentSnippet, error) {
-	req, err := c.newRequest(ctx, http.MethodGet, path.Join("environments", envID, "deployment"), nil)
+	req, err := c.newRequest(ctx, http.MethodPost, path.Join("agents", envID, "deployment"), nil)
 	if err != nil {
 		return nil, err
 	}
@@ -2697,7 +2785,7 @@ type backupHasPathEnvelope struct {
 }
 
 func (c *Client) ListVolumeBackupFiles(ctx context.Context, envID, backupID string) ([]string, error) {
-	req, err := c.newRequest(ctx, http.MethodGet, path.Join("environments", envID, "volumes", "backups", backupID, "files"), nil)
+	req, err := c.newRequest(ctx, http.MethodGet, path.Join("agents", envID, "volumes", "backups", backupID, "files"), nil)
 	if err != nil {
 		return nil, err
 	}
@@ -2712,7 +2800,7 @@ func (c *Client) ListVolumeBackupFiles(ctx context.Context, envID, backupID stri
 }
 
 func (c *Client) VolumeBackupHasPath(ctx context.Context, envID, backupID, checkPath string) (bool, error) {
-	p := path.Join("environments", envID, "volumes", "backups", backupID, "has-path")
+	p := path.Join("agents", envID, "volumes", "backups", backupID, "files", "exists")
 	u := *c.BaseURL
 	u.Path = path.Join(c.BaseURL.Path, p)
 	q := u.Query()
@@ -2750,7 +2838,7 @@ type imageListEnvelope struct {
 }
 
 func (c *Client) ListImages(ctx context.Context, envID string) ([]ImageSummary, error) {
-	req, err := c.newRequest(ctx, http.MethodGet, path.Join("environments", envID, "images"), nil)
+	req, err := c.newRequest(ctx, http.MethodGet, path.Join("agents", envID, "images"), nil)
 	if err != nil {
 		return nil, err
 	}
@@ -2779,7 +2867,7 @@ type imageDetailEnvelope struct {
 }
 
 func (c *Client) GetImage(ctx context.Context, envID, imageID string) (*ImageDetail, error) {
-	req, err := c.newRequest(ctx, http.MethodGet, path.Join("environments", envID, "images", imageID), nil)
+	req, err := c.newRequest(ctx, http.MethodGet, path.Join("agents", envID, "images", imageID), nil)
 	if err != nil {
 		return nil, err
 	}
@@ -2809,7 +2897,7 @@ type JobsListResponse struct {
 }
 
 func (c *Client) ListJobs(ctx context.Context, envID string) (*JobsListResponse, error) {
-	req, err := c.newRequest(ctx, http.MethodGet, path.Join("environments", envID, "jobs"), nil)
+	req, err := c.newRequest(ctx, http.MethodGet, path.Join("agents", envID, "jobs"), nil)
 	if err != nil {
 		return nil, err
 	}
@@ -2827,18 +2915,6 @@ type Category struct {
 	Icon        string   `json:"icon"`
 	URL         string   `json:"url"`
 	Keywords    []string `json:"keywords"`
-}
-
-func (c *Client) GetCustomizeCategories(ctx context.Context) ([]Category, error) {
-	req, err := c.newRequest(ctx, http.MethodGet, "customize/categories", nil)
-	if err != nil {
-		return nil, err
-	}
-	var out []Category
-	if err := c.do(req, &out); err != nil {
-		return nil, err
-	}
-	return out, nil
 }
 
 func (c *Client) GetSettingsCategories(ctx context.Context) ([]Category, error) {
@@ -2866,7 +2942,7 @@ type gitBranchesEnvelope struct {
 }
 
 func (c *Client) ListGitRepositoryBranches(ctx context.Context, repoID string) ([]GitBranch, error) {
-	req, err := c.newRequest(ctx, http.MethodGet, path.Join("customize", "git-repositories", repoID, "branches"), nil)
+	req, err := c.newRequest(ctx, http.MethodGet, path.Join("gitops", "repositories", repoID, "branches"), nil)
 	if err != nil {
 		return nil, err
 	}
@@ -2895,8 +2971,25 @@ type gitBrowseEnvelope struct {
 	Data    GitBrowseResponse `json:"data"`
 }
 
+// BrowseGitRepositoryFiles GET /gitops/repositories/{id}/files. v3 requires a
+// branch; when none is given the repository's default branch is used.
 func (c *Client) BrowseGitRepositoryFiles(ctx context.Context, repoID, branch, browsePath string) (*GitBrowseResponse, error) {
-	p := path.Join("customize", "git-repositories", repoID, "files")
+	if branch == "" {
+		branches, err := c.ListGitRepositoryBranches(ctx, repoID)
+		if err != nil {
+			return nil, fmt.Errorf("resolving default branch: %w", err)
+		}
+		for _, b := range branches {
+			if b.IsDefault {
+				branch = b.Name
+				break
+			}
+		}
+		if branch == "" && len(branches) > 0 {
+			branch = branches[0].Name
+		}
+	}
+	p := path.Join("gitops", "repositories", repoID, "files")
 	u := *c.BaseURL
 	u.Path = path.Join(c.BaseURL.Path, p)
 	q := u.Query()
@@ -2942,13 +3035,21 @@ func (c *Client) GetDefaultTemplates(ctx context.Context) (*DefaultTemplatesResp
 	return &out.Data, nil
 }
 
+// TemplateVariable is a global variable (components/schemas/GlobalVariable).
+// Secret values are redacted by the API.
 type TemplateVariable struct {
-	Key   string `json:"key"`
-	Value string `json:"value"`
+	ID                   string   `json:"id,omitempty"`
+	Key                  string   `json:"key"`
+	Value                string   `json:"value"`
+	IsSecret             bool     `json:"isSecret,omitempty"`
+	AllEnvironments      bool     `json:"allEnvironments,omitempty"`
+	EnvironmentIDs       []string `json:"environmentIds,omitempty"`
+	InjectIntoContainers bool     `json:"injectIntoContainers,omitempty"`
 }
 
+// GetTemplateVariables GET /variables (global variables, v3).
 func (c *Client) GetTemplateVariables(ctx context.Context) ([]TemplateVariable, error) {
-	req, err := c.newRequest(ctx, http.MethodGet, "templates/variables", nil)
+	req, err := c.newRequest(ctx, http.MethodGet, "variables", nil)
 	if err != nil {
 		return nil, err
 	}
@@ -2962,17 +3063,14 @@ func (c *Client) GetTemplateVariables(ctx context.Context) ([]TemplateVariable, 
 	return out.Data, nil
 }
 
+// GetPublicSettings GET /agents/{id}/settings/public
 func (c *Client) GetPublicSettings(ctx context.Context, envID string) (map[string]string, error) {
-	req, err := c.newRequest(ctx, http.MethodGet, path.Join("environments", envID, "settings", "public"), nil)
+	snap, err := c.getSettingsSnapshot(ctx, path.Join("agents", envID, "settings", "public"))
 	if err != nil {
 		return nil, err
 	}
-	var arr []SettingsPublicSetting
-	if err := c.do(req, &arr); err != nil {
-		return nil, err
-	}
-	res := make(map[string]string, len(arr))
-	for _, s := range arr {
+	res := make(map[string]string, len(snap.Settings))
+	for _, s := range snap.Settings {
 		res[s.Key] = s.Value
 	}
 	return res, nil

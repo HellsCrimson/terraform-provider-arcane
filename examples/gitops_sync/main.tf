@@ -30,10 +30,8 @@ variable "github_token" {
 
 # Create an environment
 resource "arcane_environment" "production" {
-  name        = "Production"
-  api_url     = "http://agent-host:8080"
-  enabled     = true
-  use_api_key = true
+  name    = "Production"
+  enabled = true
 }
 
 # Create a git repository

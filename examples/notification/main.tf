@@ -1,5 +1,5 @@
 terraform {
-  required_version = ">= 1.4.0"
+  required_version = ">= 1.11.0"
   required_providers {
     arcane = {
       source  = "hellscrimson/arcane"
@@ -21,14 +21,9 @@ variable "arcane_endpoint" {
   type    = string
   default = "http://localhost:3552/api"
 }
-variable "environment_id" {
-  type = string
-}
-
 resource "arcane_notification" "example" {
-  environment_id = var.environment_id
-  provider_name  = "discord"
-  enabled        = true
+  provider_name = "discord"
+  enabled       = true
   config = {
     avatarUrl = ""
     events = {

@@ -41,17 +41,13 @@ func (r *JobSchedulesResource) Schema(_ context.Context, _ resource.SchemaReques
 				Required:    true,
 				Description: "Environment ID",
 			},
-			"analytics_heartbeat_interval": resourceschema.StringAttribute{
-				Optional:    true,
-				Description: "Cron expression for analytics heartbeat (e.g., '0 */5 * * * *' for every 5 minutes)",
-			},
 			"auto_heal_interval": resourceschema.StringAttribute{
 				Optional:    true,
 				Description: "Cron expression for auto-heal checks",
 			},
 			"auto_update_interval": resourceschema.StringAttribute{
 				Optional:    true,
-				Description: "Cron expression for auto-update checks (e.g., '0 0 2 * * *' for daily at 2 AM)",
+				Description: "Cron expression for auto-update checks (e.g., '0 2 * * *' for daily at 2 AM)",
 			},
 			"docker_client_refresh_interval": resourceschema.StringAttribute{
 				Optional:    true,
@@ -59,27 +55,27 @@ func (r *JobSchedulesResource) Schema(_ context.Context, _ resource.SchemaReques
 			},
 			"environment_health_interval": resourceschema.StringAttribute{
 				Optional:    true,
-				Description: "Cron expression for environment health checks (e.g., '0 */1 * * * *' for every minute)",
+				Description: "Cron expression for environment health checks (e.g., '*/1 * * * *' for every minute)",
 			},
 			"event_cleanup_interval": resourceschema.StringAttribute{
 				Optional:    true,
-				Description: "Cron expression for event log cleanup (e.g., '0 0 3 * * *' for daily at 3 AM)",
+				Description: "Cron expression for event log cleanup (e.g., '0 3 * * *' for daily at 3 AM)",
 			},
 			"expired_sessions_cleanup_interval": resourceschema.StringAttribute{
 				Optional:    true,
 				Description: "Cron expression for expired session cleanup",
 			},
-			"gitops_sync_interval": resourceschema.StringAttribute{
+			"image_auto_patch_interval": resourceschema.StringAttribute{
 				Optional:    true,
-				Description: "Cron expression for GitOps sync checks (e.g., '0 */10 * * * *' for every 10 minutes)",
+				Description: "Cron expression for automatic image patching",
 			},
 			"polling_interval": resourceschema.StringAttribute{
 				Optional:    true,
-				Description: "Cron expression for general polling operations (e.g., '0 */5 * * * *' for every 5 minutes)",
+				Description: "Cron expression for general polling operations (e.g., '*/5 * * * *' for every 5 minutes)",
 			},
 			"scheduled_prune_interval": resourceschema.StringAttribute{
 				Optional:    true,
-				Description: "Cron expression for scheduled pruning of Docker resources (e.g., '0 0 1 * * 0' for weekly on Sunday at 1 AM)",
+				Description: "Cron expression for scheduled pruning of Docker resources (e.g., '0 1 * * 0' for weekly on Sunday at 1 AM)",
 			},
 			"vulnerability_scan_interval": resourceschema.StringAttribute{
 				Optional:    true,
@@ -100,14 +96,13 @@ func (r *JobSchedulesResource) Configure(_ context.Context, req resource.Configu
 type jobSchedulesModel struct {
 	ID                             types.String `tfsdk:"id"`
 	EnvironmentID                  types.String `tfsdk:"environment_id"`
-	AnalyticsHeartbeatInterval     types.String `tfsdk:"analytics_heartbeat_interval"`
 	AutoHealInterval               types.String `tfsdk:"auto_heal_interval"`
 	AutoUpdateInterval             types.String `tfsdk:"auto_update_interval"`
 	DockerClientRefreshInterval    types.String `tfsdk:"docker_client_refresh_interval"`
 	EnvironmentHealthInterval      types.String `tfsdk:"environment_health_interval"`
 	EventCleanupInterval           types.String `tfsdk:"event_cleanup_interval"`
 	ExpiredSessionsCleanupInterval types.String `tfsdk:"expired_sessions_cleanup_interval"`
-	GitOpsSyncInterval             types.String `tfsdk:"gitops_sync_interval"`
+	ImageAutoPatchInterval         types.String `tfsdk:"image_auto_patch_interval"`
 	PollingInterval                types.String `tfsdk:"polling_interval"`
 	ScheduledPruneInterval         types.String `tfsdk:"scheduled_prune_interval"`
 	VulnerabilityScanInterval      types.String `tfsdk:"vulnerability_scan_interval"`
@@ -208,10 +203,6 @@ func (r *JobSchedulesResource) ImportState(ctx context.Context, req resource.Imp
 func buildJobSchedulesRequest(m jobSchedulesModel) sdkclient.UpdateJobSchedulesRequest {
 	req := sdkclient.UpdateJobSchedulesRequest{}
 
-	if !m.AnalyticsHeartbeatInterval.IsNull() && !m.AnalyticsHeartbeatInterval.IsUnknown() {
-		v := m.AnalyticsHeartbeatInterval.ValueString()
-		req.AnalyticsHeartbeatInterval = &v
-	}
 	if !m.AutoHealInterval.IsNull() && !m.AutoHealInterval.IsUnknown() {
 		v := m.AutoHealInterval.ValueString()
 		req.AutoHealInterval = &v
@@ -236,9 +227,9 @@ func buildJobSchedulesRequest(m jobSchedulesModel) sdkclient.UpdateJobSchedulesR
 		v := m.ExpiredSessionsCleanupInterval.ValueString()
 		req.ExpiredSessionsCleanupInterval = &v
 	}
-	if !m.GitOpsSyncInterval.IsNull() && !m.GitOpsSyncInterval.IsUnknown() {
-		v := m.GitOpsSyncInterval.ValueString()
-		req.GitOpsSyncInterval = &v
+	if !m.ImageAutoPatchInterval.IsNull() && !m.ImageAutoPatchInterval.IsUnknown() {
+		v := m.ImageAutoPatchInterval.ValueString()
+		req.ImageAutoPatchInterval = &v
 	}
 	if !m.PollingInterval.IsNull() && !m.PollingInterval.IsUnknown() {
 		v := m.PollingInterval.ValueString()
@@ -259,9 +250,6 @@ func buildJobSchedulesRequest(m jobSchedulesModel) sdkclient.UpdateJobSchedulesR
 func applyJobSchedulesConfig(m *jobSchedulesModel, config *sdkclient.JobSchedulesConfig) {
 	// Only update if value was set in plan, otherwise leave as-is
 	// This allows partial updates
-	if !m.AnalyticsHeartbeatInterval.IsNull() {
-		m.AnalyticsHeartbeatInterval = types.StringValue(config.AnalyticsHeartbeatInterval)
-	}
 	if !m.AutoHealInterval.IsNull() {
 		m.AutoHealInterval = types.StringValue(config.AutoHealInterval)
 	}
@@ -280,8 +268,8 @@ func applyJobSchedulesConfig(m *jobSchedulesModel, config *sdkclient.JobSchedule
 	if !m.ExpiredSessionsCleanupInterval.IsNull() {
 		m.ExpiredSessionsCleanupInterval = types.StringValue(config.ExpiredSessionsCleanupInterval)
 	}
-	if !m.GitOpsSyncInterval.IsNull() {
-		m.GitOpsSyncInterval = types.StringValue(config.GitOpsSyncInterval)
+	if !m.ImageAutoPatchInterval.IsNull() {
+		m.ImageAutoPatchInterval = types.StringValue(config.ImageAutoPatchInterval)
 	}
 	if !m.PollingInterval.IsNull() {
 		m.PollingInterval = types.StringValue(config.PollingInterval)

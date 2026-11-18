@@ -83,12 +83,11 @@ func TestAddWriteOnlySettings(t *testing.T) {
 
 // TestRefreshSettingsFromAPI pins how Read picks up drift: a configured
 // setting takes the value Arcane reports, while unset settings, keys the API
-// does not return and secrets keep their state value.
+// does not return keep their state value.
 func TestRefreshSettingsFromAPI(t *testing.T) {
 	state := settingsModel{
 		AuthLocalEnabled: types.StringValue("false"),
 		OidcEnabled:      types.StringValue("true"),
-		OidcClientSecret: types.StringValue("secret"),
 	}
 	applied := map[string]string{
 		"authLocalEnabled": "true",
@@ -105,9 +104,6 @@ func TestRefreshSettingsFromAPI(t *testing.T) {
 	}
 	if !state.PollingEnabled.IsNull() {
 		t.Errorf("unset polling_enabled was refreshed to %q, want null", state.PollingEnabled.ValueString())
-	}
-	if got := state.OidcClientSecret.ValueString(); got != "secret" {
-		t.Errorf("oidc_client_secret: got %q, want state value %q", got, "secret")
 	}
 }
 

@@ -38,7 +38,7 @@ func (f *fakeGitOpsSyncPreDeploy) server(t *testing.T) *httptest.Server {
 
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		extra := ""
-		if r.Method == http.MethodPut {
+		if r.Method == http.MethodPatch {
 			raw, err := io.ReadAll(r.Body)
 			if err != nil {
 				t.Errorf("reading sync update body: %s", err)
@@ -100,7 +100,8 @@ func TestGitOpsSyncUpdate_PreDeployFieldsSent(t *testing.T) {
 	plan := renameGitOpsSyncModel("old")
 	plan.PreDeployScriptPath = types.StringValue("pre-deploy.sh")
 	plan.PreDeployRunnerImage = types.StringValue("ghcr.io/getsops/sops:v3.11.0")
-	plan.PreDeployEnv = types.StringValue("SOPS_AGE_KEY_FILE=/run/secrets/age.key")
+	plan.PreDeployEnvWO = types.StringValue("SOPS_AGE_KEY_FILE=/run/secrets/age.key")
+	plan.PreDeployEnvWOVersion = types.Int64Value(1)
 	plan.PreDeployExtraMounts = types.StringValue("/opt/arcane/secrets/age.key:/run/secrets/age.key:ro")
 	plan.PreDeployTimeoutSec = types.Int64Value(120)
 	plan.PreDeployNetworkMode = types.StringValue("bridge")
@@ -163,7 +164,7 @@ func TestGitOpsSyncUpdate_PreDeployServerDefaultsStayNull(t *testing.T) {
 	if !got.PreDeployTimeoutSec.IsNull() {
 		t.Errorf("pre_deploy_timeout_sec picked up the server default: %v", got.PreDeployTimeoutSec)
 	}
-	if !got.PreDeployScriptPath.IsNull() || !got.PreDeployRunnerImage.IsNull() || !got.PreDeployEnv.IsNull() || !got.PreDeployExtraMounts.IsNull() {
+	if !got.PreDeployScriptPath.IsNull() || !got.PreDeployRunnerImage.IsNull() || !got.PreDeployExtraMounts.IsNull() {
 		t.Error("a pre-deploy attribute the plan never set became non-null")
 	}
 }
@@ -175,7 +176,8 @@ func TestGitOpsSyncUpdate_PreDeployRemovalClears(t *testing.T) {
 	state := renameGitOpsSyncModel("old")
 	state.PreDeployScriptPath = types.StringValue("pre-deploy.sh")
 	state.PreDeployRunnerImage = types.StringValue("alpine:3")
-	state.PreDeployEnv = types.StringValue("A=b")
+	// pre_deploy_env_wo removed from the configuration with its version.
+	state.PreDeployEnvWOVersion = types.Int64Value(1)
 	state.PreDeployExtraMounts = types.StringValue("/a:/b:ro")
 	state.PreDeployNetworkMode = types.StringValue("bridge")
 
@@ -317,7 +319,6 @@ func TestGitOpsSyncUpdate_PreDeployUnknownIsNotRemoval(t *testing.T) {
 	state := renameGitOpsSyncModel("old")
 	state.PreDeployScriptPath = types.StringValue("pre-deploy.sh")
 	state.PreDeployRunnerImage = types.StringValue("alpine:3")
-	state.PreDeployEnv = types.StringValue("A=b")
 	state.PreDeployNetworkMode = types.StringValue("bridge")
 
 	plan := state
@@ -389,8 +390,8 @@ func TestGitOpsSyncUpdate_PreDeployEnvWO(t *testing.T) {
 		if diags := resp.State.Get(context.Background(), &got); diags.HasError() {
 			t.Fatalf("get state: %v", diags)
 		}
-		if !got.PreDeployEnv.IsNull() || !got.PreDeployEnvWO.IsNull() {
-			t.Errorf("secret leaked into state: pre_deploy_env=%v pre_deploy_env_wo=%v", got.PreDeployEnv, got.PreDeployEnvWO)
+		if !got.PreDeployEnvWO.IsNull() {
+			t.Errorf("secret leaked into state: pre_deploy_env_wo=%v", got.PreDeployEnvWO)
 		}
 		if got.PreDeployEnvWOVersion.ValueInt64() != 1 {
 			t.Errorf("pre_deploy_env_wo_version in state: got %v, want 1", got.PreDeployEnvWOVersion)
@@ -426,25 +427,4 @@ func TestGitOpsSyncUpdate_PreDeployEnvWO(t *testing.T) {
 		}
 	})
 
-	t.Run("moved from pre_deploy_env", func(t *testing.T) {
-		state := renameGitOpsSyncModel("old")
-		state.PreDeployEnv = types.StringValue("A=stored")
-		config := renameGitOpsSyncModel("old")
-		config.PreDeployEnvWO = types.StringValue("A=stored")
-		config.PreDeployEnvWOVersion = types.Int64Value(1)
-
-		fake := &fakeGitOpsSyncPreDeploy{}
-		resp := updateGitOpsSyncPreDeploy(t, fake, config, state)
-
-		if got := fake.lastPut["preDeployEnv"]; got != "A=stored" {
-			t.Errorf("update body preDeployEnv: got %v, want the pre_deploy_env_wo value rather than a clear", got)
-		}
-		var got gitOpsSyncModel
-		if diags := resp.State.Get(context.Background(), &got); diags.HasError() {
-			t.Fatalf("get state: %v", diags)
-		}
-		if !got.PreDeployEnv.IsNull() {
-			t.Errorf("pre_deploy_env still in state after the move: %v", got.PreDeployEnv)
-		}
-	})
 }

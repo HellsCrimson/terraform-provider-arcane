@@ -117,7 +117,7 @@ func (r *VolumeBackupResource) Read(ctx context.Context, req resource.ReadReques
 
 	backups, err := r.client.ListVolumeBackups(ctx, state.EnvironmentID.ValueString(), state.VolumeName.ValueString())
 	if err != nil {
-		if strings.Contains(strings.ToLower(err.Error()), "404") {
+		if r.client.IsResourceGone(err) {
 			resp.State.RemoveResource(ctx)
 			return
 		}
@@ -167,7 +167,7 @@ func (r *VolumeBackupResource) Delete(ctx context.Context, req resource.DeleteRe
 	}
 
 	if err := r.client.DeleteVolumeBackup(ctx, state.EnvironmentID.ValueString(), state.ID.ValueString()); err != nil {
-		if strings.Contains(strings.ToLower(err.Error()), "404") {
+		if r.client.IsResourceGone(err) {
 			return
 		}
 		resp.Diagnostics.AddError("delete volume backup failed", err.Error())

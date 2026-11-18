@@ -14,7 +14,6 @@ import (
 	resourceschema "github.com/hashicorp/terraform-plugin-framework/resource/schema"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema/planmodifier"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema/stringplanmodifier"
-	"github.com/hashicorp/terraform-plugin-framework/schema/validator"
 	"github.com/hashicorp/terraform-plugin-framework/types"
 	"github.com/hashicorp/terraform-plugin-log/tflog"
 )
@@ -49,18 +48,11 @@ func (r *UserResource) Schema(_ context.Context, _ resource.SchemaRequest, resp 
 					stringplanmodifier.RequiresReplace(),
 				},
 			},
-			"password": resourceschema.StringAttribute{
-				Optional:           true,
-				Sensitive:          true,
-				Description:        "Password for the user. Exactly one of `password` or `password_wo` is required.",
-				DeprecationMessage: writeOnlyDeprecation("password"),
-				Validators: []validator.String{
-					stringvalidator.LengthAtLeast(8),
-					stringvalidator.ExactlyOneOf(path.MatchRoot("password_wo")),
-				},
-			},
-			"password_wo": writeOnlyAttribute("password", "Password for the user (at least 8 characters). Exactly one of `password` or `password_wo` is required.",
-				stringvalidator.LengthAtLeast(8)),
+			"password_wo": func() resourceschema.StringAttribute {
+				a := writeOnlyAttribute("password", "Password for the user (at least 8 characters).", stringvalidator.LengthAtLeast(8))
+				a.Optional, a.Required = false, true
+				return a
+			}(),
 			"password_wo_version": writeOnlyVersionAttribute("password"),
 			"display_name": resourceschema.StringAttribute{
 				Optional:    true,
@@ -120,7 +112,6 @@ func (r *UserResource) Configure(_ context.Context, req resource.ConfigureReques
 type userModel struct {
 	ID                types.String `tfsdk:"id"`
 	Username          types.String `tfsdk:"username"`
-	Password          types.String `tfsdk:"password"`
 	PasswordWO        types.String `tfsdk:"password_wo"`
 	PasswordWOVersion types.Int64  `tfsdk:"password_wo_version"`
 	DisplayName       types.String `tfsdk:"display_name"`
@@ -152,11 +143,8 @@ func (r *UserResource) Create(ctx context.Context, req resource.CreateRequest, r
 
 	body := sdkclient.CreateUserRequest{
 		Username: plan.Username.ValueString(),
-		Password: plan.Password.ValueString(),
-	}
-	// Write-only: the plan holds null, the value is only in the configuration.
-	if isSetString(config.PasswordWO) {
-		body.Password = config.PasswordWO.ValueString()
+		// Write-only: the plan holds null, the value is only in the configuration.
+		Password: config.PasswordWO.ValueString(),
 	}
 	if !plan.DisplayName.IsNull() && !plan.DisplayName.IsUnknown() {
 		v := plan.DisplayName.ValueString()
@@ -184,8 +172,6 @@ func (r *UserResource) Create(ctx context.Context, req resource.CreateRequest, r
 		CreatedAt: stringOrNull(u.CreatedAt),
 		UpdatedAt: stringOrNull(u.UpdatedAt),
 	}
-	// Keep provided password in state to avoid sensitive inconsistency after apply
-	state.Password = plan.Password
 	state.PasswordWOVersion = plan.PasswordWOVersion
 	if !plan.DisplayName.IsNull() && !plan.DisplayName.IsUnknown() && u.Display != nil {
 		state.DisplayName = types.StringValue(*u.Display)
@@ -292,10 +278,6 @@ func (r *UserResource) Update(ctx context.Context, req resource.UpdateRequest, r
 		v := plan.Locale.ValueString()
 		body.Locale = &v
 	}
-	if !plan.Password.IsNull() && !plan.Password.IsUnknown() && plan.Password.ValueString() != "" {
-		v := plan.Password.ValueString()
-		body.Password = &v
-	}
 	// The write-only password is only re-sent when its version changes.
 	if writeOnlySend(config.PasswordWO, plan.PasswordWOVersion, state.PasswordWOVersion) {
 		v := config.PasswordWO.ValueString()
@@ -347,9 +329,6 @@ func (r *UserResource) Update(ctx context.Context, req resource.UpdateRequest, r
 	} else {
 		state.RoleAssignments = types.SetNull(roleAssignmentObjectType)
 	}
-	// Persist unconditionally: moving to password_wo plans password as null,
-	// and keeping the old value would fail the apply as an inconsistent result.
-	state.Password = plan.Password
 	state.PasswordWOVersion = plan.PasswordWOVersion
 
 	resp.Diagnostics.Append(resp.State.Set(ctx, &state)...)

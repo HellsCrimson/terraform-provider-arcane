@@ -21,10 +21,9 @@ output "environment_status" {
 ## Attributes Reference
 
 - `name` (String) — environment display name.
-- `api_url` (String) — agent API URL.
+- `api_url` (String) — environment URL (`agent://<name>` for agent environments).
 - `status` (String) — environment status.
 - `enabled` (Bool) — whether the environment is enabled.
-- `api_key` (String, Sensitive) — environment API key (if available).
-- `edge_agent_instance`, `edge_security_mode`, `edge_session_id` (String)
+- `edge_agent_instance`, `edge_security_mode`, `edge_session_id` (String) — agent details.
 - `edge_capabilities` (List of String)
-- `edge_mtls_certificate_json` (String) — edge mTLS certificate metadata as JSON.
+- `edge_mtls_certificate_json` (String) — agent mTLS certificate metadata as JSON.

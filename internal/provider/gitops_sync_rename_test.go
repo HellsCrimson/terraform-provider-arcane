@@ -32,16 +32,16 @@ func (f *fakeArcaneGitOpsSync) server(t *testing.T) *httptest.Server {
 
 	projectHandler := f.project.handler(t)
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if !strings.Contains(r.URL.Path, "/gitops-syncs/") {
+		if !strings.Contains(r.URL.Path, "/gitops/syncs/") {
 			projectHandler(w, r)
 			return
 		}
 
 		f.project.mu.Lock()
 		defer f.project.mu.Unlock()
-		f.project.calls = append(f.project.calls, r.Method+" /gitops-syncs/s1")
+		f.project.calls = append(f.project.calls, r.Method+" /gitops/syncs/s1")
 
-		if r.Method == http.MethodPut {
+		if r.Method == http.MethodPatch {
 			var body struct {
 				ProjectName *string `json:"projectName"`
 			}
@@ -82,7 +82,6 @@ func renameGitOpsSyncModel(projectName string) gitOpsSyncModel {
 		TargetType:            types.StringNull(),
 		PreDeployScriptPath:   types.StringNull(),
 		PreDeployRunnerImage:  types.StringNull(),
-		PreDeployEnv:          types.StringNull(),
 		PreDeployEnvWO:        types.StringNull(),
 		PreDeployEnvWOVersion: types.Int64Null(),
 		PreDeployExtraMounts:  types.StringNull(),
@@ -271,7 +270,7 @@ func TestGitOpsSyncUpdate_StopBeforeRenameRenamesProject(t *testing.T) {
 		t.Fatalf("update failed: %v", resp.Diagnostics)
 	}
 
-	want := []string{"PUT /gitops-syncs/s1", "GET ", "POST /down", "PUT ", "POST /up"}
+	want := []string{"PATCH /gitops/syncs/s1", "GET ", "POST ?action=down", "PATCH ", "POST /deploy?action=up"}
 	if got := fake.project.recorded(); !equalStrings(got, want) {
 		t.Errorf("unexpected API calls:\n got: %v\nwant: %v", got, want)
 	}
@@ -323,7 +322,7 @@ func TestGitOpsSyncUpdate_AlreadyStoppedRenamesInPlace(t *testing.T) {
 		t.Fatalf("update failed: %v", resp.Diagnostics)
 	}
 
-	want := []string{"PUT /gitops-syncs/s1", "GET ", "PUT "}
+	want := []string{"PATCH /gitops/syncs/s1", "GET ", "PATCH "}
 	if got := fake.project.recorded(); !equalStrings(got, want) {
 		t.Errorf("unexpected API calls:\n got: %v\nwant: %v", got, want)
 	}

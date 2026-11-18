@@ -175,7 +175,6 @@ func (p *ArcaneProvider) DataSources(_ context.Context) []func() datasource.Data
 
 		// Special cases
 		NewSettingsDataSource,
-		NewCustomizeCategoriesDataSource,
 		NewGitRepositoryBranchesDataSource,
 		NewGitRepositoryFilesDataSource,
 		NewSettingsCategoriesDataSource,
