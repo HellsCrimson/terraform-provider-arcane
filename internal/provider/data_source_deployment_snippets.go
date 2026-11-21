@@ -21,15 +21,20 @@ func (d *DeploymentSnippetDataSource) Metadata(_ context.Context, req datasource
 }
 
 func (d *DeploymentSnippetDataSource) Schema(_ context.Context, _ datasource.SchemaRequest, resp *datasource.SchemaResponse) {
-	resp.Schema = schema.Schema{Attributes: map[string]schema.Attribute{
-		"environment_id":      schema.StringAttribute{Required: true},
-		"docker_run":          schema.StringAttribute{Computed: true},
-		"docker_compose":      schema.StringAttribute{Computed: true},
-		"mtls_docker_run":     schema.StringAttribute{Computed: true},
-		"mtls_docker_compose": schema.StringAttribute{Computed: true},
-		"mtls_host_dir_hint":  schema.StringAttribute{Computed: true},
-		"mtls_files_json":     schema.StringAttribute{Computed: true, Sensitive: true},
-	}}
+	resp.Schema = schema.Schema{
+		Description: "Agent deployment snippets for an environment. Since Arcane v3 every read mints a new single-use " +
+			"enrollment token (embedded in the snippets), so each plan/refresh produces a fresh token. Prefer the " +
+			"enrollment_token of the arcane_environment resource for a stable value.",
+		Attributes: map[string]schema.Attribute{
+			"environment_id":      schema.StringAttribute{Required: true},
+			"docker_run":          schema.StringAttribute{Computed: true, Sensitive: true, Description: "docker run command (embeds the enrollment token)"},
+			"docker_compose":      schema.StringAttribute{Computed: true, Sensitive: true, Description: "Compose snippet (embeds the enrollment token)"},
+			"enrollment_token":    schema.StringAttribute{Computed: true, Sensitive: true, Description: "Single-use enrollment token minted by this read"},
+			"mtls_docker_run":     schema.StringAttribute{Computed: true},
+			"mtls_docker_compose": schema.StringAttribute{Computed: true},
+			"mtls_host_dir_hint":  schema.StringAttribute{Computed: true},
+			"mtls_files_json":     schema.StringAttribute{Computed: true, Sensitive: true},
+		}}
 }
 
 func (d *DeploymentSnippetDataSource) Configure(_ context.Context, req datasource.ConfigureRequest, resp *datasource.ConfigureResponse) {
@@ -40,6 +45,7 @@ type deploymentSnippetModel struct {
 	EnvironmentID     types.String `tfsdk:"environment_id"`
 	DockerRun         types.String `tfsdk:"docker_run"`
 	DockerCompose     types.String `tfsdk:"docker_compose"`
+	EnrollmentToken   types.String `tfsdk:"enrollment_token"`
 	MTLSDockerRun     types.String `tfsdk:"mtls_docker_run"`
 	MTLSDockerCompose types.String `tfsdk:"mtls_docker_compose"`
 	MTLSHostDirHint   types.String `tfsdk:"mtls_host_dir_hint"`
@@ -59,6 +65,7 @@ func (d *DeploymentSnippetDataSource) Read(ctx context.Context, req datasource.R
 	}
 	state.DockerRun = types.StringValue(out.DockerRun)
 	state.DockerCompose = types.StringValue(out.DockerCompose)
+	state.EnrollmentToken = nullableString(out.EnrollmentToken)
 	if out.MTLS != nil {
 		state.MTLSDockerRun = types.StringValue(out.MTLS.DockerRun)
 		state.MTLSDockerCompose = types.StringValue(out.MTLS.DockerCompose)

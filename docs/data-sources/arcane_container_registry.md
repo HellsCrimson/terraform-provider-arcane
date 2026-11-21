@@ -21,6 +21,8 @@ output "registry_url" {
 ## Attributes Reference
 
 - `url` (String) — registry URL.
+- `host` (String) — registry host derived from the URL.
+- `namespace` (String) — namespace (path after the host) derived from the URL.
 - `username` (String) — registry username.
 - `description` (String) — registry description.
 - `insecure` (Bool) — whether the registry uses insecure connections.

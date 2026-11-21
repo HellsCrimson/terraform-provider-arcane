@@ -7,16 +7,19 @@ import (
 
 	"terraform-provider-arcane/internal/sdkclient"
 
+	"github.com/hashicorp/terraform-plugin-framework-validators/stringvalidator"
 	"github.com/hashicorp/terraform-plugin-framework/path"
 	"github.com/hashicorp/terraform-plugin-framework/resource"
 	resourceschema "github.com/hashicorp/terraform-plugin-framework/resource/schema"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema/planmodifier"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema/stringplanmodifier"
+	"github.com/hashicorp/terraform-plugin-framework/schema/validator"
 	"github.com/hashicorp/terraform-plugin-framework/types"
 )
 
 var _ resource.Resource = &GitOpsSyncResource{}
 var _ resource.ResourceWithImportState = &GitOpsSyncResource{}
+var _ resource.ResourceWithValidateConfig = &GitOpsSyncResource{}
 var _ resource.ResourceWithModifyPlan = &GitOpsSyncResource{}
 
 type GitOpsSyncResource struct {
@@ -61,8 +64,37 @@ func (r *GitOpsSyncResource) Schema(_ context.Context, _ resource.SchemaRequest,
 				Description: "Git branch to sync",
 			},
 			"compose_path": resourceschema.StringAttribute{
-				Required:    true,
-				Description: "Path to docker-compose file in the repository",
+				Optional:    true,
+				Computed:    true,
+				Description: "Path to the compose file in the repository. Required with mode = \"deploy\"; in the backup modes Arcane derives it from backup_directory and it must not be set.",
+			},
+			"mode": resourceschema.StringAttribute{
+				Optional: true,
+				Computed: true,
+				Description: "Sync mode: \"deploy\" (default) deploys a project from the repository; \"backup\" pushes an existing project (project_id) to backup_directory; " +
+					"\"bidirectional\" does both. Changing it forces a new resource.",
+				Validators: []validator.String{stringvalidator.OneOf(gitOpsModes...)},
+				PlanModifiers: []planmodifier.String{
+					stringplanmodifier.UseStateForUnknown(),
+					stringplanmodifier.RequiresReplace(),
+				},
+			},
+			"backup_directory": resourceschema.StringAttribute{
+				Optional:    true,
+				Description: "Repository directory the project is pushed to. Required with the backup modes.",
+			},
+			"backup_paths": resourceschema.SetAttribute{
+				Optional:    true,
+				ElementType: types.StringType,
+				Description: "Project files to back up (paths relative to the project directory). Unset backs up the whole project.",
+			},
+			"backup_on_save": resourceschema.BoolAttribute{
+				Optional:    true,
+				Description: "Push a backup each time the project is saved in Arcane (server default true).",
+			},
+			"compose_override_path": resourceschema.StringAttribute{
+				Optional:    true,
+				Description: "Repository path of a compose override file. Unset, Arcane looks for one beside the compose file.",
 			},
 			"project_name": resourceschema.StringAttribute{
 				Optional:    true,
@@ -133,12 +165,6 @@ func (r *GitOpsSyncResource) Schema(_ context.Context, _ resource.SchemaRequest,
 				Optional:    true,
 				Description: "Container image used to run the pre-deploy script. Required by the API whenever pre_deploy_script_path is set",
 			},
-			"pre_deploy_env": resourceschema.StringAttribute{
-				Optional:           true,
-				Sensitive:          true,
-				Description:        "Environment variables exposed to the pre-deploy script, one KEY=VALUE entry per line (.env file format). Marked sensitive because it commonly carries key material (e.g. SOPS_AGE_KEY)",
-				DeprecationMessage: writeOnlyDeprecation("pre_deploy_env"),
-			},
 			"pre_deploy_env_wo": writeOnlyAttribute("pre_deploy_env", "Environment variables exposed to the pre-deploy script, one KEY=VALUE entry per line (.env file format). "+
 				"Changing `pre_deploy_env_wo_version` while this is unset clears it on the server."),
 			"pre_deploy_env_wo_version": writeOnlyVersionAttribute("pre_deploy_env"),
@@ -156,10 +182,33 @@ func (r *GitOpsSyncResource) Schema(_ context.Context, _ resource.SchemaRequest,
 				Description: "Docker network mode for the pre-deploy runner container: \"none\" (server default), \"bridge\", \"host\", or a Docker network name",
 			},
 
-			// Computed fields
 			"project_id": resourceschema.StringAttribute{
+				Optional: true,
+				Computed: true,
+				Description: "Project bound to the sync. A deploy sync creates it (computed); the backup modes need an existing project not deployed from Git. " +
+					"Changing a configured value forces a new resource.",
+				PlanModifiers: []planmodifier.String{
+					stringplanmodifier.UseStateForUnknown(),
+					stringplanmodifier.RequiresReplaceIfConfigured(),
+				},
+			},
+
+			// Computed fields
+			"backup_state": resourceschema.StringAttribute{
 				Computed:    true,
-				Description: "Associated project ID",
+				Description: "State of the last backup push.",
+			},
+			"backup_pending": resourceschema.BoolAttribute{
+				Computed:    true,
+				Description: "Whether project changes are waiting to be pushed.",
+			},
+			"backup_failure_reason": resourceschema.StringAttribute{
+				Computed:    true,
+				Description: "Why the last backup push failed (for example auth).",
+			},
+			"last_backup_at": resourceschema.StringAttribute{
+				Computed:    true,
+				Description: "Timestamp of the last backup push.",
 			},
 			"last_sync_at": resourceschema.StringAttribute{
 				Computed:    true,
@@ -320,7 +369,6 @@ type gitOpsSyncModel struct {
 	TargetType            types.String `tfsdk:"target_type"`
 	PreDeployScriptPath   types.String `tfsdk:"pre_deploy_script_path"`
 	PreDeployRunnerImage  types.String `tfsdk:"pre_deploy_runner_image"`
-	PreDeployEnv          types.String `tfsdk:"pre_deploy_env"`
 	PreDeployEnvWO        types.String `tfsdk:"pre_deploy_env_wo"`
 	PreDeployEnvWOVersion types.Int64  `tfsdk:"pre_deploy_env_wo_version"`
 	PreDeployExtraMounts  types.String `tfsdk:"pre_deploy_extra_mounts"`
@@ -332,6 +380,15 @@ type gitOpsSyncModel struct {
 	FailIfNameExists      types.Bool   `tfsdk:"fail_if_name_exists"`
 	StopBeforeRename      types.Bool   `tfsdk:"stop_before_rename"`
 	ProjectID             types.String `tfsdk:"project_id"`
+	Mode                  types.String `tfsdk:"mode"`
+	BackupDirectory       types.String `tfsdk:"backup_directory"`
+	BackupPaths           types.Set    `tfsdk:"backup_paths"`
+	BackupOnSave          types.Bool   `tfsdk:"backup_on_save"`
+	ComposeOverridePath   types.String `tfsdk:"compose_override_path"`
+	BackupState           types.String `tfsdk:"backup_state"`
+	BackupPending         types.Bool   `tfsdk:"backup_pending"`
+	BackupFailureReason   types.String `tfsdk:"backup_failure_reason"`
+	LastBackupAt          types.String `tfsdk:"last_backup_at"`
 	LastSyncAt            types.String `tfsdk:"last_sync_at"`
 	LastSyncCommit        types.String `tfsdk:"last_sync_commit"`
 	LastSyncStatus        types.String `tfsdk:"last_sync_status"`
@@ -452,10 +509,6 @@ func (r *GitOpsSyncResource) Create(ctx context.Context, req resource.CreateRequ
 		v := plan.PreDeployRunnerImage.ValueString()
 		body.PreDeployRunnerImage = &v
 	}
-	if !plan.PreDeployEnv.IsNull() && !plan.PreDeployEnv.IsUnknown() {
-		v := plan.PreDeployEnv.ValueString()
-		body.PreDeployEnv = &v
-	}
 	// Write-only: the plan holds null, the value is only in the configuration.
 	if isSetString(config.PreDeployEnvWO) {
 		v := config.PreDeployEnvWO.ValueString()
@@ -473,12 +526,52 @@ func (r *GitOpsSyncResource) Create(ctx context.Context, req resource.CreateRequ
 		v := plan.PreDeployNetworkMode.ValueString()
 		body.PreDeployNetworkMode = &v
 	}
-	// Note: 'enabled' is read-only and not part of the create request
+	if isSetString(plan.Mode) {
+		v := plan.Mode.ValueString()
+		body.Mode = &v
+	}
+	if isSetString(plan.ProjectID) {
+		v := plan.ProjectID.ValueString()
+		body.ProjectID = &v
+	}
+	if isSetString(plan.BackupDirectory) {
+		v := plan.BackupDirectory.ValueString()
+		body.BackupDirectory = &v
+	}
+	if !plan.BackupPaths.IsNull() {
+		paths, ok, diags := gitOpsBackupPaths(ctx, plan.BackupPaths)
+		resp.Diagnostics.Append(diags...)
+		if ok {
+			body.BackupPaths = paths
+		}
+	}
+	if !plan.BackupOnSave.IsNull() && !plan.BackupOnSave.IsUnknown() {
+		v := plan.BackupOnSave.ValueBool()
+		body.BackupOnSave = &v
+	}
+	if isSetString(plan.ComposeOverridePath) {
+		v := plan.ComposeOverridePath.ValueString()
+		body.ComposeOverridePath = &v
+	}
+	if resp.Diagnostics.HasError() {
+		return
+	}
 
 	sync, err := r.client.CreateGitOpsSync(ctx, plan.EnvironmentID.ValueString(), body)
 	if err != nil {
 		resp.Diagnostics.AddError("create gitops sync failed", err.Error())
 		return
+	}
+
+	// Arcane ignores backupOnSave=false on create; apply it with an update.
+	if body.BackupOnSave != nil && sync.BackupOnSave != *body.BackupOnSave {
+		updated, err := r.client.UpdateGitOpsSync(ctx, plan.EnvironmentID.ValueString(), sync.ID, sdkclient.GitOpsSyncUpdateRequest{BackupOnSave: body.BackupOnSave})
+		if err != nil {
+			resp.Diagnostics.AddError("set gitops sync backup_on_save failed", err.Error())
+			return
+		}
+		updated.EnvironmentID = sync.EnvironmentID
+		sync = updated
 	}
 
 	// If environment variables are provided and a project was created, update the project with env content
@@ -499,7 +592,9 @@ func (r *GitOpsSyncResource) Create(ctx context.Context, req resource.CreateRequ
 	}
 
 	// Start the project if requested (default: true)
-	startProject := true // default value
+	// Backup syncs point at an existing project: leave it as it is unless
+	// start_project asks otherwise.
+	startProject := !gitOpsBackupMode(types.StringValue(sync.Mode))
 	if !plan.StartProject.IsNull() && !plan.StartProject.IsUnknown() {
 		startProject = plan.StartProject.ValueBool()
 	}
@@ -587,7 +682,6 @@ func (r *GitOpsSyncResource) Create(ctx context.Context, req resource.CreateRequ
 	// Read surfaces any server-side divergence as ordinary drift instead.
 	state.PreDeployScriptPath = preDeployString(plan.PreDeployScriptPath, sync.PreDeployScriptPath)
 	state.PreDeployRunnerImage = preDeployString(plan.PreDeployRunnerImage, sync.PreDeployRunnerImage)
-	state.PreDeployEnv = preDeployString(plan.PreDeployEnv, sync.PreDeployEnv)
 	state.PreDeployEnvWOVersion = plan.PreDeployEnvWOVersion
 	state.PreDeployExtraMounts = preDeployString(plan.PreDeployExtraMounts, sync.PreDeployExtraMounts)
 	if plan.PreDeployTimeoutSec.IsUnknown() {
@@ -599,7 +693,11 @@ func (r *GitOpsSyncResource) Create(ctx context.Context, req resource.CreateRequ
 
 	if sync.ProjectID != nil {
 		state.ProjectID = types.StringValue(*sync.ProjectID)
+	} else {
+		state.ProjectID = types.StringNull()
 	}
+	setGitOpsBackupFields(&state, sync)
+	state.BackupDirectory, state.ComposeOverridePath, state.BackupOnSave, state.BackupPaths = gitOpsBackupInputs(sync, plan)
 	if sync.LastSyncAt != nil {
 		state.LastSyncAt = types.StringValue(*sync.LastSyncAt)
 	}
@@ -675,9 +773,6 @@ func (r *GitOpsSyncResource) Read(ctx context.Context, req resource.ReadRequest,
 	if !state.PreDeployRunnerImage.IsNull() && !state.PreDeployRunnerImage.IsUnknown() {
 		state.PreDeployRunnerImage = types.StringPointerValue(sync.PreDeployRunnerImage)
 	}
-	if !state.PreDeployEnv.IsNull() && !state.PreDeployEnv.IsUnknown() {
-		state.PreDeployEnv = types.StringPointerValue(sync.PreDeployEnv)
-	}
 	if !state.PreDeployExtraMounts.IsNull() && !state.PreDeployExtraMounts.IsUnknown() {
 		state.PreDeployExtraMounts = types.StringPointerValue(sync.PreDeployExtraMounts)
 	}
@@ -698,6 +793,8 @@ func (r *GitOpsSyncResource) Read(ctx context.Context, req resource.ReadRequest,
 	} else {
 		state.ProjectID = types.StringNull()
 	}
+	setGitOpsBackupFields(&state, sync)
+	state.BackupDirectory, state.ComposeOverridePath, state.BackupOnSave, state.BackupPaths = gitOpsBackupInputs(sync, state)
 	// Preserve the configured environment variables in state so refreshes do
 	// not turn them into a fresh API-derived value every time.
 	if sync.LastSyncAt != nil {
@@ -746,8 +843,10 @@ func (r *GitOpsSyncResource) Update(ctx context.Context, req resource.UpdateRequ
 		v := plan.Branch.ValueString()
 		body.Branch = &v
 	}
-	if !plan.ComposePath.IsNull() && !plan.ComposePath.IsUnknown() {
-		v := plan.ComposePath.ValueString()
+	// In the backup modes Arcane derives the compose path: only send the
+	// configured one.
+	if isSetString(config.ComposePath) {
+		v := config.ComposePath.ValueString()
 		body.ComposePath = &v
 	}
 	if !plan.ProjectName.IsNull() && !plan.ProjectName.IsUnknown() {
@@ -761,6 +860,35 @@ func (r *GitOpsSyncResource) Update(ctx context.Context, req resource.UpdateRequ
 	if !plan.SyncInterval.IsNull() && !plan.SyncInterval.IsUnknown() {
 		v := plan.SyncInterval.ValueInt64()
 		body.SyncInterval = &v
+	}
+	// Removed optional strings are cleared with an empty string.
+	if isSetString(plan.BackupDirectory) {
+		v := plan.BackupDirectory.ValueString()
+		body.BackupDirectory = &v
+	} else if plan.BackupDirectory.IsNull() && !state.BackupDirectory.IsNull() {
+		v := ""
+		body.BackupDirectory = &v
+	}
+	if isSetString(plan.ComposeOverridePath) {
+		v := plan.ComposeOverridePath.ValueString()
+		body.ComposeOverridePath = &v
+	} else if plan.ComposeOverridePath.IsNull() && !state.ComposeOverridePath.IsNull() {
+		v := ""
+		body.ComposeOverridePath = &v
+	}
+	if !plan.BackupPaths.Equal(state.BackupPaths) {
+		paths, ok, diags := gitOpsBackupPaths(ctx, plan.BackupPaths)
+		resp.Diagnostics.Append(diags...)
+		if ok {
+			body.BackupPaths = paths
+		}
+	}
+	if !plan.BackupOnSave.IsNull() && !plan.BackupOnSave.IsUnknown() {
+		v := plan.BackupOnSave.ValueBool()
+		body.BackupOnSave = &v
+	}
+	if resp.Diagnostics.HasError() {
+		return
 	}
 	if !plan.MaxSyncBinarySize.IsNull() && !plan.MaxSyncBinarySize.IsUnknown() {
 		v := plan.MaxSyncBinarySize.ValueInt64()
@@ -806,17 +934,9 @@ func (r *GitOpsSyncResource) Update(ctx context.Context, req resource.UpdateRequ
 		v := ""
 		body.PreDeployRunnerImage = &v
 	}
-	if !plan.PreDeployEnv.IsNull() && !plan.PreDeployEnv.IsUnknown() {
-		v := plan.PreDeployEnv.ValueString()
-		body.PreDeployEnv = &v
-	} else if plan.PreDeployEnv.IsNull() && !state.PreDeployEnv.IsNull() {
-		v := ""
-		body.PreDeployEnv = &v
-	}
 	// pre_deploy_env_wo only reaches Arcane when its version changes: the
 	// configured value, or an empty string to clear it when it was removed.
-	// Skipped while pre_deploy_env is in use, which then owns the value.
-	if plan.PreDeployEnv.IsNull() && !plan.PreDeployEnvWOVersion.Equal(state.PreDeployEnvWOVersion) {
+	if !plan.PreDeployEnvWOVersion.Equal(state.PreDeployEnvWOVersion) {
 		v := ""
 		if !config.PreDeployEnvWO.IsNull() && !config.PreDeployEnvWO.IsUnknown() {
 			v = config.PreDeployEnvWO.ValueString()
@@ -956,7 +1076,6 @@ func (r *GitOpsSyncResource) Update(ctx context.Context, req resource.UpdateRequ
 	// Read surfaces any server-side divergence as ordinary drift instead.
 	state.PreDeployScriptPath = preDeployString(plan.PreDeployScriptPath, sync.PreDeployScriptPath)
 	state.PreDeployRunnerImage = preDeployString(plan.PreDeployRunnerImage, sync.PreDeployRunnerImage)
-	state.PreDeployEnv = preDeployString(plan.PreDeployEnv, sync.PreDeployEnv)
 	state.PreDeployEnvWOVersion = plan.PreDeployEnvWOVersion
 	state.PreDeployExtraMounts = preDeployString(plan.PreDeployExtraMounts, sync.PreDeployExtraMounts)
 	if plan.PreDeployTimeoutSec.IsUnknown() {
@@ -978,6 +1097,8 @@ func (r *GitOpsSyncResource) Update(ctx context.Context, req resource.UpdateRequ
 		state.ProjectID = types.StringNull()
 		state.EnvironmentVariables = types.MapNull(types.StringType)
 	}
+	setGitOpsBackupFields(&state, sync)
+	state.BackupDirectory, state.ComposeOverridePath, state.BackupOnSave, state.BackupPaths = gitOpsBackupInputs(sync, plan)
 	if sync.LastSyncAt != nil {
 		state.LastSyncAt = types.StringValue(*sync.LastSyncAt)
 	} else {
@@ -1036,7 +1157,9 @@ func (r *GitOpsSyncResource) Delete(ctx context.Context, req resource.DeleteRequ
 		}
 	}
 
-	if projectID != "" {
+	// A backup sync was pointed at an existing project: it is not ours to
+	// destroy. Only the project a deploy sync created goes with it.
+	if projectID != "" && !gitOpsBackupMode(state.Mode) {
 		opts := sdkclient.ProjectDestroyOptions{
 			RemoveFiles:   false,
 			RemoveVolumes: false,

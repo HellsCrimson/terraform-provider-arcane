@@ -29,17 +29,13 @@ func (d *NotificationDataSource) Schema(ctx context.Context, req datasource.Sche
 	resp.Schema = schema.Schema{
 		Description: "Data source for reading an Arcane notification configuration",
 		Attributes: map[string]schema.Attribute{
-			"environment_id": schema.StringAttribute{
-				Required:    true,
-				Description: "Environment ID",
-			},
 			"provider_name": schema.StringAttribute{
 				Required:    true,
 				Description: "Notification provider name",
 			},
 			"id": schema.StringAttribute{
 				Computed:    true,
-				Description: "Notification ID (environment_id:provider_name)",
+				Description: "Notification ID (the provider name)",
 			},
 			"enabled": schema.BoolAttribute{
 				Computed:    true,
@@ -66,11 +62,10 @@ func (d *NotificationDataSource) Configure(ctx context.Context, req datasource.C
 }
 
 type notificationDataSourceModel struct {
-	ID            types.String  `tfsdk:"id"`
-	EnvironmentID types.String  `tfsdk:"environment_id"`
-	ProviderName  types.String  `tfsdk:"provider_name"`
-	Enabled       types.Bool    `tfsdk:"enabled"`
-	Config        types.Dynamic `tfsdk:"config"`
+	ID           types.String  `tfsdk:"id"`
+	ProviderName types.String  `tfsdk:"provider_name"`
+	Enabled      types.Bool    `tfsdk:"enabled"`
+	Config       types.Dynamic `tfsdk:"config"`
 }
 
 func (d *NotificationDataSource) Read(ctx context.Context, req datasource.ReadRequest, resp *datasource.ReadResponse) {
@@ -80,7 +75,7 @@ func (d *NotificationDataSource) Read(ctx context.Context, req datasource.ReadRe
 		return
 	}
 
-	notification, err := d.client.GetNotification(ctx, config.EnvironmentID.ValueString(), config.ProviderName.ValueString())
+	notification, err := d.client.GetNotification(ctx, config.ProviderName.ValueString())
 	if err != nil {
 		if strings.Contains(strings.ToLower(err.Error()), "404") {
 			resp.Diagnostics.AddError("notification not found", "No notification for provider: "+config.ProviderName.ValueString())
@@ -91,11 +86,10 @@ func (d *NotificationDataSource) Read(ctx context.Context, req datasource.ReadRe
 	}
 
 	state := notificationDataSourceModel{
-		ID:            types.StringValue(config.EnvironmentID.ValueString() + ":" + notification.Provider),
-		EnvironmentID: config.EnvironmentID,
-		ProviderName:  types.StringValue(notification.Provider),
-		Enabled:       types.BoolValue(notification.Enabled),
-		Config:        anyMapToDynamicConfig(ctx, notification.Config),
+		ID:           types.StringValue(notification.Provider),
+		ProviderName: types.StringValue(notification.Provider),
+		Enabled:      types.BoolValue(notification.Enabled),
+		Config:       anyMapToDynamicConfig(ctx, notification.Config),
 	}
 
 	resp.Diagnostics.Append(resp.State.Set(ctx, &state)...)

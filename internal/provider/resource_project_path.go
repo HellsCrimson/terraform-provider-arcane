@@ -55,6 +55,8 @@ func (r *ProjectPathResource) Schema(_ context.Context, _ resource.SchemaRequest
 			"stop_before_rename": resourceschema.BoolAttribute{Optional: true, Description: stopBeforeRenameDescription},
 			"pull_on_update":     resourceschema.BoolAttribute{Optional: true, Computed: true, Description: "Pull images before redeploy.", Default: booldefault.StaticBool(false)},
 			"force_recreate":     resourceschema.BoolAttribute{Optional: true, Description: forceRecreateDescription},
+			"build":              resourceschema.BoolAttribute{Optional: true, Description: buildDescription},
+			"recreate_volumes":   resourceschema.BoolAttribute{Optional: true, Description: recreateVolumesDescription},
 			"redeploy_trigger": resourceschema.StringAttribute{
 				Optional:    true,
 				Computed:    true,
@@ -105,6 +107,8 @@ type projectPathModel struct {
 	StopBeforeRename types.Bool   `tfsdk:"stop_before_rename"`
 	PullOnUpdate     types.Bool   `tfsdk:"pull_on_update"`
 	ForceRecreate    types.Bool   `tfsdk:"force_recreate"`
+	Build            types.Bool   `tfsdk:"build"`
+	RecreateVolumes  types.Bool   `tfsdk:"recreate_volumes"`
 	RedeployTrigger  types.String `tfsdk:"redeploy_trigger"`
 	LastRedeploy     types.String `tfsdk:"last_redeploy"`
 	Path             types.String `tfsdk:"path"`
@@ -167,7 +171,7 @@ func (r *ProjectPathResource) planContentAndRedeploy(ctx context.Context, req re
 
 	// Resolve the trigger before anything that can bail out early, so the
 	// attribute is never left unknown in the plan.
-	trigger, diags := resolveRedeployTrigger(ctx, req.Config, "")
+	trigger, diags := resolveRedeployTrigger(ctx, req.Config)
 	resp.Diagnostics.Append(diags...)
 	if resp.Diagnostics.HasError() {
 		return
@@ -265,10 +269,15 @@ func projectPathRedeployAllowed(m projectPathModel) bool {
 // projectPathDeployOpts returns the options for up and redeploy, or nil when
 // none is set.
 func projectPathDeployOpts(m projectPathModel) *sdkclient.ProjectDeployOptions {
-	if v := optionalBool(m.ForceRecreate); v != nil {
-		return &sdkclient.ProjectDeployOptions{ForceRecreate: v}
+	opts := &sdkclient.ProjectDeployOptions{
+		ForceRecreate:   optionalBool(m.ForceRecreate),
+		Build:           optionalBool(m.Build),
+		RecreateVolumes: optionalBool(m.RecreateVolumes),
 	}
-	return nil
+	if opts.ForceRecreate == nil && opts.Build == nil && opts.RecreateVolumes == nil {
+		return nil
+	}
+	return opts
 }
 
 // fileContentChanged reports whether freshly read file content differs from what
@@ -407,7 +416,7 @@ func (r *ProjectPathResource) Create(ctx context.Context, req resource.CreateReq
 	}
 	state.Running = plan.Running
 	state.PullOnUpdate = plan.PullOnUpdate
-	redeployTrigger, _, tdiags := resolvedRedeployAttrs(ctx, req.Config, "", plan.RedeployTrigger, types.BoolNull())
+	redeployTrigger, tdiags := resolvedRedeployTrigger(ctx, req.Config, plan.RedeployTrigger)
 	resp.Diagnostics.Append(tdiags...)
 	if resp.Diagnostics.HasError() {
 		return
@@ -428,7 +437,7 @@ func (r *ProjectPathResource) Read(ctx context.Context, req resource.ReadRequest
 	projID := state.ID.ValueString()
 	out, err := r.client.GetProject(ctx, envID, projID)
 	if err != nil {
-		if strings.Contains(strings.ToLower(err.Error()), "404") {
+		if r.client.IsResourceGone(err) {
 			resp.State.RemoveResource(ctx)
 			return
 		}
@@ -499,7 +508,7 @@ func (r *ProjectPathResource) Update(ctx context.Context, req resource.UpdateReq
 	// value is authoritative here. Whether the redeploy happens is decided
 	// before the update call: a rename that stopped the project can leave the
 	// restart to the redeploy instead of starting the project twice.
-	redeployTrigger, _, tdiags := resolvedRedeployAttrs(ctx, req.Config, "", plan.RedeployTrigger, types.BoolNull())
+	redeployTrigger, tdiags := resolvedRedeployTrigger(ctx, req.Config, plan.RedeployTrigger)
 	resp.Diagnostics.Append(tdiags...)
 	if resp.Diagnostics.HasError() {
 		return
@@ -643,6 +652,8 @@ func (r *ProjectPathResource) Update(ctx context.Context, req resource.UpdateReq
 	state.Running = plan.Running
 	state.StopBeforeRename = plan.StopBeforeRename
 	state.ForceRecreate = plan.ForceRecreate
+	state.Build = plan.Build
+	state.RecreateVolumes = plan.RecreateVolumes
 	state.RemoveFiles = plan.RemoveFiles
 	state.RemoveVolumes = plan.RemoveVolumes
 	state.RedeployTrigger = redeployTrigger
@@ -671,7 +682,7 @@ func (r *ProjectPathResource) Delete(ctx context.Context, req resource.DeleteReq
 	projID := state.ID.ValueString()
 	opts := sdkclient.ProjectDestroyOptions{RemoveFiles: state.RemoveFiles.ValueBool(), RemoveVolumes: state.RemoveVolumes.ValueBool()}
 	if err := r.client.DestroyProject(ctx, envID, projID, opts); err != nil {
-		if strings.Contains(strings.ToLower(err.Error()), "404") {
+		if r.client.IsResourceGone(err) {
 			return
 		}
 		resp.Diagnostics.AddError("destroy project failed", err.Error())

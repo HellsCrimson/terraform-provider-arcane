@@ -47,6 +47,38 @@ func optionalBool(v types.Bool) *bool {
 	return &b
 }
 
+// optionalString returns nil for a null, unknown or empty value, so an unset
+// attribute is left out of a request body.
+func optionalString(v types.String) *string {
+	if !isSetString(v) {
+		return nil
+	}
+	s := v.ValueString()
+	return &s
+}
+
+// clearableString is optionalString for an update: an attribute removed from
+// the configuration sends an empty string so Arcane clears it.
+func clearableString(planned, prior types.String) *string {
+	if p := optionalString(planned); p != nil {
+		return p
+	}
+	if planned.IsNull() && isSetString(prior) {
+		s := ""
+		return &s
+	}
+	return nil
+}
+
+// echoOptionalString keeps an unset optional attribute null and otherwise
+// reports the server's value.
+func echoOptionalString(desired types.String, server string) types.String {
+	if desired.IsNull() {
+		return desired
+	}
+	return types.StringValue(server)
+}
+
 type categoriesModel struct {
 	TotalCount types.Int64  `tfsdk:"total_count"`
 	DataJSON   types.String `tfsdk:"data_json"`

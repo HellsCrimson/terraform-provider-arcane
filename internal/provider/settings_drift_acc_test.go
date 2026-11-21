@@ -17,11 +17,14 @@ import (
 // and be reverted on apply.
 //
 // Flow:
-//  1. Apply auth_local_enabled = "false" and default_shell = "/bin/bash".
+//  1. Apply auth_password_require_symbol = "false" and default_shell = "/bin/bash".
 //  2. Change both through the API (PreConfig), as in the issue, and apply the
 //     same configuration: the plan must be an update, and afterwards Arcane
 //     must hold the configured values again.
-//  3. Restore the instance defaults so local login stays enabled.
+//  3. Restore the instance defaults.
+//
+// Arcane v3 refuses auth_local_enabled = "false" while OIDC is disabled, so the
+// authentication-scope setting under test is auth_password_require_symbol.
 func TestAccArcaneSettings_detectsDrift(t *testing.T) {
 	ctx := context.Background()
 	client := sdkclient.NewClient(testAccEndpoint(), testAccAPIKey())
@@ -38,8 +41,8 @@ func TestAccArcaneSettings_detectsDrift(t *testing.T) {
 			{
 				PreConfig: func() {
 					if _, err := client.UpdateSettings(ctx, envID, map[string]string{
-						"authLocalEnabled": "true",
-						"defaultShell":     "/bin/zsh",
+						"authPasswordRequireSymbol": "true",
+						"defaultShell":              "/bin/zsh",
 					}); err != nil {
 						t.Fatalf("change settings out of band: %v", err)
 					}
@@ -67,8 +70,8 @@ func testAccCheckSettingsAPI(client *sdkclient.Client, envID, authLocalEnabled, 
 		if err != nil {
 			return err
 		}
-		if got["authLocalEnabled"] != authLocalEnabled {
-			return fmt.Errorf("authLocalEnabled: got %q, want %q", got["authLocalEnabled"], authLocalEnabled)
+		if got["authPasswordRequireSymbol"] != authLocalEnabled {
+			return fmt.Errorf("authPasswordRequireSymbol: got %q, want %q", got["authPasswordRequireSymbol"], authLocalEnabled)
 		}
 		if got["defaultShell"] != defaultShell {
 			return fmt.Errorf("defaultShell: got %q, want %q", got["defaultShell"], defaultShell)
@@ -87,7 +90,7 @@ provider "arcane" {
 
 resource "arcane_settings" "drift" {
   environment_id     = %q
-  auth_local_enabled = %q
+  auth_password_require_symbol = %q
   default_shell      = %q
 }
 `, testAccEndpoint(), testAccAPIKey(), testAccEnvironmentID(), authLocalEnabled, defaultShell)

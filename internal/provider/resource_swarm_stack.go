@@ -78,12 +78,9 @@ func (r *SwarmStackResource) Schema(_ context.Context, _ resource.SchemaRequest,
 					boolplanmodifier.RequiresReplace(),
 				},
 			},
-			"working_dir": resourceschema.StringAttribute{
+			"override_content": resourceschema.StringAttribute{
 				Optional:    true,
-				Description: "Working directory used by Arcane for compose include resolution",
-				PlanModifiers: []planmodifier.String{
-					stringplanmodifier.RequiresReplace(),
-				},
+				Description: "Compose override content merged over compose_content",
 			},
 
 			"namespace": resourceschema.StringAttribute{Computed: true, Description: "Docker namespace for the stack"},
@@ -119,7 +116,7 @@ type swarmStackModel struct {
 	Prune            types.Bool   `tfsdk:"prune"`
 	ResolveImage     types.String `tfsdk:"resolve_image"`
 	WithRegistryAuth types.Bool   `tfsdk:"with_registry_auth"`
-	WorkingDir       types.String `tfsdk:"working_dir"`
+	OverrideContent  types.String `tfsdk:"override_content"`
 	Namespace        types.String `tfsdk:"namespace"`
 	Services         types.Int64  `tfsdk:"services"`
 	CreatedAt        types.String `tfsdk:"created_at"`
@@ -153,9 +150,9 @@ func (r *SwarmStackResource) Create(ctx context.Context, req resource.CreateRequ
 		v := plan.WithRegistryAuth.ValueBool()
 		body.WithRegistryAuth = &v
 	}
-	if !plan.WorkingDir.IsNull() && !plan.WorkingDir.IsUnknown() {
-		v := plan.WorkingDir.ValueString()
-		body.WorkingDir = &v
+	if !plan.OverrideContent.IsNull() && !plan.OverrideContent.IsUnknown() {
+		v := plan.OverrideContent.ValueString()
+		body.OverrideContent = &v
 	}
 
 	envID := plan.EnvironmentID.ValueString()
@@ -180,7 +177,7 @@ func (r *SwarmStackResource) Create(ctx context.Context, req resource.CreateRequ
 		Prune:            plan.Prune,
 		ResolveImage:     plan.ResolveImage,
 		WithRegistryAuth: plan.WithRegistryAuth,
-		WorkingDir:       plan.WorkingDir,
+		OverrideContent:  plan.OverrideContent,
 		Namespace:        types.StringValue(inspect.Namespace),
 		Services:         types.Int64Value(inspect.Services),
 		CreatedAt:        types.StringValue(inspect.CreatedAt),
@@ -201,7 +198,7 @@ func (r *SwarmStackResource) Read(ctx context.Context, req resource.ReadRequest,
 
 	inspect, err := r.client.GetSwarmStack(ctx, envID, stackName)
 	if err != nil {
-		if strings.Contains(strings.ToLower(err.Error()), "404") {
+		if r.client.IsResourceGone(err) {
 			resp.State.RemoveResource(ctx)
 			return
 		}
@@ -211,7 +208,7 @@ func (r *SwarmStackResource) Read(ctx context.Context, req resource.ReadRequest,
 
 	source, err := r.client.GetSwarmStackSource(ctx, envID, stackName)
 	if err != nil {
-		if strings.Contains(strings.ToLower(err.Error()), "404") {
+		if r.client.IsResourceGone(err) {
 			resp.State.RemoveResource(ctx)
 			return
 		}
@@ -224,6 +221,9 @@ func (r *SwarmStackResource) Read(ctx context.Context, req resource.ReadRequest,
 	state.ComposeContent = types.StringValue(source.ComposeContent)
 	if !state.EnvContent.IsNull() && !state.EnvContent.IsUnknown() && source.EnvContent != "" {
 		state.EnvContent = types.StringValue(source.EnvContent)
+	}
+	if !state.OverrideContent.IsNull() && !state.OverrideContent.IsUnknown() && source.OverrideContent != "" {
+		state.OverrideContent = types.StringValue(source.OverrideContent)
 	}
 	state.Namespace = types.StringValue(inspect.Namespace)
 	state.Services = types.Int64Value(inspect.Services)
@@ -246,6 +246,10 @@ func (r *SwarmStackResource) Update(ctx context.Context, req resource.UpdateRequ
 	if !plan.EnvContent.IsNull() && !plan.EnvContent.IsUnknown() {
 		v := plan.EnvContent.ValueString()
 		body.EnvContent = &v
+	}
+	if !plan.OverrideContent.IsNull() && !plan.OverrideContent.IsUnknown() {
+		v := plan.OverrideContent.ValueString()
+		body.OverrideContent = &v
 	}
 
 	if _, err := r.client.UpdateSwarmStackSource(ctx, envID, stackName, body); err != nil {
@@ -271,7 +275,7 @@ func (r *SwarmStackResource) Update(ctx context.Context, req resource.UpdateRequ
 	state.Prune = plan.Prune
 	state.ResolveImage = plan.ResolveImage
 	state.WithRegistryAuth = plan.WithRegistryAuth
-	state.WorkingDir = plan.WorkingDir
+	state.OverrideContent = plan.OverrideContent
 
 	resp.Diagnostics.Append(resp.State.Set(ctx, &state)...)
 }
@@ -283,7 +287,7 @@ func (r *SwarmStackResource) Delete(ctx context.Context, req resource.DeleteRequ
 		return
 	}
 	if err := r.client.DeleteSwarmStack(ctx, state.EnvironmentID.ValueString(), state.ID.ValueString()); err != nil {
-		if strings.Contains(strings.ToLower(err.Error()), "404") {
+		if r.client.IsResourceGone(err) {
 			return
 		}
 		resp.Diagnostics.AddError("delete swarm stack failed", err.Error())

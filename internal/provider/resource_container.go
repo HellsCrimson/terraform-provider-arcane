@@ -33,6 +33,7 @@ func (r *ContainerResource) Metadata(_ context.Context, req resource.MetadataReq
 }
 
 func (r *ContainerResource) Schema(_ context.Context, _ resource.SchemaRequest, resp *resource.SchemaResponse) {
+	attrs := containerHostConfigAttributes()
 	resp.Schema = resourceschema.Schema{
 		Attributes: map[string]resourceschema.Attribute{
 			"id":             resourceschema.StringAttribute{Computed: true, PlanModifiers: []planmodifier.String{stringplanmodifier.UseStateForUnknown()}},
@@ -76,6 +77,9 @@ func (r *ContainerResource) Schema(_ context.Context, _ resource.SchemaRequest, 
 			"force_delete":   resourceschema.BoolAttribute{Optional: true, Description: "Force delete running container"},
 			"remove_volumes": resourceschema.BoolAttribute{Optional: true, Description: "Remove volumes on delete"},
 		},
+	}
+	for k, v := range attrs {
+		resp.Schema.Attributes[k] = v
 	}
 }
 
@@ -163,6 +167,17 @@ type containerModel struct {
 	OpenStdin       types.Bool   `tfsdk:"open_stdin"`
 	StdinOnce       types.Bool   `tfsdk:"stdin_once"`
 	NetworkDisabled types.Bool   `tfsdk:"network_disabled"`
+
+	CapAdd            types.List                 `tfsdk:"cap_add"`
+	CapDrop           types.List                 `tfsdk:"cap_drop"`
+	ReadonlyRootfs    types.Bool                 `tfsdk:"readonly_rootfs"`
+	PublishAllPorts   types.Bool                 `tfsdk:"publish_all_ports"`
+	MemorySwap        types.Int64                `tfsdk:"memory_swap"`
+	CPUShares         types.Int64                `tfsdk:"cpu_shares"`
+	NetworkMode       types.String               `tfsdk:"network_mode"`
+	RestartMaxRetries types.Int64                `tfsdk:"restart_max_retries"`
+	Mounts            []containerMountModel      `tfsdk:"mounts"`
+	Healthcheck       *containerHealthcheckModel `tfsdk:"healthcheck"`
 
 	Created          types.String `tfsdk:"created"`
 	Status           types.String `tfsdk:"status"`
@@ -262,6 +277,8 @@ func (r *ContainerResource) Create(ctx context.Context, req resource.CreateReque
 		v := plan.NetworkDisabled.ValueBool()
 		body.NetworkDisabled = &v
 	}
+
+	applyContainerHostConfig(ctx, plan, &body)
 
 	out, err := r.client.CreateContainer(ctx, plan.EnvironmentID.ValueString(), body)
 	if err != nil {

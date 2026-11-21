@@ -6,7 +6,6 @@ import (
 
 	"terraform-provider-arcane/internal/sdkclient"
 
-	"github.com/hashicorp/terraform-plugin-framework-validators/stringvalidator"
 	"github.com/hashicorp/terraform-plugin-framework/path"
 	"github.com/hashicorp/terraform-plugin-framework/resource"
 	resourceschema "github.com/hashicorp/terraform-plugin-framework/resource/schema"
@@ -14,7 +13,6 @@ import (
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema/mapplanmodifier"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema/planmodifier"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema/stringplanmodifier"
-	"github.com/hashicorp/terraform-plugin-framework/schema/validator"
 	"github.com/hashicorp/terraform-plugin-framework/types"
 )
 
@@ -52,31 +50,19 @@ func (r *SwarmSecretResource) Schema(_ context.Context, _ resource.SchemaRequest
 					stringplanmodifier.RequiresReplace(),
 				},
 			},
-			"data": resourceschema.StringAttribute{
-				Optional:           true,
-				Sensitive:          true,
-				Description:        "Secret value (plaintext). The provider encodes this to base64 for the API. Exactly one of `data` or `data_wo` is required.",
-				DeprecationMessage: writeOnlyDeprecation("data"),
-				Validators: []validator.String{
-					stringvalidator.ExactlyOneOf(path.MatchRoot("data_wo")),
-				},
-				PlanModifiers: []planmodifier.String{
-					// A new value replaces the (immutable) secret. Removing the
-					// value is the move to data_wo, which keeps the secret.
-					stringplanmodifier.RequiresReplaceIf(func(_ context.Context, req planmodifier.StringRequest, resp *stringplanmodifier.RequiresReplaceIfFuncResponse) {
-						resp.RequiresReplace = !req.PlanValue.IsNull()
-					}, "Changing data replaces the secret; removing it to switch to data_wo does not.", "Changing `data` replaces the secret; removing it to switch to `data_wo` does not."),
-				},
-			},
-			"data_wo": writeOnlyAttribute("data", "Secret value (plaintext). The provider encodes this to base64 for the API. Exactly one of `data` or `data_wo` is required. "+
-				"Swarm secrets are immutable, so changing `data_wo_version` replaces the secret with the configured value."),
+			"data_wo": func() resourceschema.StringAttribute {
+				a := writeOnlyAttribute("data", "Secret value (plaintext). The provider encodes this to base64 for the API. "+
+					"Swarm secrets are immutable, so changing `data_wo_version` replaces the secret with the configured value.")
+				a.Optional, a.Required = false, true
+				return a
+			}(),
 			"data_wo_version": writeOnlyVersionAttribute("data",
 				// Changing the version replaces the (immutable) secret. Setting
-				// it for the first time on an existing secret is the move from
-				// data to data_wo, which keeps the secret.
+				// it for the first time on an existing secret (state written by a
+				// release that still had the stored `data`) keeps the secret.
 				int64planmodifier.RequiresReplaceIf(func(_ context.Context, req planmodifier.Int64Request, resp *int64planmodifier.RequiresReplaceIfFuncResponse) {
 					resp.RequiresReplace = !req.StateValue.IsNull()
-				}, "Changing data_wo_version replaces the secret, except when first set while switching from data.", "Changing `data_wo_version` replaces the secret, except when first set while switching from `data`."),
+				}, "Changing data_wo_version replaces the secret, except when first set on an existing secret.", "Changing `data_wo_version` replaces the secret, except when first set on an existing secret."),
 			),
 			"labels": resourceschema.MapAttribute{
 				Optional:    true,
@@ -115,7 +101,6 @@ type swarmSecretModel struct {
 	ID            types.String `tfsdk:"id"`
 	EnvironmentID types.String `tfsdk:"environment_id"`
 	Name          types.String `tfsdk:"name"`
-	Data          types.String `tfsdk:"data"`
 	DataWO        types.String `tfsdk:"data_wo"`
 	DataWOVersion types.Int64  `tfsdk:"data_wo_version"`
 	Labels        types.Map    `tfsdk:"labels"`
@@ -132,11 +117,8 @@ func (r *SwarmSecretResource) Create(ctx context.Context, req resource.CreateReq
 		return
 	}
 
-	data := plan.Data.ValueString()
 	// Write-only: the plan holds null, the value is only in the configuration.
-	if isSetString(config.DataWO) {
-		data = config.DataWO.ValueString()
-	}
+	data := config.DataWO.ValueString()
 	spec := sdkclient.DockerSwarmSecretSpec{
 		Name: plan.Name.ValueString(),
 		Data: sdkclient.EncodeSwarmSecretData(data),
@@ -155,7 +137,6 @@ func (r *SwarmSecretResource) Create(ctx context.Context, req resource.CreateReq
 		ID:            types.StringValue(secret.ID),
 		EnvironmentID: plan.EnvironmentID,
 		Name:          types.StringValue(secret.Spec.Name),
-		Data:          plan.Data,
 		DataWOVersion: plan.DataWOVersion,
 		Labels:        stringMapToMap(ctx, secret.Spec.Labels),
 		VersionIndex:  types.Int64Value(secret.Version.Index),
@@ -175,7 +156,7 @@ func (r *SwarmSecretResource) Read(ctx context.Context, req resource.ReadRequest
 
 	secret, err := r.client.GetSwarmSecret(ctx, state.EnvironmentID.ValueString(), state.ID.ValueString())
 	if err != nil {
-		if strings.Contains(strings.ToLower(err.Error()), "404") {
+		if r.client.IsResourceGone(err) {
 			resp.State.RemoveResource(ctx)
 			return
 		}
@@ -190,13 +171,13 @@ func (r *SwarmSecretResource) Read(ctx context.Context, req resource.ReadRequest
 	state.VersionIndex = types.Int64Value(secret.Version.Index)
 	state.CreatedAt = types.StringValue(secret.CreatedAt)
 	state.UpdatedAt = types.StringValue(secret.UpdatedAt)
-	// Keep configured plaintext data in state because API only returns encoded content.
 
 	resp.Diagnostics.Append(resp.State.Set(ctx, &state)...)
 }
 
-// Update only handles the move from data to data_wo: every other change
-// replaces the (immutable) secret, so nothing is sent to Arcane.
+// Update only handles data_wo_version being set for the first time on an
+// existing secret: every other change replaces the (immutable) secret, so
+// nothing is sent to Arcane.
 func (r *SwarmSecretResource) Update(ctx context.Context, req resource.UpdateRequest, resp *resource.UpdateResponse) {
 	var plan, state swarmSecretModel
 	resp.Diagnostics.Append(req.Plan.Get(ctx, &plan)...)
@@ -211,7 +192,6 @@ func (r *SwarmSecretResource) Update(ctx context.Context, req resource.UpdateReq
 		return
 	}
 
-	state.Data = plan.Data
 	state.DataWOVersion = plan.DataWOVersion
 	state.VersionIndex = types.Int64Value(secret.Version.Index)
 	state.UpdatedAt = types.StringValue(secret.UpdatedAt)
@@ -225,7 +205,7 @@ func (r *SwarmSecretResource) Delete(ctx context.Context, req resource.DeleteReq
 		return
 	}
 	if err := r.client.DeleteSwarmSecret(ctx, state.EnvironmentID.ValueString(), state.ID.ValueString()); err != nil {
-		if strings.Contains(strings.ToLower(err.Error()), "404") {
+		if r.client.IsResourceGone(err) {
 			return
 		}
 		resp.Diagnostics.AddError("delete swarm secret failed", err.Error())

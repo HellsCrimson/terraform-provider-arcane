@@ -57,16 +57,21 @@ func (f *fakeArcaneProject) handler(t *testing.T) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		f.mu.Lock()
 		defer f.mu.Unlock()
-		f.calls = append(f.calls, r.Method+" "+strings.TrimPrefix(r.URL.Path, "/environments/env-1/projects/p1"))
+		call := r.Method + " " + strings.TrimPrefix(r.URL.Path, "/agents/env-1/projects/p1")
+		if a := r.URL.Query().Get("action"); a != "" {
+			call += "?action=" + a
+		}
+		f.calls = append(f.calls, call)
 
+		action := r.URL.Query().Get("action")
 		switch {
-		case strings.HasSuffix(r.URL.Path, "/down"):
+		case r.Method == http.MethodPost && action == "down":
 			f.running = false
 			fmt.Fprint(w, `{"success":true}`)
-		case strings.HasSuffix(r.URL.Path, "/up"):
+		case r.Method == http.MethodPost && strings.HasSuffix(r.URL.Path, "/deploy") && (action == "up" || action == "redeploy"):
 			f.running = true
 			fmt.Fprint(w, `{"success":true}`)
-		case r.Method == http.MethodPut:
+		case r.Method == http.MethodPatch:
 			var body struct {
 				Name *string `json:"name"`
 			}
@@ -105,7 +110,6 @@ func renameProjectModel(name string, running bool) projectModel {
 		Env:              types.StringNull(),
 		Running:          types.BoolValue(running),
 		Archived:         types.BoolValue(false),
-		RedeployOnUpdate: types.BoolValue(false),
 		RedeployTrigger:  types.StringValue(redeployTriggerNever),
 		LastRedeploy:     types.StringNull(),
 		PullOnUpdate:     types.BoolValue(false),
@@ -284,7 +288,7 @@ func TestProjectUpdate_StopBeforeRenameStopsAndStarts(t *testing.T) {
 		t.Fatalf("update failed: %v", resp.Diagnostics)
 	}
 
-	want := []string{"GET ", "POST /down", "PUT ", "POST /up", "GET "}
+	want := []string{"GET ", "POST ?action=down", "PATCH ", "POST /deploy?action=up", "GET "}
 	if got := fake.recorded(); !equalStrings(got, want) {
 		t.Errorf("unexpected API calls:\n got: %v\nwant: %v", got, want)
 	}
@@ -323,7 +327,7 @@ func TestProjectUpdate_RenameStopsBeforeUpdateWhenPlanStops(t *testing.T) {
 		t.Fatalf("update failed: %v", resp.Diagnostics)
 	}
 
-	want := []string{"GET ", "POST /down", "PUT "}
+	want := []string{"GET ", "POST ?action=down", "PATCH "}
 	if got := fake.recorded(); !equalStrings(got, want) {
 		t.Errorf("unexpected API calls:\n got: %v\nwant: %v", got, want)
 	}

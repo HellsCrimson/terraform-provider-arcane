@@ -173,6 +173,19 @@ func apiKeyPermissionsToGrants(ctx context.Context, set types.Set) ([]sdkclient.
 	return out, diags
 }
 
+// grantKeys flattens grants to comparable "permission@environment" keys.
+func grantKeys(grants []sdkclient.ApiKeyPermissionGrant) []string {
+	out := make([]string, 0, len(grants))
+	for _, g := range grants {
+		env := ""
+		if g.EnvironmentID != nil {
+			env = *g.EnvironmentID
+		}
+		out = append(out, g.Permission+"@"+env)
+	}
+	return out
+}
+
 // apiKeyPermissionsToSet converts API permission grants into a Terraform set.
 func apiKeyPermissionsToSet(ctx context.Context, grants []sdkclient.ApiKeyPermissionGrant) (types.Set, diag.Diagnostics) {
 	models := make([]apiKeyPermissionModel, 0, len(grants))
@@ -279,12 +292,21 @@ func (r *ApiKeyResource) Read(ctx context.Context, req resource.ReadRequest, res
 	state.IsStatic = types.BoolValue(apiKey.IsStatic)
 
 	if !state.Permissions.IsNull() && !state.Permissions.IsUnknown() {
-		permSet, diags := apiKeyPermissionsToSet(ctx, apiKey.Permissions)
+		// Arcane v3 adds the permissions each configured one requires: keep the
+		// configured grants while they are all still present.
+		prior, diags := apiKeyPermissionsToGrants(ctx, state.Permissions)
 		resp.Diagnostics.Append(diags...)
 		if resp.Diagnostics.HasError() {
 			return
 		}
-		state.Permissions = permSet
+		if !impliedSuperset(grantKeys(prior), grantKeys(apiKey.Permissions)) {
+			permSet, diags := apiKeyPermissionsToSet(ctx, apiKey.Permissions)
+			resp.Diagnostics.Append(diags...)
+			if resp.Diagnostics.HasError() {
+				return
+			}
+			state.Permissions = permSet
+		}
 	}
 
 	if !state.Description.IsNull() && !state.Description.IsUnknown() && apiKey.Description != nil {

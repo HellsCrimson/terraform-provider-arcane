@@ -21,10 +21,11 @@ resource "arcane_project" "demo" {
 - `env_content` (String, Optional)
 - `archived` (Bool, Optional) — when true, brings the project down and archives it; when false, unarchives it.
 - `redeploy_trigger` (String, Optional) — when the project is redeployed (default `default`). See [Redeploy trigger](#redeploy-trigger).
-- `redeploy_on_update` (Bool, **Deprecated**) — use `redeploy_trigger` instead: `true` is equivalent to `redeploy_trigger = "default"`, `false` to `redeploy_trigger = "never"`. Setting both attributes is an error.
 - `pull_on_update` (Bool, Optional) — when true, pulls images before each redeploy (default false).
 - `remove_orphans` (Bool, Optional) — when deploying (compose up), remove containers for services not defined in the compose file.
 - `force_recreate` (Bool, Optional) — when deploying or redeploying, recreate every container even when its configuration did not change, like `docker compose up --force-recreate` (default false). See [Redeploy trigger](#redeploy-trigger).
+- `build` (Bool, Optional) — when deploying or redeploying, build the images of services that have a `build` section first, like `docker compose up --build` (default false).
+- `recreate_volumes` (Bool, Optional) — when deploying or redeploying, recreate anonymous volumes instead of reusing the data of the previous containers, like `docker compose up --renew-anon-volumes` (default false).
 - `running` (Bool, Optional) — when true, ensures the project is running (compose up); when false, brings it down. If unset, lifecycle is not managed.
 - `stop_before_rename` (Bool, Optional) — when true, a rename stops the project, renames it and starts it again in the same apply (default false). See [Renaming a project](#renaming-a-project).
 - `fail_if_name_exists` (Bool, Optional) — when true, the plan fails if a project with the same `name` already exists in the environment (including folders Arcane has discovered on disk), instead of letting Arcane auto-rename the new project with a numeric suffix (default false). The check runs during the plan phase, so the collision is reported before any change is applied.
@@ -38,7 +39,7 @@ resource "arcane_project" "demo" {
 | Value | Redeploys |
 | --- | --- |
 | `never` | Never. |
-| `default` | When `compose_content` or `env_content` changed. This is the default, and matches the old `redeploy_on_update = true`. |
+| `default` | When `compose_content` or `env_content` changed. This is the default. |
 | `update` | On any in-place update of the resource, including changes that leave the compose/env content untouched. |
 | `always` | On every apply, even when nothing changed. |
 

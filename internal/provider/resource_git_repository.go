@@ -6,11 +6,13 @@ import (
 
 	"terraform-provider-arcane/internal/sdkclient"
 
+	"github.com/hashicorp/terraform-plugin-framework-validators/stringvalidator"
 	"github.com/hashicorp/terraform-plugin-framework/path"
 	"github.com/hashicorp/terraform-plugin-framework/resource"
 	resourceschema "github.com/hashicorp/terraform-plugin-framework/resource/schema"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema/planmodifier"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema/stringplanmodifier"
+	"github.com/hashicorp/terraform-plugin-framework/schema/validator"
 	"github.com/hashicorp/terraform-plugin-framework/types"
 )
 
@@ -83,22 +85,39 @@ func (r *GitRepositoryResource) Schema(_ context.Context, _ resource.SchemaReque
 				Optional:    true,
 				Description: "SSH host key verification mode",
 			},
-			"ssh_key": resourceschema.StringAttribute{
-				Optional:           true,
-				Sensitive:          true,
-				Description:        "SSH private key for authentication",
-				DeprecationMessage: writeOnlyDeprecation("ssh_key"),
-			},
 			"ssh_key_wo":         writeOnlyAttribute("ssh_key", "SSH private key for authentication."),
 			"ssh_key_wo_version": writeOnlyVersionAttribute("ssh_key"),
-			"token": resourceschema.StringAttribute{
-				Optional:           true,
-				Sensitive:          true,
-				Description:        "Access token for authentication",
-				DeprecationMessage: writeOnlyDeprecation("token"),
+			"token_wo":           writeOnlyAttribute("token", "Access token for authentication."),
+			"token_wo_version":   writeOnlyVersionAttribute("token"),
+			"signing_key_wo":     writeOnlyAttribute("signing_key", "Private key (SSH or OpenPGP) used to sign the commits Arcane pushes, for example GitOps backups."),
+			"signing_key_passphrase_wo": resourceschema.StringAttribute{
+				Optional:  true,
+				Sensitive: true,
+				WriteOnly: true,
+				Description: "Passphrase of `signing_key_wo`. Write-only: never stored in state or plan files (requires Terraform or OpenTofu 1.11+). " +
+					"Sent together with `signing_key_wo` when `signing_key_wo_version` changes.",
+				Validators: []validator.String{
+					stringvalidator.AlsoRequires(path.MatchRoot("signing_key_wo")),
+				},
 			},
-			"token_wo":         writeOnlyAttribute("token", "Access token for authentication."),
-			"token_wo_version": writeOnlyVersionAttribute("token"),
+			"signing_key_wo_version": writeOnlyVersionAttribute("signing_key"),
+			"has_signing_key": resourceschema.BoolAttribute{
+				Computed:    true,
+				Description: "Whether Arcane holds a signing key for the repository.",
+			},
+			"git_provider": resourceschema.StringAttribute{
+				Optional:    true,
+				Description: "Git forge used to build web links: github, gitlab, gitea or bitbucket. Unset, Arcane detects it from the URL host.",
+				Validators:  []validator.String{stringvalidator.OneOf("github", "gitlab", "gitea", "bitbucket")},
+			},
+			"commit_author_name": resourceschema.StringAttribute{
+				Optional:    true,
+				Description: "Author name of the commits Arcane pushes.",
+			},
+			"commit_author_email": resourceschema.StringAttribute{
+				Optional:    true,
+				Description: "Author email of the commits Arcane pushes.",
+			},
 			"username": resourceschema.StringAttribute{
 				Optional:    true,
 				Description: "Username for authentication",
@@ -137,13 +156,18 @@ type gitRepositoryModel struct {
 	Description            types.String `tfsdk:"description"`
 	Enabled                types.Bool   `tfsdk:"enabled"`
 	SSHHostKeyVerification types.String `tfsdk:"ssh_host_key_verification"`
-	SSHKey                 types.String `tfsdk:"ssh_key"`
 	SSHKeyWO               types.String `tfsdk:"ssh_key_wo"`
 	SSHKeyWOVersion        types.Int64  `tfsdk:"ssh_key_wo_version"`
-	Token                  types.String `tfsdk:"token"`
 	TokenWO                types.String `tfsdk:"token_wo"`
 	TokenWOVersion         types.Int64  `tfsdk:"token_wo_version"`
 	Username               types.String `tfsdk:"username"`
+	SigningKeyWO           types.String `tfsdk:"signing_key_wo"`
+	SigningKeyPassphraseWO types.String `tfsdk:"signing_key_passphrase_wo"`
+	SigningKeyWOVersion    types.Int64  `tfsdk:"signing_key_wo_version"`
+	HasSigningKey          types.Bool   `tfsdk:"has_signing_key"`
+	Provider               types.String `tfsdk:"git_provider"`
+	CommitAuthorName       types.String `tfsdk:"commit_author_name"`
+	CommitAuthorEmail      types.String `tfsdk:"commit_author_email"`
 	CreatedAt              types.String `tfsdk:"created_at"`
 	UpdatedAt              types.String `tfsdk:"updated_at"`
 }
@@ -174,14 +198,6 @@ func (r *GitRepositoryResource) Create(ctx context.Context, req resource.CreateR
 		v := plan.SSHHostKeyVerification.ValueString()
 		body.SSHHostKeyVerification = &v
 	}
-	if !plan.SSHKey.IsNull() && !plan.SSHKey.IsUnknown() && plan.SSHKey.ValueString() != "" {
-		v := plan.SSHKey.ValueString()
-		body.SSHKey = &v
-	}
-	if !plan.Token.IsNull() && !plan.Token.IsUnknown() && plan.Token.ValueString() != "" {
-		v := plan.Token.ValueString()
-		body.Token = &v
-	}
 	// Write-only: the plan holds null, the value is only in the configuration.
 	if isSetString(config.SSHKeyWO) {
 		v := config.SSHKeyWO.ValueString()
@@ -195,6 +211,17 @@ func (r *GitRepositoryResource) Create(ctx context.Context, req resource.CreateR
 		v := plan.Username.ValueString()
 		body.Username = &v
 	}
+	if isSetString(config.SigningKeyWO) {
+		v := config.SigningKeyWO.ValueString()
+		body.SigningKey = &v
+		if isSetString(config.SigningKeyPassphraseWO) {
+			p := config.SigningKeyPassphraseWO.ValueString()
+			body.SigningKeyPassphrase = &p
+		}
+	}
+	body.Provider = optionalString(plan.Provider)
+	body.CommitAuthorName = optionalString(plan.CommitAuthorName)
+	body.CommitAuthorEmail = optionalString(plan.CommitAuthorEmail)
 
 	repo, err := r.client.CreateGitRepository(ctx, body)
 	if err != nil {
@@ -211,13 +238,14 @@ func (r *GitRepositoryResource) Create(ctx context.Context, req resource.CreateR
 		CreatedAt:              types.StringValue(repo.CreatedAt),
 		UpdatedAt:              types.StringValue(repo.UpdatedAt),
 		SSHHostKeyVerification: plan.SSHHostKeyVerification,
-		SSHKey:                 plan.SSHKey,
 		SSHKeyWOVersion:        plan.SSHKeyWOVersion,
-		Token:                  plan.Token,
 		TokenWOVersion:         plan.TokenWOVersion,
 		Description:            plan.Description,
 		Username:               plan.Username,
+		SigningKeyWOVersion:    plan.SigningKeyWOVersion,
 	}
+	state.HasSigningKey = types.BoolValue(repo.HasSigningKey)
+	state.Provider, state.CommitAuthorName, state.CommitAuthorEmail = gitRepositoryExtras(repo, plan)
 
 	resp.Diagnostics.Append(resp.State.Set(ctx, &state)...)
 }
@@ -261,8 +289,8 @@ func (r *GitRepositoryResource) Read(ctx context.Context, req resource.ReadReque
 	}
 	// Keep existing username if API returns empty and we had a value
 
-	// Preserve sensitive fields from state
-	// SSHKey and Token remain unchanged from state
+	state.HasSigningKey = types.BoolValue(repo.HasSigningKey)
+	state.Provider, state.CommitAuthorName, state.CommitAuthorEmail = gitRepositoryExtras(repo, state)
 
 	resp.Diagnostics.Append(resp.State.Set(ctx, &state)...)
 }
@@ -303,14 +331,6 @@ func (r *GitRepositoryResource) Update(ctx context.Context, req resource.UpdateR
 		v := plan.SSHHostKeyVerification.ValueString()
 		body.SSHHostKeyVerification = &v
 	}
-	if !plan.SSHKey.IsNull() && !plan.SSHKey.IsUnknown() && plan.SSHKey.ValueString() != "" {
-		v := plan.SSHKey.ValueString()
-		body.SSHKey = &v
-	}
-	if !plan.Token.IsNull() && !plan.Token.IsUnknown() && plan.Token.ValueString() != "" {
-		v := plan.Token.ValueString()
-		body.Token = &v
-	}
 	// Write-only credentials are only re-sent when their version changes.
 	if writeOnlySend(config.SSHKeyWO, plan.SSHKeyWOVersion, state.SSHKeyWOVersion) {
 		v := config.SSHKeyWO.ValueString()
@@ -324,6 +344,19 @@ func (r *GitRepositoryResource) Update(ctx context.Context, req resource.UpdateR
 		v := plan.Username.ValueString()
 		body.Username = &v
 	}
+	if writeOnlySend(config.SigningKeyWO, plan.SigningKeyWOVersion, state.SigningKeyWOVersion) {
+		v := config.SigningKeyWO.ValueString()
+		body.SigningKey = &v
+		p := ""
+		if isSetString(config.SigningKeyPassphraseWO) {
+			p = config.SigningKeyPassphraseWO.ValueString()
+		}
+		body.SigningKeyPassphrase = &p
+	}
+	// Removed optional strings are cleared with an empty string.
+	body.Provider = clearableString(plan.Provider, state.Provider)
+	body.CommitAuthorName = clearableString(plan.CommitAuthorName, state.CommitAuthorName)
+	body.CommitAuthorEmail = clearableString(plan.CommitAuthorEmail, state.CommitAuthorEmail)
 
 	repo, err := r.client.UpdateGitRepository(ctx, state.ID.ValueString(), body)
 	if err != nil {
@@ -360,10 +393,11 @@ func (r *GitRepositoryResource) Update(ctx context.Context, req resource.UpdateR
 	}
 
 	// Preserve sensitive fields from plan
-	state.SSHKey = plan.SSHKey
 	state.SSHKeyWOVersion = plan.SSHKeyWOVersion
-	state.Token = plan.Token
 	state.TokenWOVersion = plan.TokenWOVersion
+	state.SigningKeyWOVersion = plan.SigningKeyWOVersion
+	state.HasSigningKey = types.BoolValue(repo.HasSigningKey)
+	state.Provider, state.CommitAuthorName, state.CommitAuthorEmail = gitRepositoryExtras(repo, plan)
 
 	resp.Diagnostics.Append(resp.State.Set(ctx, &state)...)
 }
@@ -385,4 +419,12 @@ func (r *GitRepositoryResource) Delete(ctx context.Context, req resource.DeleteR
 
 func (r *GitRepositoryResource) ImportState(ctx context.Context, req resource.ImportStateRequest, resp *resource.ImportStateResponse) {
 	resource.ImportStatePassthroughID(ctx, path.Root("id"), req, resp)
+}
+
+// gitRepositoryExtras resolves the forge and commit author settings for
+// state: a configured value is echoed from the API, an unset one stays null.
+func gitRepositoryExtras(repo *sdkclient.GitRepository, desired gitRepositoryModel) (provider, authorName, authorEmail types.String) {
+	return echoOptionalString(desired.Provider, repo.Provider),
+		echoOptionalString(desired.CommitAuthorName, repo.CommitAuthorName),
+		echoOptionalString(desired.CommitAuthorEmail, repo.CommitAuthorEmail)
 }

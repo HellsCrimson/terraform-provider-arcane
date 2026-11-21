@@ -30,8 +30,9 @@ func NewProjectComposeDataSource() datasource.DataSource {
 func NewProjectFilesDataSource() datasource.DataSource {
 	return &ProjectSectionDataSource{
 		typeName: "project_files",
-		section:  "files",
-		desc:     "Reads directory file details for a project.",
+		// Arcane v3 replaced GET …/projects/{id}/files with the workspace view.
+		section: "workspace",
+		desc:    "Reads the workspace (directory tree) of a project.",
 	}
 }
 

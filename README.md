@@ -2,9 +2,9 @@ Arcane Terraform Provider
 
 Manage Arcane using Terraform or OpenTofu. This provider talks to the Arcane HTTP API using an API key and implements common workflows: users, environment settings, compose projects (inline or from files), project state (up/down), notifications, and single containers.
 
-API schema version used for this version: `v2.11.0`.
+API schema version used for this version: `v3.0.1`.
 
-Requires an Arcane server on **v2.8.0 or later**, and is tested against v2.11.0. Two API changes set that floor: container registries gained a required `repositoryNames` property in v2.7.0, and project creation moved to `multipart/form-data` in v2.8.0. Arcane also dropped a number of settings keys in v2.11.0; the matching `arcane_settings` attributes are still accepted but are deprecated and no longer sent.
+Requires an Arcane server on **v3.0.0 or later**, and is tested against v3.0.1.
 
 Overview
 
@@ -13,7 +13,7 @@ Overview
 
 Requirements
 
-- Terraform or OpenTofu 1.4+; 1.11+ for the write-only (`_wo`) arguments, see [Write-only arguments](#write-only-arguments).
+- Terraform or OpenTofu 1.11+ (secrets are write-only arguments, see [Write-only arguments](#write-only-arguments)).
 - Go 1.21+ (to build from source).
 
 Installation
@@ -85,29 +85,29 @@ Resources
 
 - arcane_user
   - Create/read/update/delete Arcane users.
-  - Attributes: username (required, replace), password_wo + password_wo_version (write-only) or the deprecated password (sensitive, stored in state), display_name, email, locale, role_assignments.
+  - Attributes: username (required, replace), password_wo + password_wo_version (required, write-only), display_name, email, locale, role_assignments.
 
 - arcane_settings
-  - Update environment settings using explicit attributes.
-  - Settings include: base_server_url, polling_enabled, polling_interval, docker_host, auto_update, oidc_* (OIDC auth), scheduled_prune_* (scheduled pruning), and many more.
+  - Update settings using explicit attributes. Environment settings apply to `environment_id`; app-wide and authentication/OIDC settings are global.
+  - Settings include: base_server_url, polling_enabled, polling_interval, docker_host, auto_update, oidc_* (OIDC auth), scheduled_prune_* (scheduled pruning), and many more. Secrets (oidc_client_secret_wo, depot_token_wo, trivy_server_token_wo, github_token_wo) are write-only.
   - Computed `applied` map exposes the server's current settings after apply.
 
 - arcane_project
   - Manage a compose project with inline content.
-  - Attributes: environment_id, name, compose_content (required), env_content (optional).
+  - Attributes: environment_id, name, compose_content (required), env_content (optional), running, redeploy_trigger, deploy options (remove_orphans, force_recreate, build, recreate_volumes).
   - Computed: id, path, status, service_count, running_count, created_at, updated_at.
 
 - arcane_swarm_stack
   - Manage a Docker Swarm stack in an environment.
-  - Attributes: environment_id, name, compose_content (required), env_content (optional), prune, resolve_image, with_registry_auth, working_dir.
+  - Attributes: environment_id, name, compose_content (required), env_content, override_content (optional), prune, resolve_image, with_registry_auth.
   - Computed: id (stack name), namespace, services, created_at, updated_at.
-  - Note: Core deploy options (prune, resolve_image, with_registry_auth, working_dir) require replacement after initial create.
+  - Note: Core deploy options (prune, resolve_image, with_registry_auth) require replacement after initial create.
 
 - arcane_swarm_secret
   - Manage a Docker Swarm secret in an environment.
-  - Attributes: environment_id, name, data_wo + data_wo_version (write-only) or the deprecated data (sensitive, stored in state), labels.
+  - Attributes: environment_id, name, data_wo + data_wo_version (required, write-only), labels.
   - Computed: id, version_index, created_at, updated_at.
-  - Note: Swarm secrets are immutable; changing `name`, `data`, `data_wo_version`, or `labels` forces replacement. Moving from `data` to `data_wo` does not.
+  - Note: Swarm secrets are immutable; changing `name`, `data_wo_version`, or `labels` forces replacement.
 
 - arcane_swarm_config
   - Manage a Docker Swarm config in an environment.
@@ -141,33 +141,33 @@ Resources
   - Lifecycle: set `running = true` to ensure the project is deployed (compose up), or `false` to bring it down. If unset, lifecycle is not managed.
 
 - arcane_notification
-  - Manage notification settings for a provider.
-  - Attributes: environment_id, provider_name, enabled, config (map(string)).
+  - Manage notification settings for a provider (app-wide).
+  - Attributes: provider_name, enabled, config (map(string)).
 
 - arcane_container
   - Create/delete a single container.
-  - Attributes: environment_id, name, image (required), and advanced options (command, ports, volumes, etc.). Most changes force replacement.
+  - Attributes: environment_id, name, image (required), and advanced options (command, ports, volumes, mounts, healthcheck, cap_add/cap_drop, network_mode, etc.). Most changes force replacement.
   - Ports map format: container port -> host port, numeric strings only (e.g., `{ "8081" = "8081" }`). The provider normalizes values if a protocol suffix is present.
 
 - arcane_container_registry
   - Manage container registries for pulling images.
-  - Attributes: url (required), username (required), token_wo + token_wo_version (write-only) or the deprecated token (sensitive), description, insecure, enabled, aws_access_key_id_wo / aws_secret_access_key_wo (write-only) or their deprecated stored forms.
-  - Computed: id, created_at, updated_at.
+  - Attributes: url (required), username (required), token_wo + token_wo_version (required, write-only), description, insecure, enabled, aws_access_key_id_wo / aws_secret_access_key_wo (write-only), aws_region.
+  - Computed: id, host, namespace, created_at, updated_at.
 
 - arcane_environment
-  - Manage Arcane environments.
-  - Attributes: api_url (required), name, access_token_wo + access_token_wo_version (write-only) or the deprecated access_token (sensitive), bootstrap_token (sensitive), enabled, use_api_key.
-  - Computed: id, status, api_key (sensitive).
+  - Manage Arcane (agent) environments. Start an Arcane agent with the `enrollment_token` to join it.
+  - Attributes: name, enabled.
+  - Computed: id, status, api_url, enrollment_token (sensitive, single use), agent details.
 
 - arcane_git_repository
   - Manage Git repository credentials for GitOps.
-  - Attributes: name (required), url (required), auth_type (required: none, ssh, token), description, enabled, ssh_key_wo / token_wo + their _wo_version (write-only) or the deprecated ssh_key / token (sensitive), username.
+  - Attributes: name (required), url (required), auth_type (required: none, ssh, token), description, enabled, ssh_key_wo / token_wo / signing_key_wo + their _wo_version (write-only), username, git_provider, commit_author_name, commit_author_email.
   - Computed: id, created_at, updated_at.
 
 - arcane_gitops_sync
   - Manage GitOps synchronization configurations.
-  - Attributes: environment_id (required), name (required), repository_id (required), branch (required), compose_path (required), project_name, auto_sync, sync_interval, env_vars (map).
-  - Computed: id, project_id, enabled, last_sync_at, last_sync_commit, last_sync_status, last_sync_error, created_at, updated_at.
+  - Attributes: environment_id (required), name (required), repository_id (required), branch (required), compose_path (required for deploy syncs), mode (deploy, backup, bidirectional), project_id (backup modes), backup_directory, backup_paths, backup_on_save, compose_override_path, project_name, auto_sync, sync_interval, environment_variables (map).
+  - Computed: id, project_id, enabled, backup_state, last_sync_at, last_sync_commit, last_sync_status, last_sync_error, created_at, updated_at.
 
 - arcane_api_key
   - Manage API keys for programmatic access.
@@ -178,6 +178,11 @@ Resources
   - Manage reusable docker-compose templates.
   - Attributes: name (required), description (required), content (required, docker-compose YAML), env_content (required, .env format).
   - Computed: id, is_custom, is_remote, registry_id.
+
+- arcane_global_variable
+  - Manage Arcane global variables, available to the projects and templates of the environments they are scoped to.
+  - Attributes: key (required), value or value_wo + value_wo_version (write-only, for secrets), is_secret, all_environments, environment_ids, inject_into_containers.
+  - Computed: id, created_at.
 
 - arcane_template_registry
   - Manage external template registries for remote templates.
@@ -192,14 +197,14 @@ Resources
 
 - arcane_network
   - Manage Docker networks for container communication.
-  - Attributes: environment_id (required), name (required, forces replacement), driver (forces replacement), attachable, internal, enable_ipv6, check_duplicate, ingress, labels (map), options (map).
+  - Attributes: environment_id (required), name (required, forces replacement), driver (forces replacement), attachable, internal, enable_ipv6, check_duplicate, ingress, labels (map), options (map), ipam.
   - Computed: id, scope, created.
   - Note: Updates require replacement.
 
 - arcane_job_schedules
   - Manage cron schedules for automated background jobs.
-  - Attributes: environment_id (required), analytics_heartbeat_interval, auto_update_interval, environment_health_interval, event_cleanup_interval, gitops_sync_interval, polling_interval, scheduled_prune_interval.
-  - All intervals use cron format (e.g., '0 */5 * * * *' for every 5 minutes).
+  - Attributes: environment_id (required), auto_heal_interval, auto_update_interval, docker_client_refresh_interval, environment_health_interval, event_cleanup_interval, expired_sessions_cleanup_interval, image_auto_patch_interval, polling_interval, scheduled_prune_interval, vulnerability_scan_interval.
+  - All intervals use 5-field cron format (e.g., '*/5 * * * *' for every 5 minutes).
   - Computed: id (same as environment_id).
 
 - arcane_vulnerability_ignore
@@ -209,8 +214,8 @@ Resources
 
 - arcane_volume_backup
   - Manage snapshots/backups for volumes.
-  - Attributes: environment_id, volume_name (required).
-  - Computed: id, size, created_at, updated_at.
+  - Attributes: environment_id, volume_name (required), destination, policy_id, s3_destination_id.
+  - Computed: id, size, status, error, format, trigger, created_at, updated_at.
 
 Imports
 
@@ -221,7 +226,7 @@ Imports
 - arcane_swarm_secret: `environment_id:secret_id`
 - arcane_swarm_config: `environment_id:config_id`
 - arcane_project_path: `environment_id:project_id`
-- arcane_notification: `environment_id:provider_name`
+- arcane_notification: `provider_name`
 - arcane_container: `environment_id:container_id`
 - arcane_container_registry: `id`
 - arcane_environment: `id`
@@ -229,6 +234,7 @@ Imports
 - arcane_gitops_sync: `environment_id:sync_id`
 - arcane_api_key: `id`
 - arcane_template: `id`
+- arcane_global_variable: `id`
 - arcane_template_registry: `id`
 - arcane_volume: `environment_id/volume_name`
 - arcane_network: `environment_id/network_id`
@@ -265,35 +271,29 @@ API Coverage & Notes
 
 - This provider adheres to the OpenAPI available in an arcane instance.
 - Implemented endpoints:
-  - Users: `POST /users`, `GET/PUT/DELETE /users/{userId}`
-  - Settings: `GET/PUT /environments/{id}/settings`
-  - Projects: `POST /environments/{id}/projects`, `GET/PUT /environments/{id}/projects/{projectId}`, `DELETE /environments/{id}/projects/{projectId}/destroy`, `POST /environments/{id}/projects/{projectId}/up|down`
-  - Swarm stacks: `POST /environments/{id}/swarm/stacks`, `GET/DELETE /environments/{id}/swarm/stacks/{name}`, `GET/PUT /environments/{id}/swarm/stacks/{name}/source`
-  - Swarm secrets: `POST /environments/{id}/swarm/secrets`, `GET/PUT/DELETE /environments/{id}/swarm/secrets/{secretId}`
-  - Swarm configs: `POST /environments/{id}/swarm/configs`, `GET/PUT/DELETE /environments/{id}/swarm/configs/{configId}`
-  - Roles: `POST /roles`, `GET/PUT/DELETE /roles/{id}`, `GET /roles` (paginated), `GET /roles/available-permissions`
-  - OIDC role mappings: `POST /oidc/role-mappings`, `GET /oidc/role-mappings`, `PUT/DELETE /oidc/role-mappings/{id}`
-  - Federated credentials: `POST /federated-credentials`, `GET/PUT/DELETE /federated-credentials/{id}`
-  - Notifications: `POST /environments/{id}/notifications/settings`, `GET/DELETE /environments/{id}/notifications/settings/{provider}`
-  - Containers: `POST /environments/{id}/containers`, `GET/DELETE /environments/{id}/containers/{containerId}` (supports `force` and `volumes` on delete)
+  - Users: `POST /users`, `GET/PATCH/DELETE /users/{userId}`, `PUT /users/{userId}/roles`
+  - Settings: `GET/PATCH /agents/{id}/settings`, `GET/PATCH /settings`, `GET/PATCH /settings/authentication`
+  - Environments: `POST /agents`, `GET/PATCH/DELETE /agents/{id}`, `POST /agents/{id}/deployment`
+  - Projects: `POST /agents/{id}/projects`, `GET/PATCH/DELETE /agents/{id}/projects/{projectId}`, `POST /agents/{id}/projects/{projectId}?action=down|archive|unarchive`, `POST /agents/{id}/projects/{projectId}/deploy?action=up|redeploy|pull`
+  - Swarm stacks: `POST /agents/{id}/swarm/stacks`, `GET/DELETE /agents/{id}/swarm/stacks/{name}`, `GET/PATCH /agents/{id}/swarm/stacks/{name}/source`
+  - Swarm secrets: `POST /agents/{id}/swarm/secrets`, `GET/DELETE /agents/{id}/swarm/secrets/{secretId}`
+  - Swarm configs: `POST /agents/{id}/swarm/configs`, `GET/DELETE /agents/{id}/swarm/configs/{configId}`
+  - Roles: `POST /roles`, `GET/PATCH/DELETE /roles/{id}`, `GET /roles` (paginated), `GET /roles/permissions`
+  - OIDC role mappings: `POST /oidc/mappings`, `GET /oidc/mappings`, `PATCH/DELETE /oidc/mappings/{id}`
+  - Federated credentials: `POST /federated/credentials`, `GET/PATCH/DELETE /federated/credentials/{id}`
+  - Notifications: `POST /notifications/settings`, `GET/DELETE /notifications/settings/{provider}`
+  - Containers: `POST /agents/{id}/containers`, `GET/DELETE /agents/{id}/containers/{containerId}` (supports `force` and `volumes` on delete)
 
 Write-only arguments
 
-Each secret has a write-only variant with a `_wo` suffix: Terraform passes it to the provider but never stores it in the state or in saved plan files, so it can come from an ephemeral resource. Because Terraform keeps no copy to diff, it requires a `_wo_version` companion: change it to send a new value. Requires Terraform or OpenTofu 1.11+.
+Secrets are write-only arguments with a `_wo` suffix: Terraform passes them to the provider but never stores them in the state or in saved plan files, so they can come from an ephemeral resource. Because Terraform keeps no copy to diff, it requires a `_wo_version` companion: change it to send a new value. Requires Terraform or OpenTofu 1.11+.
 
 - `arcane_user`: `password_wo`
 - `arcane_git_repository`: `token_wo`, `ssh_key_wo`
 - `arcane_container_registry`: `token_wo`, `aws_access_key_id_wo`, `aws_secret_access_key_wo`
-- `arcane_environment`: `access_token_wo`
 - `arcane_settings`: `oidc_client_secret_wo`, `depot_token_wo`, `trivy_server_token_wo`
 - `arcane_gitops_sync`: `pre_deploy_env_wo`
 - `arcane_swarm_secret`: `data_wo` (changing `data_wo_version` replaces the secret)
-
-The original arguments (`password`, `token`, ...) still work but are deprecated: they store the secret in the state and will be removed in the next major release. Replacing one with its `_wo` variant plus a `_wo_version` updates the resource in place and removes the secret from the state.
-
-Limitations / Roadmap
-
-- The deprecated stored secret arguments will be removed in the next major release.
 
 Contributing
 

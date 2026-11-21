@@ -1,10 +1,10 @@
 terraform {
-  required_version = ">= 1.4.0"
+  required_version = ">= 1.11.0"
   required_providers {
-	arcane = {
-	  source  = "hellscrimson/arcane"
-	  version = ">= 0.0.1"
-	}
+    arcane = {
+      source  = "hellscrimson/arcane"
+      version = ">= 0.0.1"
+    }
   }
 }
 
@@ -28,16 +28,16 @@ variable "environment_id" {
 }
 
 resource "arcane_swarm_stack" "demo" {
-  environment_id      = var.environment_id
-  name                = "demo-swarm-stack"
-  compose_content     = file("${path.module}/stack-compose.yml")
-  env_content         = <<EOF
+  environment_id     = var.environment_id
+  name               = "demo-swarm-stack"
+  compose_content    = file("${path.module}/stack-compose.yml")
+  env_content        = <<EOF
 APP_ENV=production
 NGINX_PORT=8080
 EOF
-  prune               = true
-  resolve_image       = "changed"
-  with_registry_auth  = false
+  prune              = true
+  resolve_image      = "changed"
+  with_registry_auth = false
 }
 
 # Read back the deployed stack and source content.

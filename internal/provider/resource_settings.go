@@ -43,125 +43,159 @@ func (r *SettingsResource) Schema(_ context.Context, _ resource.SchemaRequest, r
 				},
 			},
 			// SettingsUpdate attributes (all strings per OpenAPI schema)
-			"accent_color":                         resourceschema.StringAttribute{Optional: true, Description: "accentColor", DeprecationMessage: "Arcane no longer accepts this setting (removed in v2.11.0); it is ignored. It is now a per-user preference set in the Arcane UI."},
-			"activity_history_max_entries":         resourceschema.StringAttribute{Optional: true, Description: "activityHistoryMaxEntries"},
-			"activity_history_retention_days":      resourceschema.StringAttribute{Optional: true, Description: "activityHistoryRetentionDays"},
-			"apns_enabled":                         resourceschema.StringAttribute{Optional: true, Description: "apnsEnabled"},
-			"application_theme":                    resourceschema.StringAttribute{Optional: true, Description: "applicationTheme", DeprecationMessage: "Arcane no longer accepts this setting (removed in v2.11.0); it is ignored. It is now a per-user preference set in the Arcane UI."},
-			"auth_local_enabled":                   resourceschema.StringAttribute{Optional: true, Description: "authLocalEnabled"},
-			"auth_password_policy":                 resourceschema.StringAttribute{Optional: true, Description: "authPasswordPolicy"},
-			"auth_session_timeout":                 resourceschema.StringAttribute{Optional: true, Description: "authSessionTimeout"},
-			"auto_heal_enabled":                    resourceschema.StringAttribute{Optional: true, Description: "autoHealEnabled"},
-			"auto_heal_excluded_containers":        resourceschema.StringAttribute{Optional: true, Description: "autoHealExcludedContainers"},
-			"auto_heal_interval":                   resourceschema.StringAttribute{Optional: true, Description: "autoHealInterval"},
-			"auto_heal_max_restarts":               resourceschema.StringAttribute{Optional: true, Description: "autoHealMaxRestarts"},
-			"auto_heal_restart_window":             resourceschema.StringAttribute{Optional: true, Description: "autoHealRestartWindow"},
-			"auto_inject_env":                      resourceschema.StringAttribute{Optional: true, Description: "autoInjectEnv"},
-			"auto_update":                          resourceschema.StringAttribute{Optional: true, Description: "autoUpdate"},
-			"auto_update_excluded_containers":      resourceschema.StringAttribute{Optional: true, Description: "autoUpdateExcludedContainers"},
-			"auto_update_interval":                 resourceschema.StringAttribute{Optional: true, Description: "autoUpdateInterval"},
-			"avatar_max_upload_size_mb":            resourceschema.StringAttribute{Optional: true, Description: "avatarMaxUploadSizeMb"},
-			"base_server_url":                      resourceschema.StringAttribute{Optional: true, Description: "baseServerUrl"},
-			"build_provider":                       resourceschema.StringAttribute{Optional: true, Description: "buildProvider"},
-			"build_timeout":                        resourceschema.StringAttribute{Optional: true, Description: "buildTimeout"},
-			"builds_directory":                     resourceschema.StringAttribute{Optional: true, Description: "buildsDirectory"},
-			"default_deploy_pull_policy":           resourceschema.StringAttribute{Optional: true, Description: "defaultDeployPullPolicy"},
-			"default_shell":                        resourceschema.StringAttribute{Optional: true, Description: "defaultShell"},
-			"deploy_wait_timeout":                  resourceschema.StringAttribute{Optional: true, Description: "deployWaitTimeout"},
-			"depot_project_id":                     resourceschema.StringAttribute{Optional: true, Description: "depotProjectId"},
-			"depot_token":                          resourceschema.StringAttribute{Optional: true, Description: "depotToken", DeprecationMessage: writeOnlyDeprecation("depot_token")},
-			"depot_token_wo":                       writeOnlyAttribute("depot_token", "depotToken."),
-			"depot_token_wo_version":               writeOnlyVersionAttribute("depot_token"),
-			"disk_usage_path":                      resourceschema.StringAttribute{Optional: true, Description: "diskUsagePath"},
-			"docker_host":                          resourceschema.StringAttribute{Optional: true, Description: "dockerHost"},
-			"docker_api_timeout":                   resourceschema.StringAttribute{Optional: true, Description: "dockerApiTimeout"},
-			"docker_client_refresh_interval":       resourceschema.StringAttribute{Optional: true, Description: "dockerClientRefreshInterval"},
-			"docker_image_pull_timeout":            resourceschema.StringAttribute{Optional: true, Description: "dockerImagePullTimeout"},
-			"enable_gravatar":                      resourceschema.StringAttribute{Optional: true, Description: "enableGravatar"},
-			"environment_health_interval":          resourceschema.StringAttribute{Optional: true, Description: "environmentHealthInterval"},
-			"experimental_features_enabled":        resourceschema.StringAttribute{Optional: true, Description: "experimentalFeaturesEnabled"},
-			"follow_project_symlinks":              resourceschema.StringAttribute{Optional: true, Description: "followProjectSymlinks"},
-			"git_operation_timeout":                resourceschema.StringAttribute{Optional: true, Description: "gitOperationTimeout"},
-			"git_sync_max_binary_size_mb":          resourceschema.StringAttribute{Optional: true, Description: "gitSyncMaxBinarySizeMb"},
-			"git_sync_max_files":                   resourceschema.StringAttribute{Optional: true, Description: "gitSyncMaxFiles"},
-			"git_sync_max_total_size_mb":           resourceschema.StringAttribute{Optional: true, Description: "gitSyncMaxTotalSizeMb"},
-			"http_client_timeout":                  resourceschema.StringAttribute{Optional: true, Description: "httpClientTimeout"},
-			"icon_catalog":                         resourceschema.StringAttribute{Optional: true, Description: "iconCatalog", DeprecationMessage: "Arcane no longer accepts this setting (removed in v2.11.0); it is ignored. It is now a per-user preference set in the Arcane UI."},
-			"image_patch_timeout_sec":              resourceschema.StringAttribute{Optional: true, Description: "imagePatchTimeoutSec"},
-			"image_patch_suffix":                   resourceschema.StringAttribute{Optional: true, Description: "imagePatchSuffix"},
-			"image_patch_all_platforms":            resourceschema.StringAttribute{Optional: true, Description: "imagePatchAllPlatforms"},
-			"image_event_watcher_enabled":          resourceschema.StringAttribute{Optional: true, Description: "imageEventWatcherEnabled"},
-			"image_auto_patch_interval":            resourceschema.StringAttribute{Optional: true, Description: "imageAutoPatchInterval"},
-			"image_auto_patch_enabled":             resourceschema.StringAttribute{Optional: true, Description: "imageAutoPatchEnabled"},
-			"keyboard_shortcuts_enabled":           resourceschema.StringAttribute{Optional: true, Description: "keyboardShortcutsEnabled", DeprecationMessage: "Arcane no longer accepts this setting (removed in v2.11.0); it is ignored. It is now a per-user preference set in the Arcane UI."},
-			"lifecycle_enabled":                    resourceschema.StringAttribute{Optional: true, Description: "lifecycleEnabled"},
-			"lifecycle_default_runner_image":       resourceschema.StringAttribute{Optional: true, Description: "lifecycleDefaultRunnerImage"},
-			"lifecycle_max_timeout_sec":            resourceschema.StringAttribute{Optional: true, Description: "lifecycleMaxTimeoutSec"},
-			"max_concurrent_activities":            resourceschema.StringAttribute{Optional: true, Description: "maxConcurrentActivities"},
-			"max_image_upload_size":                resourceschema.StringAttribute{Optional: true, Description: "maxImageUploadSize"},
-			"mobile_navigation_mode":               resourceschema.StringAttribute{Optional: true, Description: "mobileNavigationMode", DeprecationMessage: "Arcane no longer accepts this setting (removed in v2.11.0); it is ignored. It is now a per-user preference set in the Arcane UI."},
-			"mobile_navigation_show_labels":        resourceschema.StringAttribute{Optional: true, Description: "mobileNavigationShowLabels", DeprecationMessage: "Arcane no longer accepts this setting (removed in v2.11.0); it is ignored. It is now a per-user preference set in the Arcane UI."},
-			"oidc_auto_redirect_to_provider":       resourceschema.StringAttribute{Optional: true, Description: "oidcAutoRedirectToProvider"},
-			"oidc_client_id":                       resourceschema.StringAttribute{Optional: true, Description: "oidcClientId"},
-			"oidc_client_secret":                   resourceschema.StringAttribute{Optional: true, Description: "oidcClientSecret", DeprecationMessage: writeOnlyDeprecation("oidc_client_secret")},
-			"oidc_client_secret_wo":                writeOnlyAttribute("oidc_client_secret", "oidcClientSecret."),
-			"oidc_client_secret_wo_version":        writeOnlyVersionAttribute("oidc_client_secret"),
-			"oidc_enabled":                         resourceschema.StringAttribute{Optional: true, Description: "oidcEnabled"},
-			"oidc_groups_claim":                    resourceschema.StringAttribute{Optional: true, Description: "oidcGroupsClaim"},
-			"oidc_issuer_url":                      resourceschema.StringAttribute{Optional: true, Description: "oidcIssuerUrl"},
-			"oidc_merge_accounts":                  resourceschema.StringAttribute{Optional: true, Description: "oidcMergeAccounts"},
-			"oidc_provider_logo_url":               resourceschema.StringAttribute{Optional: true, Description: "oidcProviderLogoUrl"},
-			"oidc_provider_name":                   resourceschema.StringAttribute{Optional: true, Description: "oidcProviderName"},
-			"oidc_scopes":                          resourceschema.StringAttribute{Optional: true, Description: "oidcScopes"},
-			"oidc_skip_tls_verify":                 resourceschema.StringAttribute{Optional: true, Description: "oidcSkipTlsVerify"},
-			"oled_mode":                            resourceschema.StringAttribute{Optional: true, Description: "oledMode", DeprecationMessage: "Arcane no longer accepts this setting (removed in v2.11.0); it is ignored. It is now a per-user preference set in the Arcane UI."},
-			"polling_enabled":                      resourceschema.StringAttribute{Optional: true, Description: "pollingEnabled"},
-			"polling_interval":                     resourceschema.StringAttribute{Optional: true, Description: "pollingInterval"},
-			"projects_directory":                   resourceschema.StringAttribute{Optional: true, Description: "projectsDirectory"},
-			"prune_build_cache_mode":               resourceschema.StringAttribute{Optional: true, Description: "pruneBuildCacheMode"},
-			"prune_build_cache_until":              resourceschema.StringAttribute{Optional: true, Description: "pruneBuildCacheUntil"},
-			"prune_container_mode":                 resourceschema.StringAttribute{Optional: true, Description: "pruneContainerMode"},
-			"prune_container_until":                resourceschema.StringAttribute{Optional: true, Description: "pruneContainerUntil"},
-			"prune_image_mode":                     resourceschema.StringAttribute{Optional: true, Description: "pruneImageMode"},
-			"prune_image_until":                    resourceschema.StringAttribute{Optional: true, Description: "pruneImageUntil"},
-			"prune_network_mode":                   resourceschema.StringAttribute{Optional: true, Description: "pruneNetworkMode"},
-			"prune_network_until":                  resourceschema.StringAttribute{Optional: true, Description: "pruneNetworkUntil"},
-			"prune_volume_mode":                    resourceschema.StringAttribute{Optional: true, Description: "pruneVolumeMode"},
-			"proxy_request_timeout":                resourceschema.StringAttribute{Optional: true, Description: "proxyRequestTimeout"},
-			"registry_timeout":                     resourceschema.StringAttribute{Optional: true, Description: "registryTimeout"},
-			"scheduled_prune_enabled":              resourceschema.StringAttribute{Optional: true, Description: "scheduledPruneEnabled"},
-			"scheduled_prune_interval":             resourceschema.StringAttribute{Optional: true, Description: "scheduledPruneInterval"},
-			"sidebar_hover_expansion":              resourceschema.StringAttribute{Optional: true, Description: "sidebarHoverExpansion", DeprecationMessage: "Arcane no longer accepts this setting (removed in v2.11.0); it is ignored. It is now a per-user preference set in the Arcane UI."},
-			"swarm_stack_sources_directory":        resourceschema.StringAttribute{Optional: true, Description: "swarmStackSourcesDirectory"},
-			"templates_directory":                  resourceschema.StringAttribute{Optional: true, Description: "templatesDirectory"},
-			"tools_image_registry":                 resourceschema.StringAttribute{Optional: true, Description: "toolsImageRegistry"},
-			"trivy_concurrent_scan_containers":     resourceschema.StringAttribute{Optional: true, Description: "trivyConcurrentScanContainers"},
-			"trivy_cpu_limit":                      resourceschema.StringAttribute{Optional: true, Description: "trivyCpuLimit"},
-			"trivy_ignore_unfixed":                 resourceschema.StringAttribute{Optional: true, Description: "trivyIgnoreUnfixed"},
-			"trivy_db_registry":                    resourceschema.StringAttribute{Optional: true, Description: "trivyDbRegistry"},
-			"trivy_image":                          resourceschema.StringAttribute{Optional: true, Description: "trivyImage", DeprecationMessage: "Arcane no longer accepts this setting (removed in v2.11.0); it is ignored. It has no replacement."},
-			"trivy_memory_limit_mb":                resourceschema.StringAttribute{Optional: true, Description: "trivyMemoryLimitMb"},
-			"trivy_network":                        resourceschema.StringAttribute{Optional: true, Description: "trivyNetwork"},
-			"trivy_preserve_cache_on_volume_prune": resourceschema.StringAttribute{Optional: true, Description: "trivyPreserveCacheOnVolumePrune", DeprecationMessage: "Arcane no longer accepts this setting (removed in v2.11.0); it is ignored. It has no replacement."},
-			"trivy_privileged":                     resourceschema.StringAttribute{Optional: true, Description: "trivyPrivileged"},
-			"trivy_resource_limits_enabled":        resourceschema.StringAttribute{Optional: true, Description: "trivyResourceLimitsEnabled"},
-			"trivy_scan_timeout":                   resourceschema.StringAttribute{Optional: true, Description: "trivyScanTimeout"},
-			"trivy_security_opts":                  resourceschema.StringAttribute{Optional: true, Description: "trivySecurityOpts"},
-			"update_check_registry":                resourceschema.StringAttribute{Optional: true, Description: "updateCheckRegistry"},
-			"trivy_server_url":                     resourceschema.StringAttribute{Optional: true, Description: "trivyServerUrl"},
-			"trivy_server_token":                   resourceschema.StringAttribute{Optional: true, Sensitive: true, Description: "trivyServerToken", DeprecationMessage: writeOnlyDeprecation("trivy_server_token")},
-			"trivy_server_token_wo":                writeOnlyAttribute("trivy_server_token", "trivyServerToken."),
-			"trivy_server_token_wo_version":        writeOnlyVersionAttribute("trivy_server_token"),
-			"trivy_server_enabled":                 resourceschema.StringAttribute{Optional: true, Description: "trivyServerEnabled"},
-			"volume_browser_helper_idle_timeout":   resourceschema.StringAttribute{Optional: true, Description: "volumeBrowserHelperIdleTimeout", DeprecationMessage: "Arcane no longer accepts this setting (removed in v2.11.0); it is ignored. Use volume_helper_idle_timeout instead."},
-			"volume_helper_idle_timeout":           resourceschema.StringAttribute{Optional: true, Description: "volumeHelperIdleTimeout"},
-			"vulnerability_scan_enabled":           resourceschema.StringAttribute{Optional: true, Description: "vulnerabilityScanEnabled"},
-			"vulnerability_scan_interval":          resourceschema.StringAttribute{Optional: true, Description: "vulnerabilityScanInterval"},
+			"activity_history_max_entries":             resourceschema.StringAttribute{Optional: true, Description: "activityHistoryMaxEntries"},
+			"activity_history_retention_days":          resourceschema.StringAttribute{Optional: true, Description: "activityHistoryRetentionDays"},
+			"apns_enabled":                             resourceschema.StringAttribute{Optional: true, Description: "apnsEnabled"},
+			"auth_local_enabled":                       resourceschema.StringAttribute{Optional: true, Description: "authLocalEnabled"},
+			"auth_password_min_length":                 resourceschema.StringAttribute{Optional: true, Description: "authPasswordMinLength (global authentication setting)"},
+			"auth_password_require_lowercase":          resourceschema.StringAttribute{Optional: true, Description: "authPasswordRequireLowercase (global authentication setting)"},
+			"auth_password_require_number":             resourceschema.StringAttribute{Optional: true, Description: "authPasswordRequireNumber (global authentication setting)"},
+			"auth_password_require_symbol":             resourceschema.StringAttribute{Optional: true, Description: "authPasswordRequireSymbol (global authentication setting)"},
+			"auth_password_require_uppercase":          resourceschema.StringAttribute{Optional: true, Description: "authPasswordRequireUppercase (global authentication setting)"},
+			"auth_session_timeout":                     resourceschema.StringAttribute{Optional: true, Description: "authSessionTimeout"},
+			"auto_heal_enabled":                        resourceschema.StringAttribute{Optional: true, Description: "autoHealEnabled"},
+			"auto_heal_excluded_containers":            resourceschema.StringAttribute{Optional: true, Description: "autoHealExcludedContainers"},
+			"auto_heal_interval":                       resourceschema.StringAttribute{Optional: true, Description: "autoHealInterval"},
+			"auto_heal_max_restarts":                   resourceschema.StringAttribute{Optional: true, Description: "autoHealMaxRestarts"},
+			"auto_heal_restart_window":                 resourceschema.StringAttribute{Optional: true, Description: "autoHealRestartWindow"},
+			"auto_inject_env":                          resourceschema.StringAttribute{Optional: true, Description: "autoInjectEnv"},
+			"auto_update":                              resourceschema.StringAttribute{Optional: true, Description: "autoUpdate"},
+			"auto_update_excluded_containers":          resourceschema.StringAttribute{Optional: true, Description: "autoUpdateExcludedContainers"},
+			"auto_update_interval":                     resourceschema.StringAttribute{Optional: true, Description: "autoUpdateInterval"},
+			"avatar_max_upload_size_mb":                resourceschema.StringAttribute{Optional: true, Description: "avatarMaxUploadSizeMb"},
+			"base_server_url":                          resourceschema.StringAttribute{Optional: true, Description: "baseServerUrl"},
+			"build_provider":                           resourceschema.StringAttribute{Optional: true, Description: "buildProvider"},
+			"build_timeout":                            resourceschema.StringAttribute{Optional: true, Description: "buildTimeout"},
+			"builds_directory":                         resourceschema.StringAttribute{Optional: true, Description: "buildsDirectory"},
+			"default_deploy_pull_policy":               resourceschema.StringAttribute{Optional: true, Description: "defaultDeployPullPolicy"},
+			"default_shell":                            resourceschema.StringAttribute{Optional: true, Description: "defaultShell"},
+			"deploy_wait_timeout":                      resourceschema.StringAttribute{Optional: true, Description: "deployWaitTimeout"},
+			"depot_project_id":                         resourceschema.StringAttribute{Optional: true, Description: "depotProjectId"},
+			"depot_token_wo":                           writeOnlyAttribute("depot_token", "depotToken."),
+			"depot_token_wo_version":                   writeOnlyVersionAttribute("depot_token"),
+			"disk_usage_path":                          resourceschema.StringAttribute{Optional: true, Description: "diskUsagePath"},
+			"docker_host":                              resourceschema.StringAttribute{Optional: true, Description: "dockerHost"},
+			"docker_api_timeout":                       resourceschema.StringAttribute{Optional: true, Description: "dockerApiTimeout"},
+			"docker_client_refresh_interval":           resourceschema.StringAttribute{Optional: true, Description: "dockerClientRefreshInterval"},
+			"docker_image_pull_timeout":                resourceschema.StringAttribute{Optional: true, Description: "dockerImagePullTimeout"},
+			"enable_gravatar":                          resourceschema.StringAttribute{Optional: true, Description: "enableGravatar"},
+			"environment_health_interval":              resourceschema.StringAttribute{Optional: true, Description: "environmentHealthInterval"},
+			"experimental_features_enabled":            resourceschema.StringAttribute{Optional: true, Description: "experimentalFeaturesEnabled"},
+			"follow_project_symlinks":                  resourceschema.StringAttribute{Optional: true, Description: "followProjectSymlinks"},
+			"git_operation_timeout":                    resourceschema.StringAttribute{Optional: true, Description: "gitOperationTimeout"},
+			"git_sync_max_binary_size_mb":              resourceschema.StringAttribute{Optional: true, Description: "gitSyncMaxBinarySizeMb"},
+			"git_sync_max_files":                       resourceschema.StringAttribute{Optional: true, Description: "gitSyncMaxFiles"},
+			"git_sync_max_total_size_mb":               resourceschema.StringAttribute{Optional: true, Description: "gitSyncMaxTotalSizeMb"},
+			"http_client_timeout":                      resourceschema.StringAttribute{Optional: true, Description: "httpClientTimeout"},
+			"image_patch_timeout_sec":                  resourceschema.StringAttribute{Optional: true, Description: "imagePatchTimeoutSec"},
+			"image_patch_suffix":                       resourceschema.StringAttribute{Optional: true, Description: "imagePatchSuffix"},
+			"image_patch_all_platforms":                resourceschema.StringAttribute{Optional: true, Description: "imagePatchAllPlatforms"},
+			"image_event_watcher_enabled":              resourceschema.StringAttribute{Optional: true, Description: "imageEventWatcherEnabled"},
+			"image_auto_patch_interval":                resourceschema.StringAttribute{Optional: true, Description: "imageAutoPatchInterval"},
+			"image_auto_patch_enabled":                 resourceschema.StringAttribute{Optional: true, Description: "imageAutoPatchEnabled"},
+			"lifecycle_enabled":                        resourceschema.StringAttribute{Optional: true, Description: "lifecycleEnabled"},
+			"lifecycle_default_runner_image":           resourceschema.StringAttribute{Optional: true, Description: "lifecycleDefaultRunnerImage"},
+			"lifecycle_max_timeout_sec":                resourceschema.StringAttribute{Optional: true, Description: "lifecycleMaxTimeoutSec"},
+			"max_concurrent_activities":                resourceschema.StringAttribute{Optional: true, Description: "maxConcurrentActivities"},
+			"max_image_upload_size":                    resourceschema.StringAttribute{Optional: true, Description: "maxImageUploadSize"},
+			"oidc_auto_redirect_to_provider":           resourceschema.StringAttribute{Optional: true, Description: "oidcAutoRedirectToProvider"},
+			"oidc_client_id":                           resourceschema.StringAttribute{Optional: true, Description: "oidcClientId"},
+			"oidc_client_secret_wo":                    writeOnlyAttribute("oidc_client_secret", "oidcClientSecret."),
+			"oidc_client_secret_wo_version":            writeOnlyVersionAttribute("oidc_client_secret"),
+			"oidc_enabled":                             resourceschema.StringAttribute{Optional: true, Description: "oidcEnabled"},
+			"oidc_groups_claim":                        resourceschema.StringAttribute{Optional: true, Description: "oidcGroupsClaim"},
+			"oidc_issuer_url":                          resourceschema.StringAttribute{Optional: true, Description: "oidcIssuerUrl"},
+			"oidc_merge_accounts":                      resourceschema.StringAttribute{Optional: true, Description: "oidcMergeAccounts"},
+			"oidc_provider_logo_url":                   resourceschema.StringAttribute{Optional: true, Description: "oidcProviderLogoUrl"},
+			"oidc_provider_name":                       resourceschema.StringAttribute{Optional: true, Description: "oidcProviderName"},
+			"oidc_scopes":                              resourceschema.StringAttribute{Optional: true, Description: "oidcScopes"},
+			"oidc_skip_tls_verify":                     resourceschema.StringAttribute{Optional: true, Description: "oidcSkipTlsVerify"},
+			"polling_enabled":                          resourceschema.StringAttribute{Optional: true, Description: "pollingEnabled"},
+			"polling_interval":                         resourceschema.StringAttribute{Optional: true, Description: "pollingInterval"},
+			"projects_directory":                       resourceschema.StringAttribute{Optional: true, Description: "projectsDirectory"},
+			"prune_build_cache_mode":                   resourceschema.StringAttribute{Optional: true, Description: "pruneBuildCacheMode"},
+			"prune_build_cache_until":                  resourceschema.StringAttribute{Optional: true, Description: "pruneBuildCacheUntil"},
+			"prune_container_mode":                     resourceschema.StringAttribute{Optional: true, Description: "pruneContainerMode"},
+			"prune_container_until":                    resourceschema.StringAttribute{Optional: true, Description: "pruneContainerUntil"},
+			"prune_image_mode":                         resourceschema.StringAttribute{Optional: true, Description: "pruneImageMode"},
+			"prune_image_until":                        resourceschema.StringAttribute{Optional: true, Description: "pruneImageUntil"},
+			"prune_network_mode":                       resourceschema.StringAttribute{Optional: true, Description: "pruneNetworkMode"},
+			"prune_network_until":                      resourceschema.StringAttribute{Optional: true, Description: "pruneNetworkUntil"},
+			"prune_volume_mode":                        resourceschema.StringAttribute{Optional: true, Description: "pruneVolumeMode"},
+			"proxy_request_timeout":                    resourceschema.StringAttribute{Optional: true, Description: "proxyRequestTimeout"},
+			"registry_timeout":                         resourceschema.StringAttribute{Optional: true, Description: "registryTimeout"},
+			"scheduled_prune_enabled":                  resourceschema.StringAttribute{Optional: true, Description: "scheduledPruneEnabled"},
+			"scheduled_prune_interval":                 resourceschema.StringAttribute{Optional: true, Description: "scheduledPruneInterval"},
+			"swarm_stack_sources_directory":            resourceschema.StringAttribute{Optional: true, Description: "swarmStackSourcesDirectory"},
+			"templates_directory":                      resourceschema.StringAttribute{Optional: true, Description: "templatesDirectory"},
+			"tools_image_registry":                     resourceschema.StringAttribute{Optional: true, Description: "toolsImageRegistry"},
+			"trivy_concurrent_scan_containers":         resourceschema.StringAttribute{Optional: true, Description: "trivyConcurrentScanContainers"},
+			"trivy_cpu_limit":                          resourceschema.StringAttribute{Optional: true, Description: "trivyCpuLimit"},
+			"trivy_ignore_unfixed":                     resourceschema.StringAttribute{Optional: true, Description: "trivyIgnoreUnfixed"},
+			"trivy_db_registry":                        resourceschema.StringAttribute{Optional: true, Description: "trivyDbRegistry"},
+			"trivy_memory_limit_mb":                    resourceschema.StringAttribute{Optional: true, Description: "trivyMemoryLimitMb"},
+			"trivy_network":                            resourceschema.StringAttribute{Optional: true, Description: "trivyNetwork"},
+			"trivy_privileged":                         resourceschema.StringAttribute{Optional: true, Description: "trivyPrivileged"},
+			"trivy_resource_limits_enabled":            resourceschema.StringAttribute{Optional: true, Description: "trivyResourceLimitsEnabled"},
+			"trivy_scan_timeout":                       resourceschema.StringAttribute{Optional: true, Description: "trivyScanTimeout"},
+			"trivy_security_opts":                      resourceschema.StringAttribute{Optional: true, Description: "trivySecurityOpts"},
+			"update_check_registry":                    resourceschema.StringAttribute{Optional: true, Description: "updateCheckRegistry"},
+			"trivy_server_url":                         resourceschema.StringAttribute{Optional: true, Description: "trivyServerUrl"},
+			"trivy_server_token_wo":                    writeOnlyAttribute("trivy_server_token", "trivyServerToken."),
+			"trivy_server_token_wo_version":            writeOnlyVersionAttribute("trivy_server_token"),
+			"trivy_server_enabled":                     resourceschema.StringAttribute{Optional: true, Description: "trivyServerEnabled"},
+			"volume_helper_idle_timeout":               resourceschema.StringAttribute{Optional: true, Description: "volumeHelperIdleTimeout"},
+			"vulnerability_scan_enabled":               resourceschema.StringAttribute{Optional: true, Description: "vulnerabilityScanEnabled"},
+			"vulnerability_scan_interval":              resourceschema.StringAttribute{Optional: true, Description: "vulnerabilityScanInterval"},
+			"projects_directories":                     resourceschema.StringAttribute{Optional: true, Description: "projectsDirectories"},
+			"auto_update_delay":                        resourceschema.StringAttribute{Optional: true, Description: "autoUpdateDelay"},
+			"event_cleanup_interval":                   resourceschema.StringAttribute{Optional: true, Description: "eventCleanupInterval"},
+			"expired_sessions_cleanup_interval":        resourceschema.StringAttribute{Optional: true, Description: "expiredSessionsCleanupInterval"},
+			"upgrade_log_retention_days":               resourceschema.StringAttribute{Optional: true, Description: "upgradeLogRetentionDays"},
+			"unmanaged_backup_retention_days":          resourceschema.StringAttribute{Optional: true, Description: "unmanagedBackupRetentionDays"},
+			"project_scan_max_depth":                   resourceschema.StringAttribute{Optional: true, Description: "projectScanMaxDepth"},
+			"project_scan_skip_dirs":                   resourceschema.StringAttribute{Optional: true, Description: "projectScanSkipDirs"},
+			"project_workspace_max_depth":              resourceschema.StringAttribute{Optional: true, Description: "projectWorkspaceMaxDepth"},
+			"project_workspace_max_entries":            resourceschema.StringAttribute{Optional: true, Description: "projectWorkspaceMaxEntries"},
+			"project_workspace_max_file_size_mb":       resourceschema.StringAttribute{Optional: true, Description: "projectWorkspaceMaxFileSizeMb"},
+			"volume_workspace_max_entries":             resourceschema.StringAttribute{Optional: true, Description: "volumeWorkspaceMaxEntries"},
+			"volume_workspace_max_file_size_mb":        resourceschema.StringAttribute{Optional: true, Description: "volumeWorkspaceMaxFileSizeMb"},
+			"gpu_monitoring_enabled":                   resourceschema.StringAttribute{Optional: true, Description: "gpuMonitoringEnabled"},
+			"gpu_type":                                 resourceschema.StringAttribute{Optional: true, Description: "gpuType"},
+			"build_history_retention_days":             resourceschema.StringAttribute{Optional: true, Description: "buildHistoryRetentionDays"},
+			"feature_vulnerability_management_enabled": resourceschema.StringAttribute{Optional: true, Description: "featureVulnerabilityManagementEnabled"},
+			"feature_swarm_enabled":                    resourceschema.StringAttribute{Optional: true, Description: "featureSwarmEnabled"},
+			"vulnerability_threat_intel_enabled":       resourceschema.StringAttribute{Optional: true, Description: "vulnerabilityThreatIntelEnabled"},
+			"vulnerability_update_gate_enabled":        resourceschema.StringAttribute{Optional: true, Description: "vulnerabilityUpdateGateEnabled"},
+			"vulnerability_update_gate_max_critical":   resourceschema.StringAttribute{Optional: true, Description: "vulnerabilityUpdateGateMaxCritical"},
+			"vulnerability_update_gate_max_high":       resourceschema.StringAttribute{Optional: true, Description: "vulnerabilityUpdateGateMaxHigh"},
+			"vulnerability_update_gate_max_medium":     resourceschema.StringAttribute{Optional: true, Description: "vulnerabilityUpdateGateMaxMedium"},
+			"vulnerability_update_gate_max_low":        resourceschema.StringAttribute{Optional: true, Description: "vulnerabilityUpdateGateMaxLow"},
+			"trivy_config":                             resourceschema.StringAttribute{Optional: true, Description: "trivyConfig"},
+			"trivy_ignore":                             resourceschema.StringAttribute{Optional: true, Description: "trivyIgnore"},
+			"registry_tag_timeout":                     resourceschema.StringAttribute{Optional: true, Description: "registryTagTimeout"},
+			"http2_receive_window_mb":                  resourceschema.StringAttribute{Optional: true, Description: "http2ReceiveWindowMb"},
+			"agent_tunnel_stream_window_mb":            resourceschema.StringAttribute{Optional: true, Description: "agentTunnelStreamWindowMb"},
+			"development_branding_enabled":             resourceschema.StringAttribute{Optional: true, Description: "developmentBrandingEnabled (global app-wide setting)"},
+			"all_environments_limit":                   resourceschema.StringAttribute{Optional: true, Description: "allEnvironmentsLimit (global app-wide setting)"},
+			"upgrade_max_parallel_agents":              resourceschema.StringAttribute{Optional: true, Description: "upgradeMaxParallelAgents (global app-wide setting)"},
+			"analytics_enabled":                        resourceschema.StringAttribute{Optional: true, Description: "analyticsEnabled (global app-wide setting)"},
+			"update_check_enabled":                     resourceschema.StringAttribute{Optional: true, Description: "updateCheckEnabled (global app-wide setting)"},
+			"notifications_include_release_links":      resourceschema.StringAttribute{Optional: true, Description: "notificationsIncludeReleaseLinks (global app-wide setting)"},
+			"hsts_enabled":                             resourceschema.StringAttribute{Optional: true, Description: "hstsEnabled (global authentication setting)"},
+			"oidc_authorization_endpoint":              resourceschema.StringAttribute{Optional: true, Description: "oidcAuthorizationEndpoint (global authentication setting)"},
+			"oidc_token_endpoint":                      resourceschema.StringAttribute{Optional: true, Description: "oidcTokenEndpoint (global authentication setting)"},
+			"oidc_userinfo_endpoint":                   resourceschema.StringAttribute{Optional: true, Description: "oidcUserinfoEndpoint (global authentication setting)"},
+			"oidc_jwks_endpoint":                       resourceschema.StringAttribute{Optional: true, Description: "oidcJwksEndpoint (global authentication setting)"},
+			"oidc_device_authorization_endpoint":       resourceschema.StringAttribute{Optional: true, Description: "oidcDeviceAuthorizationEndpoint (global authentication setting)"},
+			"oidc_mobile_redirect_uris":                resourceschema.StringAttribute{Optional: true, Description: "oidcMobileRedirectUris (global authentication setting)"},
+			"github_token_wo":                          writeOnlyAttribute("github_token", "githubToken (GitHub token used for API rate limits)."),
+			"github_token_wo_version":                  writeOnlyVersionAttribute("github_token"),
 
 			// Computed applied map
 			"applied": resourceschema.MapAttribute{
 				Computed:    true,
-				Description: "All environment settings after apply (key -> value).",
+				Description: "All settings after apply (key -> value): the environment settings plus the global app-wide and authentication settings.",
 				ElementType: types.StringType,
 			},
 		},
@@ -177,123 +211,157 @@ func (r *SettingsResource) Configure(_ context.Context, req resource.ConfigureRe
 }
 
 type settingsModel struct {
-	ExperimentalFeaturesEnabled     types.String `tfsdk:"experimental_features_enabled"`
-	DeployWaitTimeout               types.String `tfsdk:"deploy_wait_timeout"`
-	AvatarMaxUploadSizeMb           types.String `tfsdk:"avatar_max_upload_size_mb"`
-	ApnsEnabled                     types.String `tfsdk:"apns_enabled"`
-	ID                              types.String `tfsdk:"id"`
-	EnvironmentID                   types.String `tfsdk:"environment_id"`
-	AccentColor                     types.String `tfsdk:"accent_color"`
-	ActivityHistoryMaxEntries       types.String `tfsdk:"activity_history_max_entries"`
-	ActivityHistoryRetentionDays    types.String `tfsdk:"activity_history_retention_days"`
-	ApplicationTheme                types.String `tfsdk:"application_theme"`
-	AuthLocalEnabled                types.String `tfsdk:"auth_local_enabled"`
-	AuthPasswordPolicy              types.String `tfsdk:"auth_password_policy"`
-	AuthSessionTimeout              types.String `tfsdk:"auth_session_timeout"`
-	AutoHealEnabled                 types.String `tfsdk:"auto_heal_enabled"`
-	AutoHealExcludedContainers      types.String `tfsdk:"auto_heal_excluded_containers"`
-	AutoHealInterval                types.String `tfsdk:"auto_heal_interval"`
-	AutoHealMaxRestarts             types.String `tfsdk:"auto_heal_max_restarts"`
-	AutoHealRestartWindow           types.String `tfsdk:"auto_heal_restart_window"`
-	AutoInjectEnv                   types.String `tfsdk:"auto_inject_env"`
-	AutoUpdate                      types.String `tfsdk:"auto_update"`
-	AutoUpdateExcludedContainers    types.String `tfsdk:"auto_update_excluded_containers"`
-	AutoUpdateInterval              types.String `tfsdk:"auto_update_interval"`
-	BaseServerUrl                   types.String `tfsdk:"base_server_url"`
-	BuildProvider                   types.String `tfsdk:"build_provider"`
-	BuildTimeout                    types.String `tfsdk:"build_timeout"`
-	BuildsDirectory                 types.String `tfsdk:"builds_directory"`
-	DefaultDeployPullPolicy         types.String `tfsdk:"default_deploy_pull_policy"`
-	DefaultShell                    types.String `tfsdk:"default_shell"`
-	DepotProjectId                  types.String `tfsdk:"depot_project_id"`
-	DepotToken                      types.String `tfsdk:"depot_token"`
-	DepotTokenWO                    types.String `tfsdk:"depot_token_wo"`
-	DepotTokenWOVersion             types.Int64  `tfsdk:"depot_token_wo_version"`
-	DiskUsagePath                   types.String `tfsdk:"disk_usage_path"`
-	DockerApiTimeout                types.String `tfsdk:"docker_api_timeout"`
-	DockerClientRefreshInterval     types.String `tfsdk:"docker_client_refresh_interval"`
-	DockerHost                      types.String `tfsdk:"docker_host"`
-	DockerImagePullTimeout          types.String `tfsdk:"docker_image_pull_timeout"`
-	EnableGravatar                  types.String `tfsdk:"enable_gravatar"`
-	EnvironmentHealthInterval       types.String `tfsdk:"environment_health_interval"`
-	FollowProjectSymlinks           types.String `tfsdk:"follow_project_symlinks"`
-	GitOperationTimeout             types.String `tfsdk:"git_operation_timeout"`
-	GitSyncMaxBinarySizeMb          types.String `tfsdk:"git_sync_max_binary_size_mb"`
-	GitSyncMaxFiles                 types.String `tfsdk:"git_sync_max_files"`
-	GitSyncMaxTotalSizeMb           types.String `tfsdk:"git_sync_max_total_size_mb"`
-	HttpClientTimeout               types.String `tfsdk:"http_client_timeout"`
-	IconCatalog                     types.String `tfsdk:"icon_catalog"`
-	ImagePatchTimeoutSec            types.String `tfsdk:"image_patch_timeout_sec"`
-	ImagePatchSuffix                types.String `tfsdk:"image_patch_suffix"`
-	ImagePatchAllPlatforms          types.String `tfsdk:"image_patch_all_platforms"`
-	ImageEventWatcherEnabled        types.String `tfsdk:"image_event_watcher_enabled"`
-	ImageAutoPatchInterval          types.String `tfsdk:"image_auto_patch_interval"`
-	ImageAutoPatchEnabled           types.String `tfsdk:"image_auto_patch_enabled"`
-	KeyboardShortcutsEnabled        types.String `tfsdk:"keyboard_shortcuts_enabled"`
-	LifecycleEnabled                types.String `tfsdk:"lifecycle_enabled"`
-	LifecycleDefaultRunnerImage     types.String `tfsdk:"lifecycle_default_runner_image"`
-	LifecycleMaxTimeoutSec          types.String `tfsdk:"lifecycle_max_timeout_sec"`
-	MaxConcurrentActivities         types.String `tfsdk:"max_concurrent_activities"`
-	MaxImageUploadSize              types.String `tfsdk:"max_image_upload_size"`
-	MobileNavigationMode            types.String `tfsdk:"mobile_navigation_mode"`
-	MobileNavigationShowLabels      types.String `tfsdk:"mobile_navigation_show_labels"`
-	OidcAutoRedirectToProvider      types.String `tfsdk:"oidc_auto_redirect_to_provider"`
-	OidcClientId                    types.String `tfsdk:"oidc_client_id"`
-	OidcClientSecret                types.String `tfsdk:"oidc_client_secret"`
-	OidcClientSecretWO              types.String `tfsdk:"oidc_client_secret_wo"`
-	OidcClientSecretWOVersion       types.Int64  `tfsdk:"oidc_client_secret_wo_version"`
-	OidcEnabled                     types.String `tfsdk:"oidc_enabled"`
-	OidcGroupsClaim                 types.String `tfsdk:"oidc_groups_claim"`
-	OidcIssuerUrl                   types.String `tfsdk:"oidc_issuer_url"`
-	OidcMergeAccounts               types.String `tfsdk:"oidc_merge_accounts"`
-	OidcProviderLogoUrl             types.String `tfsdk:"oidc_provider_logo_url"`
-	OidcProviderName                types.String `tfsdk:"oidc_provider_name"`
-	OidcScopes                      types.String `tfsdk:"oidc_scopes"`
-	OidcSkipTlsVerify               types.String `tfsdk:"oidc_skip_tls_verify"`
-	OledMode                        types.String `tfsdk:"oled_mode"`
-	PollingEnabled                  types.String `tfsdk:"polling_enabled"`
-	PollingInterval                 types.String `tfsdk:"polling_interval"`
-	ProjectsDirectory               types.String `tfsdk:"projects_directory"`
-	PruneBuildCacheMode             types.String `tfsdk:"prune_build_cache_mode"`
-	PruneBuildCacheUntil            types.String `tfsdk:"prune_build_cache_until"`
-	PruneContainerMode              types.String `tfsdk:"prune_container_mode"`
-	PruneContainerUntil             types.String `tfsdk:"prune_container_until"`
-	PruneImageMode                  types.String `tfsdk:"prune_image_mode"`
-	PruneImageUntil                 types.String `tfsdk:"prune_image_until"`
-	PruneNetworkMode                types.String `tfsdk:"prune_network_mode"`
-	PruneNetworkUntil               types.String `tfsdk:"prune_network_until"`
-	PruneVolumeMode                 types.String `tfsdk:"prune_volume_mode"`
-	ProxyRequestTimeout             types.String `tfsdk:"proxy_request_timeout"`
-	RegistryTimeout                 types.String `tfsdk:"registry_timeout"`
-	ScheduledPruneEnabled           types.String `tfsdk:"scheduled_prune_enabled"`
-	ScheduledPruneInterval          types.String `tfsdk:"scheduled_prune_interval"`
-	SidebarHoverExpansion           types.String `tfsdk:"sidebar_hover_expansion"`
-	SwarmStackSourcesDirectory      types.String `tfsdk:"swarm_stack_sources_directory"`
-	TemplatesDirectory              types.String `tfsdk:"templates_directory"`
-	ToolsImageRegistry              types.String `tfsdk:"tools_image_registry"`
-	TrivyConcurrentScanContainers   types.String `tfsdk:"trivy_concurrent_scan_containers"`
-	TrivyCpuLimit                   types.String `tfsdk:"trivy_cpu_limit"`
-	TrivyIgnoreUnfixed              types.String `tfsdk:"trivy_ignore_unfixed"`
-	TrivyDbRegistry                 types.String `tfsdk:"trivy_db_registry"`
-	TrivyImage                      types.String `tfsdk:"trivy_image"`
-	TrivyMemoryLimitMb              types.String `tfsdk:"trivy_memory_limit_mb"`
-	TrivyNetwork                    types.String `tfsdk:"trivy_network"`
-	TrivyPreserveCacheOnVolumePrune types.String `tfsdk:"trivy_preserve_cache_on_volume_prune"`
-	TrivyPrivileged                 types.String `tfsdk:"trivy_privileged"`
-	TrivyResourceLimitsEnabled      types.String `tfsdk:"trivy_resource_limits_enabled"`
-	TrivyScanTimeout                types.String `tfsdk:"trivy_scan_timeout"`
-	TrivySecurityOpts               types.String `tfsdk:"trivy_security_opts"`
-	UpdateCheckRegistry             types.String `tfsdk:"update_check_registry"`
-	TrivyServerUrl                  types.String `tfsdk:"trivy_server_url"`
-	TrivyServerToken                types.String `tfsdk:"trivy_server_token"`
-	TrivyServerTokenWO              types.String `tfsdk:"trivy_server_token_wo"`
-	TrivyServerTokenWOVersion       types.Int64  `tfsdk:"trivy_server_token_wo_version"`
-	TrivyServerEnabled              types.String `tfsdk:"trivy_server_enabled"`
-	VolumeBrowserHelperIdleTimeout  types.String `tfsdk:"volume_browser_helper_idle_timeout"`
-	VolumeHelperIdleTimeout         types.String `tfsdk:"volume_helper_idle_timeout"`
-	VulnerabilityScanEnabled        types.String `tfsdk:"vulnerability_scan_enabled"`
-	VulnerabilityScanInterval       types.String `tfsdk:"vulnerability_scan_interval"`
-	Applied                         types.Map    `tfsdk:"applied"`
+	ExperimentalFeaturesEnabled           types.String `tfsdk:"experimental_features_enabled"`
+	DeployWaitTimeout                     types.String `tfsdk:"deploy_wait_timeout"`
+	AvatarMaxUploadSizeMb                 types.String `tfsdk:"avatar_max_upload_size_mb"`
+	ApnsEnabled                           types.String `tfsdk:"apns_enabled"`
+	ID                                    types.String `tfsdk:"id"`
+	EnvironmentID                         types.String `tfsdk:"environment_id"`
+	ActivityHistoryMaxEntries             types.String `tfsdk:"activity_history_max_entries"`
+	ActivityHistoryRetentionDays          types.String `tfsdk:"activity_history_retention_days"`
+	AuthLocalEnabled                      types.String `tfsdk:"auth_local_enabled"`
+	AuthPasswordMinLength                 types.String `tfsdk:"auth_password_min_length"`
+	AuthPasswordRequireLowercase          types.String `tfsdk:"auth_password_require_lowercase"`
+	AuthPasswordRequireNumber             types.String `tfsdk:"auth_password_require_number"`
+	AuthPasswordRequireSymbol             types.String `tfsdk:"auth_password_require_symbol"`
+	AuthPasswordRequireUppercase          types.String `tfsdk:"auth_password_require_uppercase"`
+	AuthSessionTimeout                    types.String `tfsdk:"auth_session_timeout"`
+	AutoHealEnabled                       types.String `tfsdk:"auto_heal_enabled"`
+	AutoHealExcludedContainers            types.String `tfsdk:"auto_heal_excluded_containers"`
+	AutoHealInterval                      types.String `tfsdk:"auto_heal_interval"`
+	AutoHealMaxRestarts                   types.String `tfsdk:"auto_heal_max_restarts"`
+	AutoHealRestartWindow                 types.String `tfsdk:"auto_heal_restart_window"`
+	AutoInjectEnv                         types.String `tfsdk:"auto_inject_env"`
+	AutoUpdate                            types.String `tfsdk:"auto_update"`
+	AutoUpdateExcludedContainers          types.String `tfsdk:"auto_update_excluded_containers"`
+	AutoUpdateInterval                    types.String `tfsdk:"auto_update_interval"`
+	BaseServerUrl                         types.String `tfsdk:"base_server_url"`
+	BuildProvider                         types.String `tfsdk:"build_provider"`
+	BuildTimeout                          types.String `tfsdk:"build_timeout"`
+	BuildsDirectory                       types.String `tfsdk:"builds_directory"`
+	DefaultDeployPullPolicy               types.String `tfsdk:"default_deploy_pull_policy"`
+	DefaultShell                          types.String `tfsdk:"default_shell"`
+	DepotProjectId                        types.String `tfsdk:"depot_project_id"`
+	DepotTokenWO                          types.String `tfsdk:"depot_token_wo"`
+	DepotTokenWOVersion                   types.Int64  `tfsdk:"depot_token_wo_version"`
+	DiskUsagePath                         types.String `tfsdk:"disk_usage_path"`
+	DockerApiTimeout                      types.String `tfsdk:"docker_api_timeout"`
+	DockerClientRefreshInterval           types.String `tfsdk:"docker_client_refresh_interval"`
+	DockerHost                            types.String `tfsdk:"docker_host"`
+	DockerImagePullTimeout                types.String `tfsdk:"docker_image_pull_timeout"`
+	EnableGravatar                        types.String `tfsdk:"enable_gravatar"`
+	EnvironmentHealthInterval             types.String `tfsdk:"environment_health_interval"`
+	FollowProjectSymlinks                 types.String `tfsdk:"follow_project_symlinks"`
+	GitOperationTimeout                   types.String `tfsdk:"git_operation_timeout"`
+	GitSyncMaxBinarySizeMb                types.String `tfsdk:"git_sync_max_binary_size_mb"`
+	GitSyncMaxFiles                       types.String `tfsdk:"git_sync_max_files"`
+	GitSyncMaxTotalSizeMb                 types.String `tfsdk:"git_sync_max_total_size_mb"`
+	HttpClientTimeout                     types.String `tfsdk:"http_client_timeout"`
+	ImagePatchTimeoutSec                  types.String `tfsdk:"image_patch_timeout_sec"`
+	ImagePatchSuffix                      types.String `tfsdk:"image_patch_suffix"`
+	ImagePatchAllPlatforms                types.String `tfsdk:"image_patch_all_platforms"`
+	ImageEventWatcherEnabled              types.String `tfsdk:"image_event_watcher_enabled"`
+	ImageAutoPatchInterval                types.String `tfsdk:"image_auto_patch_interval"`
+	ImageAutoPatchEnabled                 types.String `tfsdk:"image_auto_patch_enabled"`
+	LifecycleEnabled                      types.String `tfsdk:"lifecycle_enabled"`
+	LifecycleDefaultRunnerImage           types.String `tfsdk:"lifecycle_default_runner_image"`
+	LifecycleMaxTimeoutSec                types.String `tfsdk:"lifecycle_max_timeout_sec"`
+	MaxConcurrentActivities               types.String `tfsdk:"max_concurrent_activities"`
+	MaxImageUploadSize                    types.String `tfsdk:"max_image_upload_size"`
+	OidcAutoRedirectToProvider            types.String `tfsdk:"oidc_auto_redirect_to_provider"`
+	OidcClientId                          types.String `tfsdk:"oidc_client_id"`
+	OidcClientSecretWO                    types.String `tfsdk:"oidc_client_secret_wo"`
+	OidcClientSecretWOVersion             types.Int64  `tfsdk:"oidc_client_secret_wo_version"`
+	OidcEnabled                           types.String `tfsdk:"oidc_enabled"`
+	OidcGroupsClaim                       types.String `tfsdk:"oidc_groups_claim"`
+	OidcIssuerUrl                         types.String `tfsdk:"oidc_issuer_url"`
+	OidcMergeAccounts                     types.String `tfsdk:"oidc_merge_accounts"`
+	OidcProviderLogoUrl                   types.String `tfsdk:"oidc_provider_logo_url"`
+	OidcProviderName                      types.String `tfsdk:"oidc_provider_name"`
+	OidcScopes                            types.String `tfsdk:"oidc_scopes"`
+	OidcSkipTlsVerify                     types.String `tfsdk:"oidc_skip_tls_verify"`
+	PollingEnabled                        types.String `tfsdk:"polling_enabled"`
+	PollingInterval                       types.String `tfsdk:"polling_interval"`
+	ProjectsDirectory                     types.String `tfsdk:"projects_directory"`
+	PruneBuildCacheMode                   types.String `tfsdk:"prune_build_cache_mode"`
+	PruneBuildCacheUntil                  types.String `tfsdk:"prune_build_cache_until"`
+	PruneContainerMode                    types.String `tfsdk:"prune_container_mode"`
+	PruneContainerUntil                   types.String `tfsdk:"prune_container_until"`
+	PruneImageMode                        types.String `tfsdk:"prune_image_mode"`
+	PruneImageUntil                       types.String `tfsdk:"prune_image_until"`
+	PruneNetworkMode                      types.String `tfsdk:"prune_network_mode"`
+	PruneNetworkUntil                     types.String `tfsdk:"prune_network_until"`
+	PruneVolumeMode                       types.String `tfsdk:"prune_volume_mode"`
+	ProxyRequestTimeout                   types.String `tfsdk:"proxy_request_timeout"`
+	RegistryTimeout                       types.String `tfsdk:"registry_timeout"`
+	ScheduledPruneEnabled                 types.String `tfsdk:"scheduled_prune_enabled"`
+	ScheduledPruneInterval                types.String `tfsdk:"scheduled_prune_interval"`
+	SwarmStackSourcesDirectory            types.String `tfsdk:"swarm_stack_sources_directory"`
+	TemplatesDirectory                    types.String `tfsdk:"templates_directory"`
+	ToolsImageRegistry                    types.String `tfsdk:"tools_image_registry"`
+	TrivyConcurrentScanContainers         types.String `tfsdk:"trivy_concurrent_scan_containers"`
+	TrivyCpuLimit                         types.String `tfsdk:"trivy_cpu_limit"`
+	TrivyIgnoreUnfixed                    types.String `tfsdk:"trivy_ignore_unfixed"`
+	TrivyDbRegistry                       types.String `tfsdk:"trivy_db_registry"`
+	TrivyMemoryLimitMb                    types.String `tfsdk:"trivy_memory_limit_mb"`
+	TrivyNetwork                          types.String `tfsdk:"trivy_network"`
+	TrivyPrivileged                       types.String `tfsdk:"trivy_privileged"`
+	TrivyResourceLimitsEnabled            types.String `tfsdk:"trivy_resource_limits_enabled"`
+	TrivyScanTimeout                      types.String `tfsdk:"trivy_scan_timeout"`
+	TrivySecurityOpts                     types.String `tfsdk:"trivy_security_opts"`
+	UpdateCheckRegistry                   types.String `tfsdk:"update_check_registry"`
+	TrivyServerUrl                        types.String `tfsdk:"trivy_server_url"`
+	TrivyServerTokenWO                    types.String `tfsdk:"trivy_server_token_wo"`
+	TrivyServerTokenWOVersion             types.Int64  `tfsdk:"trivy_server_token_wo_version"`
+	TrivyServerEnabled                    types.String `tfsdk:"trivy_server_enabled"`
+	VolumeHelperIdleTimeout               types.String `tfsdk:"volume_helper_idle_timeout"`
+	VulnerabilityScanEnabled              types.String `tfsdk:"vulnerability_scan_enabled"`
+	VulnerabilityScanInterval             types.String `tfsdk:"vulnerability_scan_interval"`
+	ProjectsDirectories                   types.String `tfsdk:"projects_directories"`
+	AutoUpdateDelay                       types.String `tfsdk:"auto_update_delay"`
+	EventCleanupInterval                  types.String `tfsdk:"event_cleanup_interval"`
+	ExpiredSessionsCleanupInterval        types.String `tfsdk:"expired_sessions_cleanup_interval"`
+	UpgradeLogRetentionDays               types.String `tfsdk:"upgrade_log_retention_days"`
+	UnmanagedBackupRetentionDays          types.String `tfsdk:"unmanaged_backup_retention_days"`
+	ProjectScanMaxDepth                   types.String `tfsdk:"project_scan_max_depth"`
+	ProjectScanSkipDirs                   types.String `tfsdk:"project_scan_skip_dirs"`
+	ProjectWorkspaceMaxDepth              types.String `tfsdk:"project_workspace_max_depth"`
+	ProjectWorkspaceMaxEntries            types.String `tfsdk:"project_workspace_max_entries"`
+	ProjectWorkspaceMaxFileSizeMb         types.String `tfsdk:"project_workspace_max_file_size_mb"`
+	VolumeWorkspaceMaxEntries             types.String `tfsdk:"volume_workspace_max_entries"`
+	VolumeWorkspaceMaxFileSizeMb          types.String `tfsdk:"volume_workspace_max_file_size_mb"`
+	GpuMonitoringEnabled                  types.String `tfsdk:"gpu_monitoring_enabled"`
+	GpuType                               types.String `tfsdk:"gpu_type"`
+	BuildHistoryRetentionDays             types.String `tfsdk:"build_history_retention_days"`
+	FeatureVulnerabilityManagementEnabled types.String `tfsdk:"feature_vulnerability_management_enabled"`
+	FeatureSwarmEnabled                   types.String `tfsdk:"feature_swarm_enabled"`
+	VulnerabilityThreatIntelEnabled       types.String `tfsdk:"vulnerability_threat_intel_enabled"`
+	VulnerabilityUpdateGateEnabled        types.String `tfsdk:"vulnerability_update_gate_enabled"`
+	VulnerabilityUpdateGateMaxCritical    types.String `tfsdk:"vulnerability_update_gate_max_critical"`
+	VulnerabilityUpdateGateMaxHigh        types.String `tfsdk:"vulnerability_update_gate_max_high"`
+	VulnerabilityUpdateGateMaxMedium      types.String `tfsdk:"vulnerability_update_gate_max_medium"`
+	VulnerabilityUpdateGateMaxLow         types.String `tfsdk:"vulnerability_update_gate_max_low"`
+	TrivyConfig                           types.String `tfsdk:"trivy_config"`
+	TrivyIgnore                           types.String `tfsdk:"trivy_ignore"`
+	RegistryTagTimeout                    types.String `tfsdk:"registry_tag_timeout"`
+	Http2ReceiveWindowMb                  types.String `tfsdk:"http2_receive_window_mb"`
+	AgentTunnelStreamWindowMb             types.String `tfsdk:"agent_tunnel_stream_window_mb"`
+	DevelopmentBrandingEnabled            types.String `tfsdk:"development_branding_enabled"`
+	AllEnvironmentsLimit                  types.String `tfsdk:"all_environments_limit"`
+	UpgradeMaxParallelAgents              types.String `tfsdk:"upgrade_max_parallel_agents"`
+	AnalyticsEnabled                      types.String `tfsdk:"analytics_enabled"`
+	UpdateCheckEnabled                    types.String `tfsdk:"update_check_enabled"`
+	NotificationsIncludeReleaseLinks      types.String `tfsdk:"notifications_include_release_links"`
+	HstsEnabled                           types.String `tfsdk:"hsts_enabled"`
+	OidcAuthorizationEndpoint             types.String `tfsdk:"oidc_authorization_endpoint"`
+	OidcTokenEndpoint                     types.String `tfsdk:"oidc_token_endpoint"`
+	OidcUserinfoEndpoint                  types.String `tfsdk:"oidc_userinfo_endpoint"`
+	OidcJwksEndpoint                      types.String `tfsdk:"oidc_jwks_endpoint"`
+	OidcDeviceAuthorizationEndpoint       types.String `tfsdk:"oidc_device_authorization_endpoint"`
+	OidcMobileRedirectUris                types.String `tfsdk:"oidc_mobile_redirect_uris"`
+	GithubTokenWO                         types.String `tfsdk:"github_token_wo"`
+	GithubTokenWOVersion                  types.Int64  `tfsdk:"github_token_wo_version"`
+	Applied                               types.Map    `tfsdk:"applied"`
 }
 
 func (r *SettingsResource) Create(ctx context.Context, req resource.CreateRequest, resp *resource.CreateResponse) {
@@ -409,6 +477,7 @@ func settingsSecrets(s settingsModel) []settingsSecret {
 		{"depotToken", s.DepotTokenWO, s.DepotTokenWOVersion},
 		{"oidcClientSecret", s.OidcClientSecretWO, s.OidcClientSecretWOVersion},
 		{"trivyServerToken", s.TrivyServerTokenWO, s.TrivyServerTokenWOVersion},
+		{"githubToken", s.GithubTokenWO, s.GithubTokenWOVersion},
 	}
 }
 
@@ -437,17 +506,19 @@ type settingsField struct {
 	value *types.String
 }
 
-// settingsFields lists the settings the provider manages. Deprecated
-// attributes that Arcane no longer accepts are left out, so they are neither
-// sent nor refreshed. The write-only secrets are handled by
-// addWriteOnlySettings.
+// settingsFields lists the settings the provider manages. The write-only
+// secrets are handled by addWriteOnlySettings.
 func settingsFields(s *settingsModel) []settingsField {
 	return []settingsField{
 		{"activityHistoryMaxEntries", &s.ActivityHistoryMaxEntries},
 		{"activityHistoryRetentionDays", &s.ActivityHistoryRetentionDays},
 		{"apnsEnabled", &s.ApnsEnabled},
 		{"authLocalEnabled", &s.AuthLocalEnabled},
-		{"authPasswordPolicy", &s.AuthPasswordPolicy},
+		{"authPasswordMinLength", &s.AuthPasswordMinLength},
+		{"authPasswordRequireLowercase", &s.AuthPasswordRequireLowercase},
+		{"authPasswordRequireNumber", &s.AuthPasswordRequireNumber},
+		{"authPasswordRequireSymbol", &s.AuthPasswordRequireSymbol},
+		{"authPasswordRequireUppercase", &s.AuthPasswordRequireUppercase},
 		{"authSessionTimeout", &s.AuthSessionTimeout},
 		{"autoHealEnabled", &s.AutoHealEnabled},
 		{"autoHealExcludedContainers", &s.AutoHealExcludedContainers},
@@ -467,7 +538,6 @@ func settingsFields(s *settingsModel) []settingsField {
 		{"defaultShell", &s.DefaultShell},
 		{"deployWaitTimeout", &s.DeployWaitTimeout},
 		{"depotProjectId", &s.DepotProjectId},
-		{"depotToken", &s.DepotToken},
 		{"diskUsagePath", &s.DiskUsagePath},
 		{"dockerApiTimeout", &s.DockerApiTimeout},
 		{"dockerClientRefreshInterval", &s.DockerClientRefreshInterval},
@@ -495,7 +565,6 @@ func settingsFields(s *settingsModel) []settingsField {
 		{"maxImageUploadSize", &s.MaxImageUploadSize},
 		{"oidcAutoRedirectToProvider", &s.OidcAutoRedirectToProvider},
 		{"oidcClientId", &s.OidcClientId},
-		{"oidcClientSecret", &s.OidcClientSecret},
 		{"oidcEnabled", &s.OidcEnabled},
 		{"oidcGroupsClaim", &s.OidcGroupsClaim},
 		{"oidcIssuerUrl", &s.OidcIssuerUrl},
@@ -536,10 +605,51 @@ func settingsFields(s *settingsModel) []settingsField {
 		{"volumeHelperIdleTimeout", &s.VolumeHelperIdleTimeout},
 		{"updateCheckRegistry", &s.UpdateCheckRegistry},
 		{"trivyServerUrl", &s.TrivyServerUrl},
-		{"trivyServerToken", &s.TrivyServerToken},
 		{"trivyServerEnabled", &s.TrivyServerEnabled},
 		{"vulnerabilityScanEnabled", &s.VulnerabilityScanEnabled},
 		{"vulnerabilityScanInterval", &s.VulnerabilityScanInterval},
+		{"projectsDirectories", &s.ProjectsDirectories},
+		{"autoUpdateDelay", &s.AutoUpdateDelay},
+		{"eventCleanupInterval", &s.EventCleanupInterval},
+		{"expiredSessionsCleanupInterval", &s.ExpiredSessionsCleanupInterval},
+		{"upgradeLogRetentionDays", &s.UpgradeLogRetentionDays},
+		{"unmanagedBackupRetentionDays", &s.UnmanagedBackupRetentionDays},
+		{"projectScanMaxDepth", &s.ProjectScanMaxDepth},
+		{"projectScanSkipDirs", &s.ProjectScanSkipDirs},
+		{"projectWorkspaceMaxDepth", &s.ProjectWorkspaceMaxDepth},
+		{"projectWorkspaceMaxEntries", &s.ProjectWorkspaceMaxEntries},
+		{"projectWorkspaceMaxFileSizeMb", &s.ProjectWorkspaceMaxFileSizeMb},
+		{"volumeWorkspaceMaxEntries", &s.VolumeWorkspaceMaxEntries},
+		{"volumeWorkspaceMaxFileSizeMb", &s.VolumeWorkspaceMaxFileSizeMb},
+		{"gpuMonitoringEnabled", &s.GpuMonitoringEnabled},
+		{"gpuType", &s.GpuType},
+		{"buildHistoryRetentionDays", &s.BuildHistoryRetentionDays},
+		{"featureVulnerabilityManagementEnabled", &s.FeatureVulnerabilityManagementEnabled},
+		{"featureSwarmEnabled", &s.FeatureSwarmEnabled},
+		{"vulnerabilityThreatIntelEnabled", &s.VulnerabilityThreatIntelEnabled},
+		{"vulnerabilityUpdateGateEnabled", &s.VulnerabilityUpdateGateEnabled},
+		{"vulnerabilityUpdateGateMaxCritical", &s.VulnerabilityUpdateGateMaxCritical},
+		{"vulnerabilityUpdateGateMaxHigh", &s.VulnerabilityUpdateGateMaxHigh},
+		{"vulnerabilityUpdateGateMaxMedium", &s.VulnerabilityUpdateGateMaxMedium},
+		{"vulnerabilityUpdateGateMaxLow", &s.VulnerabilityUpdateGateMaxLow},
+		{"trivyConfig", &s.TrivyConfig},
+		{"trivyIgnore", &s.TrivyIgnore},
+		{"registryTagTimeout", &s.RegistryTagTimeout},
+		{"http2ReceiveWindowMb", &s.Http2ReceiveWindowMb},
+		{"agentTunnelStreamWindowMb", &s.AgentTunnelStreamWindowMb},
+		{"developmentBrandingEnabled", &s.DevelopmentBrandingEnabled},
+		{"allEnvironmentsLimit", &s.AllEnvironmentsLimit},
+		{"upgradeMaxParallelAgents", &s.UpgradeMaxParallelAgents},
+		{"analyticsEnabled", &s.AnalyticsEnabled},
+		{"updateCheckEnabled", &s.UpdateCheckEnabled},
+		{"notificationsIncludeReleaseLinks", &s.NotificationsIncludeReleaseLinks},
+		{"hstsEnabled", &s.HstsEnabled},
+		{"oidcAuthorizationEndpoint", &s.OidcAuthorizationEndpoint},
+		{"oidcTokenEndpoint", &s.OidcTokenEndpoint},
+		{"oidcUserinfoEndpoint", &s.OidcUserinfoEndpoint},
+		{"oidcJwksEndpoint", &s.OidcJwksEndpoint},
+		{"oidcDeviceAuthorizationEndpoint", &s.OidcDeviceAuthorizationEndpoint},
+		{"oidcMobileRedirectUris", &s.OidcMobileRedirectUris},
 	}
 }
 

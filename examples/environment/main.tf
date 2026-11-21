@@ -1,5 +1,5 @@
 terraform {
-  required_version = ">= 1.4.0"
+  required_version = ">= 1.11.0"
   required_providers {
     arcane = {
       source  = "hellscrimson/arcane"
@@ -14,18 +14,22 @@ provider "arcane" {
 }
 
 variable "arcane_api_key" {
-  type = string
+  type      = string
   sensitive = true
 }
 variable "arcane_endpoint" {
-  type = string
+  type    = string
   default = "http://localhost:3552/api"
 }
 
 resource "arcane_environment" "agent" {
-  name        = "Production"
-  api_url     = "http://agent-host:8080"
-  enabled     = true
-  use_api_key = true
+  name    = "Production"
+  enabled = true
+}
+
+# Single-use token to start the Arcane agent with (ARCANE_AGENT_TOKEN).
+output "enrollment_token" {
+  value     = arcane_environment.agent.enrollment_token
+  sensitive = true
 }
 

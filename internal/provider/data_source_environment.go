@@ -49,11 +49,6 @@ func (d *EnvironmentDataSource) Schema(ctx context.Context, req datasource.Schem
 				Computed:    true,
 				Description: "Whether the environment is enabled",
 			},
-			"api_key": schema.StringAttribute{
-				Computed:    true,
-				Sensitive:   true,
-				Description: "Environment API key",
-			},
 			"edge_agent_instance": schema.StringAttribute{
 				Computed:    true,
 				Description: "Edge agent instance identifier",
@@ -97,7 +92,6 @@ type environmentDataSourceModel struct {
 	APIURL                  types.String `tfsdk:"api_url"`
 	Status                  types.String `tfsdk:"status"`
 	Enabled                 types.Bool   `tfsdk:"enabled"`
-	APIKey                  types.String `tfsdk:"api_key"`
 	EdgeAgentInstance       types.String `tfsdk:"edge_agent_instance"`
 	EdgeCapabilities        types.List   `tfsdk:"edge_capabilities"`
 	EdgeMTLSCertificateJSON types.String `tfsdk:"edge_mtls_certificate_json"`
@@ -128,20 +122,15 @@ func (d *EnvironmentDataSource) Read(ctx context.Context, req datasource.ReadReq
 		APIURL:            types.StringValue(env.APIURL),
 		Status:            types.StringValue(env.Status),
 		Enabled:           types.BoolValue(env.Enabled),
-		EdgeAgentInstance: nullableString(env.EdgeAgentInstance),
-		EdgeCapabilities:  stringsToList(ctx, env.EdgeCapabilities),
-		EdgeSecurityMode:  nullableString(env.EdgeSecurityMode),
-		EdgeSessionID:     nullableString(env.EdgeSessionID),
+		EdgeAgentInstance: nullableString(env.AgentInstance),
+		EdgeCapabilities:  stringsToList(ctx, env.AgentCapabilities),
+		EdgeSecurityMode:  nullableString(env.AgentSecurityMode),
+		EdgeSessionID:     nullableString(env.AgentSessionID),
 	}
-	if env.EdgeMTLSCertificate != nil {
-		state.EdgeMTLSCertificateJSON = types.StringValue(mustJSON(env.EdgeMTLSCertificate))
+	if env.AgentMTLSCertificate != nil {
+		state.EdgeMTLSCertificateJSON = types.StringValue(mustJSON(env.AgentMTLSCertificate))
 	} else {
 		state.EdgeMTLSCertificateJSON = types.StringNull()
-	}
-	if env.APIKey != "" {
-		state.APIKey = types.StringValue(env.APIKey)
-	} else {
-		state.APIKey = types.StringNull()
 	}
 
 	resp.Diagnostics.Append(resp.State.Set(ctx, &state)...)

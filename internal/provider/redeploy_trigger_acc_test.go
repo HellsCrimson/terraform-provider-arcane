@@ -1,15 +1,10 @@
 package provider
 
 import (
-	"encoding/json"
 	"fmt"
-	"net/http"
-	"os"
 	"path/filepath"
 	"regexp"
-	"strings"
 	"testing"
-	"time"
 
 	"github.com/hashicorp/terraform-plugin-testing/helper/resource"
 	"github.com/hashicorp/terraform-plugin-testing/terraform"
@@ -20,8 +15,7 @@ import (
 // endpoint, so "did this apply redeploy?" becomes an attribute assertion.
 
 // TestAccArcaneProject_redeployTriggerNever verifies that redeploy_trigger =
-// "never" suppresses the redeploy even when the compose content changes, and
-// that the deprecated redeploy_on_update mirror follows the trigger.
+// "never" suppresses the redeploy even when the compose content changes.
 func TestAccArcaneProject_redeployTriggerNever(t *testing.T) {
 	name := testAccName("redeploy-never")
 
@@ -33,7 +27,6 @@ func TestAccArcaneProject_redeployTriggerNever(t *testing.T) {
 				Config: testAccProjectRedeployTriggerConfig(name, `redeploy_trigger = "never"`, "v1", ""),
 				Check: resource.ComposeAggregateTestCheckFunc(
 					resource.TestCheckResourceAttr("arcane_project.test", "redeploy_trigger", "never"),
-					resource.TestCheckResourceAttr("arcane_project.test", "redeploy_on_update", "false"),
 					resource.TestCheckNoResourceAttr("arcane_project.test", "last_redeploy"),
 				),
 			},
@@ -63,7 +56,6 @@ func TestAccArcaneProject_redeployTriggerDefault(t *testing.T) {
 				Config: testAccProjectRedeployTriggerConfig(name, `redeploy_trigger = "default"`, "v1", ""),
 				Check: resource.ComposeAggregateTestCheckFunc(
 					resource.TestCheckResourceAttr("arcane_project.test", "redeploy_trigger", "default"),
-					resource.TestCheckResourceAttr("arcane_project.test", "redeploy_on_update", "true"),
 					resource.TestCheckNoResourceAttr("arcane_project.test", "last_redeploy"),
 				),
 			},
@@ -165,45 +157,8 @@ func TestAccArcaneProject_redeployTriggerAlways(t *testing.T) {
 	})
 }
 
-// TestAccArcaneProject_redeployOnUpdateLegacy verifies that the deprecated
-// redeploy_on_update attribute keeps working: existing configurations must not
-// break, and the value they set has to be reflected in the new attribute.
-func TestAccArcaneProject_redeployOnUpdateLegacy(t *testing.T) {
-	name := testAccName("redeploy-legacy")
-
-	resource.Test(t, resource.TestCase{
-		ProtoV6ProviderFactories: testAccProtoV6ProviderFactories,
-		PreCheck:                 func() { testAccPreCheck(t) },
-		Steps: []resource.TestStep{
-			{
-				Config: testAccProjectRedeployTriggerConfig(name, `redeploy_on_update = false`, "v1", ""),
-				Check: resource.ComposeAggregateTestCheckFunc(
-					resource.TestCheckResourceAttr("arcane_project.test", "redeploy_on_update", "false"),
-					resource.TestCheckResourceAttr("arcane_project.test", "redeploy_trigger", "never"),
-				),
-			},
-			{
-				// Content change with the legacy opt-out: still no redeploy.
-				Config: testAccProjectRedeployTriggerConfig(name, `redeploy_on_update = false`, "v2", ""),
-				Check: resource.ComposeAggregateTestCheckFunc(
-					resource.TestCheckNoResourceAttr("arcane_project.test", "last_redeploy"),
-				),
-			},
-			{
-				// Flipping the legacy attribute back on maps to "default".
-				Config: testAccProjectRedeployTriggerConfig(name, `redeploy_on_update = true`, "v3", ""),
-				Check: resource.ComposeAggregateTestCheckFunc(
-					resource.TestCheckResourceAttr("arcane_project.test", "redeploy_trigger", "default"),
-					resource.TestCheckResourceAttrSet("arcane_project.test", "last_redeploy"),
-				),
-			},
-		},
-	})
-}
-
-// TestAccArcaneProject_redeployTriggerInvalidConfigs covers the two ways of
-// configuring the trigger wrong: an unsupported value, and setting both the new
-// and the deprecated attribute (which would be ambiguous).
+// TestAccArcaneProject_redeployTriggerInvalidConfigs covers an unsupported
+// redeploy_trigger value.
 func TestAccArcaneProject_redeployTriggerInvalidConfigs(t *testing.T) {
 	name := testAccName("redeploy-invalid")
 
@@ -214,11 +169,6 @@ func TestAccArcaneProject_redeployTriggerInvalidConfigs(t *testing.T) {
 			{
 				Config:      testAccProjectRedeployTriggerConfig(name, `redeploy_trigger = "sometimes"`, "v1", ""),
 				ExpectError: regexp.MustCompile(`Invalid Attribute Value Match`),
-			},
-			{
-				Config: testAccProjectRedeployTriggerConfig(name,
-					"redeploy_trigger   = \"always\"\n  redeploy_on_update = true", "v1", ""),
-				ExpectError: regexp.MustCompile(`Invalid Attribute Combination`),
 			},
 		},
 	})
@@ -332,241 +282,6 @@ resource "arcane_project_path" "test" {
 		filepath.Join(testAccFixtureDirPath(), "docker-compose.yml"),
 		filepath.Join(testAccFixtureDirPath(), ".env"),
 		triggerAttr)
-}
-
-// Upgrade path: state written by a provider release that predates
-// redeploy_trigger has neither redeploy_trigger nor last_redeploy. The new
-// provider resolves the trigger during plan, which shows up as a one-time
-// null -> "default"/"never" diff on redeploy_trigger. The tests below pin down
-// what that upgrade must *not* do: redeploy the project, move last_redeploy, or
-// leave the resource with a perpetual diff (the implicit post-apply empty-plan
-// check covers the last one).
-
-// redeployTriggerPreFeatureVersion is the last release without
-// redeploy_trigger. Pinned exactly rather than as a range: these tests are about
-// upgrading from the pre-feature schema, so the version must not float forward
-// as new releases are published.
-const redeployTriggerPreFeatureVersion = "1.0.4"
-
-func redeployTriggerPreFeatureProvider() map[string]resource.ExternalProvider {
-	return map[string]resource.ExternalProvider{
-		"arcane": {
-			Source:            "hellscrimson/arcane",
-			VersionConstraint: redeployTriggerPreFeatureVersion,
-		},
-	}
-}
-
-// testAccIgnoreDevOverrides points the Terraform CLI at a configuration file of
-// our own for the duration of the test. A dev_overrides block for
-// hellscrimson/arcane in ~/.terraformrc is the usual way to try a locally built
-// binary, and it would also replace the pinned pre-feature release these tests
-// install from the registry, quietly turning the upgrade into a no-op that
-// passes for the wrong reason. Steps driven by ProtoV6ProviderFactories are
-// unaffected either way: those run the provider in-process.
-func testAccIgnoreDevOverrides(t *testing.T) {
-	t.Helper()
-
-	cliConfig := filepath.Join(t.TempDir(), "terraformrc")
-	if err := os.WriteFile(cliConfig, []byte("provider_installation {\n  direct {}\n}\n"), 0o600); err != nil {
-		t.Fatalf("writing Terraform CLI configuration: %s", err)
-	}
-	t.Setenv("TF_CLI_CONFIG_FILE", cliConfig)
-}
-
-// testAccSkipIfLegacyProviderCannotCreateProjects skips an upgrade test when the
-// Arcane server under test has moved past what the pinned pre-feature provider
-// release can talk to. Those first steps run the published hellscrimson/arcane
-// binary, which posts project creation as a JSON body; Arcane later switched
-// that endpoint to multipart/form-data, so on such a server step 1 fails before
-// the upgrade under test is ever exercised, and no change in this repository can
-// fix it — every published release with the pre-feature schema also predates the
-// multipart client.
-//
-// The capability is read from the server's own OpenAPI document rather than
-// compared against a version number, so this stops skipping on its own if the
-// endpoint ever accepts JSON again.
-func testAccSkipIfLegacyProviderCannotCreateProjects(t *testing.T) {
-	t.Helper()
-
-	// Runs before resource.Test, so it has to honour the acceptance-test gate
-	// itself: without TF_ACC there is no server to ask.
-	if os.Getenv("TF_ACC") == "" {
-		return
-	}
-
-	specURL := strings.TrimSuffix(testAccEndpoint(), "/") + "/openapi.json"
-	req, err := http.NewRequest(http.MethodGet, specURL, nil)
-	if err != nil {
-		t.Fatalf("building OpenAPI request: %s", err)
-	}
-	req.Header.Set("X-API-Key", testAccAPIKey())
-
-	client := &http.Client{Timeout: 30 * time.Second}
-	res, err := client.Do(req)
-	if err != nil {
-		t.Fatalf("fetching %s: %s", specURL, err)
-	}
-	defer res.Body.Close()
-	if res.StatusCode != http.StatusOK {
-		t.Fatalf("fetching %s: unexpected status %s", specURL, res.Status)
-	}
-
-	var spec struct {
-		Paths map[string]map[string]struct {
-			RequestBody struct {
-				Content map[string]json.RawMessage `json:"content"`
-			} `json:"requestBody"`
-		} `json:"paths"`
-	}
-	if err := json.NewDecoder(res.Body).Decode(&spec); err != nil {
-		t.Fatalf("decoding %s: %s", specURL, err)
-	}
-
-	op, ok := spec.Paths["/environments/{id}/projects"]["post"]
-	if !ok {
-		t.Fatalf("%s does not describe POST /environments/{id}/projects", specURL)
-	}
-	if _, ok := op.RequestBody.Content["application/json"]; !ok {
-		t.Skipf("Arcane under test creates projects as %v, which the pinned pre-feature provider %s cannot send; step 1 would fail before the upgrade is exercised",
-			contentTypesOf(op.RequestBody.Content), redeployTriggerPreFeatureVersion)
-	}
-}
-
-func contentTypesOf(content map[string]json.RawMessage) []string {
-	out := make([]string, 0, len(content))
-	for ct := range content {
-		out = append(out, ct)
-	}
-	return out
-}
-
-// TestAccArcaneProject_redeployTriggerUpgradeFromPreFeatureState covers the
-// common upgrade: a project created without any redeploy configuration. The
-// trigger resolves to "default", the deprecated mirror keeps its value, and the
-// upgrade itself does not redeploy because the compose content did not change.
-func TestAccArcaneProject_redeployTriggerUpgradeFromPreFeatureState(t *testing.T) {
-	testAccSkipIfLegacyProviderCannotCreateProjects(t)
-	testAccIgnoreDevOverrides(t)
-
-	name := testAccName("redeploy-upgrade")
-	cfg := testAccProjectRedeployTriggerConfig(name, "", "v1", "")
-
-	resource.Test(t, resource.TestCase{
-		PreCheck: func() { testAccPreCheck(t) },
-		Steps: []resource.TestStep{
-			{
-				ExternalProviders: redeployTriggerPreFeatureProvider(),
-				Config:            cfg,
-				Check: resource.ComposeAggregateTestCheckFunc(
-					resource.TestCheckResourceAttr("arcane_project.test", "redeploy_on_update", "true"),
-					resource.TestCheckNoResourceAttr("arcane_project.test", "redeploy_trigger"),
-					resource.TestCheckNoResourceAttr("arcane_project.test", "last_redeploy"),
-				),
-			},
-			{
-				ProtoV6ProviderFactories: testAccProtoV6ProviderFactories,
-				Config:                   cfg,
-				Check: resource.ComposeAggregateTestCheckFunc(
-					resource.TestCheckResourceAttr("arcane_project.test", "redeploy_trigger", "default"),
-					resource.TestCheckResourceAttr("arcane_project.test", "redeploy_on_update", "true"),
-					resource.TestCheckNoResourceAttr("arcane_project.test", "last_redeploy"),
-				),
-			},
-		},
-	})
-}
-
-// TestAccArcaneProject_redeployTriggerUpgradeKeepsLegacyOptOut is the upgrade
-// that would hurt if it regressed: a project that opted out through
-// redeploy_on_update = false must map to "never", not to the "default" every
-// other upgraded resource gets, or the upgrade would start redeploying projects
-// their owners deliberately left alone.
-func TestAccArcaneProject_redeployTriggerUpgradeKeepsLegacyOptOut(t *testing.T) {
-	testAccSkipIfLegacyProviderCannotCreateProjects(t)
-	testAccIgnoreDevOverrides(t)
-
-	name := testAccName("redeploy-upgrade-optout")
-	cfg := func(contentVersion string) string {
-		return testAccProjectRedeployTriggerConfig(name, `redeploy_on_update = false`, contentVersion, "")
-	}
-
-	resource.Test(t, resource.TestCase{
-		PreCheck: func() { testAccPreCheck(t) },
-		Steps: []resource.TestStep{
-			{
-				ExternalProviders: redeployTriggerPreFeatureProvider(),
-				Config:            cfg("v1"),
-				Check: resource.ComposeAggregateTestCheckFunc(
-					resource.TestCheckResourceAttr("arcane_project.test", "redeploy_on_update", "false"),
-					resource.TestCheckNoResourceAttr("arcane_project.test", "redeploy_trigger"),
-				),
-			},
-			{
-				ProtoV6ProviderFactories: testAccProtoV6ProviderFactories,
-				Config:                   cfg("v1"),
-				Check: resource.ComposeAggregateTestCheckFunc(
-					resource.TestCheckResourceAttr("arcane_project.test", "redeploy_trigger", "never"),
-					resource.TestCheckResourceAttr("arcane_project.test", "redeploy_on_update", "false"),
-					resource.TestCheckNoResourceAttr("arcane_project.test", "last_redeploy"),
-				),
-			},
-			{
-				// Content change after the upgrade: the opt-out still holds.
-				ProtoV6ProviderFactories: testAccProtoV6ProviderFactories,
-				Config:                   cfg("v2"),
-				Check: resource.ComposeAggregateTestCheckFunc(
-					resource.TestCheckResourceAttr("arcane_project.test", "redeploy_trigger", "never"),
-					resource.TestCheckNoResourceAttr("arcane_project.test", "last_redeploy"),
-				),
-			},
-		},
-	})
-}
-
-// TestAccArcaneProjectPath_redeployTriggerUpgradeFromPreFeatureState is the same
-// upgrade for arcane_project_path, which never had the deprecated boolean: the
-// resolved "default" has to reproduce the old unconditional behaviour, so
-// untouched files must not redeploy and changed files must.
-func TestAccArcaneProjectPath_redeployTriggerUpgradeFromPreFeatureState(t *testing.T) {
-	testAccSkipIfLegacyProviderCannotCreateProjects(t)
-	testAccIgnoreDevOverrides(t)
-
-	name := testAccName("redeploy-path-upgrade")
-
-	resource.Test(t, resource.TestCase{
-		PreCheck: func() { testAccPreCheck(t) },
-		Steps: []resource.TestStep{
-			{
-				PreConfig:         func() { writeProjectPathFixtures(t, "1") },
-				ExternalProviders: redeployTriggerPreFeatureProvider(),
-				Config:            testAccProjectPathRedeployTriggerConfig(name, ""),
-				Check: resource.ComposeAggregateTestCheckFunc(
-					resource.TestCheckNoResourceAttr("arcane_project_path.test", "redeploy_trigger"),
-					resource.TestCheckNoResourceAttr("arcane_project_path.test", "last_redeploy"),
-				),
-			},
-			{
-				// Files untouched: the upgrade alone must not redeploy.
-				PreConfig:                func() { writeProjectPathFixtures(t, "1") },
-				ProtoV6ProviderFactories: testAccProtoV6ProviderFactories,
-				Config:                   testAccProjectPathRedeployTriggerConfig(name, ""),
-				Check: resource.ComposeAggregateTestCheckFunc(
-					resource.TestCheckResourceAttr("arcane_project_path.test", "redeploy_trigger", "default"),
-					resource.TestCheckNoResourceAttr("arcane_project_path.test", "last_redeploy"),
-				),
-			},
-			{
-				// And the pre-upgrade behaviour is intact afterwards.
-				PreConfig:                func() { writeProjectPathFixtures(t, "2") },
-				ProtoV6ProviderFactories: testAccProtoV6ProviderFactories,
-				Config:                   testAccProjectPathRedeployTriggerConfig(name, ""),
-				Check: resource.ComposeAggregateTestCheckFunc(
-					resource.TestCheckResourceAttrSet("arcane_project_path.test", "last_redeploy"),
-				),
-			},
-		},
-	})
 }
 
 // testAccCaptureAttr records an attribute value so a later step can compare

@@ -26,6 +26,9 @@ output "repository_url" {
 - `description` (String) — repository description.
 - `enabled` (Bool) — whether the repository is enabled.
 - `username` (String) — username for authentication.
+- `git_provider` (String) — git forge used to build web links.
+- `commit_author_name`, `commit_author_email` (String) — author of the commits Arcane pushes.
+- `has_signing_key` (Bool) — whether Arcane holds a signing key for the repository.
 - `created_at` (String) — creation timestamp.
 - `updated_at` (String) — last update timestamp.
 

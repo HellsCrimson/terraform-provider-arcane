@@ -9,7 +9,6 @@ import (
 	"github.com/hashicorp/terraform-plugin-framework/path"
 	"github.com/hashicorp/terraform-plugin-framework/resource"
 	resourceschema "github.com/hashicorp/terraform-plugin-framework/resource/schema"
-	"github.com/hashicorp/terraform-plugin-framework/resource/schema/boolplanmodifier"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema/planmodifier"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema/stringplanmodifier"
 	"github.com/hashicorp/terraform-plugin-framework/types"
@@ -28,6 +27,8 @@ func (r *EnvironmentResource) Metadata(_ context.Context, req resource.MetadataR
 
 func (r *EnvironmentResource) Schema(_ context.Context, _ resource.SchemaRequest, resp *resource.SchemaResponse) {
 	resp.Schema = resourceschema.Schema{
+		Description: "An Arcane environment. Environments are agent-based: create the environment, " +
+			"then start an Arcane agent with the enrollment_token (single use) so it joins this environment.",
 		Attributes: map[string]resourceschema.Attribute{
 			"id": resourceschema.StringAttribute{
 				Computed:    true,
@@ -41,75 +42,50 @@ func (r *EnvironmentResource) Schema(_ context.Context, _ resource.SchemaRequest
 				Description: "Environment display name",
 			},
 			"api_url": resourceschema.StringAttribute{
-				Required:    true,
-				Description: "Agent API URL (e.g., http://host:agent-port)",
-			},
-			"access_token": resourceschema.StringAttribute{
-				Optional:           true,
-				Sensitive:          true,
-				Description:        "Access token for agent pairing (optional)",
-				DeprecationMessage: writeOnlyDeprecation("access_token"),
-			},
-			"access_token_wo":         writeOnlyAttribute("access_token", "Access token for agent pairing (optional)."),
-			"access_token_wo_version": writeOnlyVersionAttribute("access_token"),
-			"use_api_key": resourceschema.BoolAttribute{
-				Optional:    true,
-				Description: "When true, generates an API key for agent pairing.",
-			},
-			"is_edge": resourceschema.BoolAttribute{
-				Optional:    true,
 				Computed:    true,
-				Description: "Whether the environment uses edge transport. Changing it replaces the environment.",
-				PlanModifiers: []planmodifier.Bool{
-					// Always read back from the API so a configured value is compared
-					// against the real transport, even after import or when it was
-					// previously unset. The API cannot change it in place.
-					boolplanmodifier.UseStateForUnknown(),
-					boolplanmodifier.RequiresReplace(),
+				Description: "Environment URL derived by Arcane (agent://<name> for agent environments).",
+				PlanModifiers: []planmodifier.String{
+					stringplanmodifier.UseStateForUnknown(),
 				},
 			},
 			"enabled": resourceschema.BoolAttribute{
 				Optional:    true,
 				Description: "Whether the environment is enabled.",
 			},
-			"regenerate_api_key": resourceschema.BoolAttribute{
-				Optional:    true,
-				Description: "Regenerate the pairing API key on update.",
-			},
 
 			// Computed fields
 			"status": resourceschema.StringAttribute{
 				Computed:    true,
-				Description: "Environment status.",
+				Description: "Environment status (pending until an agent enrolls).",
 			},
-			"api_key": resourceschema.StringAttribute{
+			"enrollment_token": resourceschema.StringAttribute{
 				Computed:    true,
 				Sensitive:   true,
-				Description: "Pairing API key (only returned on creation).",
+				Description: "Single-use enrollment token minted when the environment is created; pass it to the agent as ARCANE_AGENT_TOKEN. Not available for imported environments.",
 				PlanModifiers: []planmodifier.String{
 					stringplanmodifier.UseStateForUnknown(),
 				},
 			},
 			"edge_agent_instance": resourceschema.StringAttribute{
 				Computed:    true,
-				Description: "Edge agent instance identifier.",
+				Description: "Agent instance identifier.",
 			},
 			"edge_capabilities": resourceschema.ListAttribute{
 				Computed:    true,
 				ElementType: types.StringType,
-				Description: "Capabilities reported by the edge agent.",
+				Description: "Capabilities reported by the agent.",
 			},
 			"edge_mtls_certificate_json": resourceschema.StringAttribute{
 				Computed:    true,
-				Description: "Edge mTLS certificate metadata as JSON.",
+				Description: "Agent mTLS certificate metadata as JSON.",
 			},
 			"edge_security_mode": resourceschema.StringAttribute{
 				Computed:    true,
-				Description: "Edge security mode.",
+				Description: "Agent security mode.",
 			},
 			"edge_session_id": resourceschema.StringAttribute{
 				Computed:    true,
-				Description: "Edge session identifier.",
+				Description: "Agent session identifier.",
 			},
 		},
 	}
@@ -127,15 +103,9 @@ type environmentModel struct {
 	ID                      types.String `tfsdk:"id"`
 	Name                    types.String `tfsdk:"name"`
 	APIURL                  types.String `tfsdk:"api_url"`
-	AccessToken             types.String `tfsdk:"access_token"`
-	AccessTokenWO           types.String `tfsdk:"access_token_wo"`
-	AccessTokenWOVersion    types.Int64  `tfsdk:"access_token_wo_version"`
-	UseAPIKey               types.Bool   `tfsdk:"use_api_key"`
-	IsEdge                  types.Bool   `tfsdk:"is_edge"`
 	Enabled                 types.Bool   `tfsdk:"enabled"`
-	RegenerateAPIKey        types.Bool   `tfsdk:"regenerate_api_key"`
 	Status                  types.String `tfsdk:"status"`
-	APIKey                  types.String `tfsdk:"api_key"`
+	EnrollmentToken         types.String `tfsdk:"enrollment_token"`
 	EdgeAgentInstance       types.String `tfsdk:"edge_agent_instance"`
 	EdgeCapabilities        types.List   `tfsdk:"edge_capabilities"`
 	EdgeMTLSCertificateJSON types.String `tfsdk:"edge_mtls_certificate_json"`
@@ -144,40 +114,20 @@ type environmentModel struct {
 }
 
 func (r *EnvironmentResource) Create(ctx context.Context, req resource.CreateRequest, resp *resource.CreateResponse) {
-	var plan, config environmentModel
+	var plan environmentModel
 	resp.Diagnostics.Append(req.Plan.Get(ctx, &plan)...)
-	resp.Diagnostics.Append(req.Config.Get(ctx, &config)...)
 	if resp.Diagnostics.HasError() {
 		return
 	}
 
-	body := sdkclient.EnvironmentCreateRequest{
-		APIURL: plan.APIURL.ValueString(),
-	}
-	if !plan.Name.IsNull() && !plan.Name.IsUnknown() {
+	body := sdkclient.EnvironmentCreateRequest{}
+	if isSetString(plan.Name) {
 		v := plan.Name.ValueString()
 		body.Name = &v
-	}
-	if !plan.AccessToken.IsNull() && !plan.AccessToken.IsUnknown() {
-		v := plan.AccessToken.ValueString()
-		body.AccessToken = &v
-	}
-	// Write-only: the plan holds null, the value is only in the configuration.
-	if isSetString(config.AccessTokenWO) {
-		v := config.AccessTokenWO.ValueString()
-		body.AccessToken = &v
 	}
 	if !plan.Enabled.IsNull() && !plan.Enabled.IsUnknown() {
 		v := plan.Enabled.ValueBool()
 		body.Enabled = &v
-	}
-	if !plan.IsEdge.IsNull() && !plan.IsEdge.IsUnknown() {
-		v := plan.IsEdge.ValueBool()
-		body.IsEdge = &v
-	}
-	if !plan.UseAPIKey.IsNull() && !plan.UseAPIKey.IsUnknown() {
-		v := plan.UseAPIKey.ValueBool()
-		body.UseAPIKey = &v
 	}
 
 	env, err := r.client.CreateEnvironment(ctx, body)
@@ -186,31 +136,21 @@ func (r *EnvironmentResource) Create(ctx context.Context, req resource.CreateReq
 		return
 	}
 
-	state := environmentModel{
-		ID:                   types.StringValue(env.ID),
-		APIURL:               types.StringValue(env.APIURL),
-		AccessToken:          plan.AccessToken,
-		AccessTokenWOVersion: plan.AccessTokenWOVersion,
-		UseAPIKey:            plan.UseAPIKey,
-		RegenerateAPIKey:     plan.RegenerateAPIKey,
-		Status:               types.StringValue(env.Status),
+	// Mint the single-use enrollment token the agent needs to join.
+	snippet, err := r.client.GetDeploymentSnippet(ctx, env.ID)
+	if err != nil {
+		// The environment exists: keep it in state so it is not leaked.
+		resp.Diagnostics.AddWarning("create environment enrollment token failed",
+			"The environment was created but Arcane did not return an enrollment token: "+err.Error())
 	}
-	if !plan.Name.IsNull() && !plan.Name.IsUnknown() {
-		state.Name = types.StringValue(env.Name)
-	} else {
-		state.Name = plan.Name
-	}
-	state.IsEdge = types.BoolValue(env.IsEdge)
-	if !plan.Enabled.IsNull() && !plan.Enabled.IsUnknown() {
-		state.Enabled = types.BoolValue(env.Enabled)
-	} else {
-		state.Enabled = plan.Enabled
-	}
-	if env.APIKey != "" {
-		state.APIKey = types.StringValue(env.APIKey)
-	}
-	applyEnvironmentEdgeFields(ctx, &state, env)
 
+	state := plan
+	state.ID = types.StringValue(env.ID)
+	state.EnrollmentToken = types.StringNull()
+	if snippet != nil && snippet.EnrollmentToken != "" {
+		state.EnrollmentToken = types.StringValue(snippet.EnrollmentToken)
+	}
+	applyEnvironment(ctx, &state, env, plan)
 	resp.Diagnostics.Append(resp.State.Set(ctx, &state)...)
 }
 
@@ -231,55 +171,32 @@ func (r *EnvironmentResource) Read(ctx context.Context, req resource.ReadRequest
 		return
 	}
 
-	state.APIURL = types.StringValue(env.APIURL)
-	state.Status = types.StringValue(env.Status)
 	if !state.Name.IsNull() && !state.Name.IsUnknown() {
 		state.Name = types.StringValue(env.Name)
 	}
 	if !state.Enabled.IsNull() && !state.Enabled.IsUnknown() {
 		state.Enabled = types.BoolValue(env.Enabled)
 	}
-	state.IsEdge = types.BoolValue(env.IsEdge)
-	applyEnvironmentEdgeFields(ctx, &state, env)
-	// access_token/use_api_key remain as configured
+	applyEnvironment(ctx, &state, env, state)
 	resp.Diagnostics.Append(resp.State.Set(ctx, &state)...)
 }
 
 func (r *EnvironmentResource) Update(ctx context.Context, req resource.UpdateRequest, resp *resource.UpdateResponse) {
-	var plan, config environmentModel
-	var state environmentModel
+	var plan, state environmentModel
 	resp.Diagnostics.Append(req.Plan.Get(ctx, &plan)...)
-	resp.Diagnostics.Append(req.Config.Get(ctx, &config)...)
 	resp.Diagnostics.Append(req.State.Get(ctx, &state)...)
 	if resp.Diagnostics.HasError() {
 		return
 	}
 
 	body := sdkclient.EnvironmentUpdateRequest{}
-	if !plan.APIURL.IsNull() && !plan.APIURL.IsUnknown() {
-		v := plan.APIURL.ValueString()
-		body.APIURL = &v
-	}
-	if !plan.Name.IsNull() && !plan.Name.IsUnknown() {
+	if isSetString(plan.Name) {
 		v := plan.Name.ValueString()
 		body.Name = &v
-	}
-	if !plan.AccessToken.IsNull() && !plan.AccessToken.IsUnknown() {
-		v := plan.AccessToken.ValueString()
-		body.AccessToken = &v
-	}
-	// The write-only access token is only re-sent when its version changes.
-	if writeOnlySend(config.AccessTokenWO, plan.AccessTokenWOVersion, state.AccessTokenWOVersion) {
-		v := config.AccessTokenWO.ValueString()
-		body.AccessToken = &v
 	}
 	if !plan.Enabled.IsNull() && !plan.Enabled.IsUnknown() {
 		v := plan.Enabled.ValueBool()
 		body.Enabled = &v
-	}
-	if !plan.RegenerateAPIKey.IsNull() && !plan.RegenerateAPIKey.IsUnknown() {
-		v := plan.RegenerateAPIKey.ValueBool()
-		body.RegenerateAPIKey = &v
 	}
 
 	env, err := r.client.UpdateEnvironment(ctx, state.ID.ValueString(), body)
@@ -288,28 +205,11 @@ func (r *EnvironmentResource) Update(ctx context.Context, req resource.UpdateReq
 		return
 	}
 
-	state.APIURL = types.StringValue(env.APIURL)
-	state.Status = types.StringValue(env.Status)
-	if !plan.Name.IsNull() && !plan.Name.IsUnknown() {
-		state.Name = types.StringValue(env.Name)
-	} else {
-		state.Name = plan.Name
-	}
-	if !plan.Enabled.IsNull() && !plan.Enabled.IsUnknown() {
-		state.Enabled = types.BoolValue(env.Enabled)
-	} else {
-		state.Enabled = plan.Enabled
-	}
-	state.IsEdge = types.BoolValue(env.IsEdge)
-	applyEnvironmentEdgeFields(ctx, &state, env)
-	// Persist unconditionally so clearing any of these to null also updates
-	// state; a guarded copy would keep the stale prior value and produce an
-	// inconsistent-result error on the clear-to-null transition.
-	state.AccessToken = plan.AccessToken
-	state.AccessTokenWOVersion = plan.AccessTokenWOVersion
-	state.UseAPIKey = plan.UseAPIKey
-	state.RegenerateAPIKey = plan.RegenerateAPIKey
-	resp.Diagnostics.Append(resp.State.Set(ctx, &state)...)
+	newState := plan
+	newState.ID = state.ID
+	newState.EnrollmentToken = state.EnrollmentToken
+	applyEnvironment(ctx, &newState, env, plan)
+	resp.Diagnostics.Append(resp.State.Set(ctx, &newState)...)
 }
 
 func (r *EnvironmentResource) Delete(ctx context.Context, req resource.DeleteRequest, resp *resource.DeleteResponse) {
@@ -330,14 +230,28 @@ func (r *EnvironmentResource) ImportState(ctx context.Context, req resource.Impo
 	resource.ImportStatePassthroughID(ctx, path.Root("id"), req, resp)
 }
 
-func applyEnvironmentEdgeFields(ctx context.Context, state *environmentModel, env *sdkclient.Environment) {
-	state.EdgeAgentInstance = nullableString(env.EdgeAgentInstance)
-	state.EdgeCapabilities = stringsToList(ctx, env.EdgeCapabilities)
-	if env.EdgeMTLSCertificate != nil {
-		state.EdgeMTLSCertificateJSON = types.StringValue(mustJSON(env.EdgeMTLSCertificate))
+// applyEnvironment copies the server-owned fields into state. desired carries
+// the configured values: a configured name/enabled is echoed from the API and
+// an unset one stays null.
+func applyEnvironment(ctx context.Context, state *environmentModel, env *sdkclient.Environment, desired environmentModel) {
+	state.Status = types.StringValue(env.Status)
+	if isSetString(desired.Name) {
+		state.Name = types.StringValue(env.Name)
+	}
+	if !desired.Enabled.IsNull() && !desired.Enabled.IsUnknown() {
+		state.Enabled = types.BoolValue(env.Enabled)
+	}
+	state.APIURL = types.StringValue(env.APIURL)
+	state.EdgeAgentInstance = nullableString(env.AgentInstance)
+	state.EdgeCapabilities = stringsToList(ctx, env.AgentCapabilities)
+	if env.AgentMTLSCertificate != nil {
+		state.EdgeMTLSCertificateJSON = types.StringValue(mustJSON(env.AgentMTLSCertificate))
 	} else {
 		state.EdgeMTLSCertificateJSON = types.StringNull()
 	}
-	state.EdgeSecurityMode = nullableString(env.EdgeSecurityMode)
-	state.EdgeSessionID = nullableString(env.EdgeSessionID)
+	state.EdgeSecurityMode = nullableString(env.AgentSecurityMode)
+	state.EdgeSessionID = nullableString(env.AgentSessionID)
+	if state.EnrollmentToken.IsUnknown() {
+		state.EnrollmentToken = types.StringNull()
+	}
 }

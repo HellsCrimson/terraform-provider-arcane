@@ -4,7 +4,6 @@ import (
 	"context"
 	"fmt"
 	"math/big"
-	"strings"
 
 	"terraform-provider-arcane/internal/sdkclient"
 
@@ -32,11 +31,10 @@ func (r *NotificationResource) Metadata(_ context.Context, req resource.Metadata
 func (r *NotificationResource) Schema(_ context.Context, _ resource.SchemaRequest, resp *resource.SchemaResponse) {
 	resp.Schema = resourceschema.Schema{
 		Attributes: map[string]resourceschema.Attribute{
-			"id":             resourceschema.StringAttribute{Computed: true, PlanModifiers: []planmodifier.String{stringplanmodifier.UseStateForUnknown()}},
-			"environment_id": resourceschema.StringAttribute{Required: true, Description: "Environment ID", PlanModifiers: []planmodifier.String{stringplanmodifier.RequiresReplace()}},
-			"provider_name":  resourceschema.StringAttribute{Required: true, Description: "Notification provider name", PlanModifiers: []planmodifier.String{stringplanmodifier.RequiresReplace()}},
-			"enabled":        resourceschema.BoolAttribute{Required: true},
-			"config":         resourceschema.DynamicAttribute{Optional: true, Description: "Provider-specific config object"},
+			"id":            resourceschema.StringAttribute{Computed: true, PlanModifiers: []planmodifier.String{stringplanmodifier.UseStateForUnknown()}},
+			"provider_name": resourceschema.StringAttribute{Required: true, Description: "Notification provider name", PlanModifiers: []planmodifier.String{stringplanmodifier.RequiresReplace()}},
+			"enabled":       resourceschema.BoolAttribute{Required: true},
+			"config":        resourceschema.DynamicAttribute{Optional: true, Description: "Provider-specific config object"},
 		},
 	}
 }
@@ -50,11 +48,10 @@ func (r *NotificationResource) Configure(_ context.Context, req resource.Configu
 }
 
 type notificationModel struct {
-	ID            types.String  `tfsdk:"id"`
-	EnvironmentID types.String  `tfsdk:"environment_id"`
-	ProviderName  types.String  `tfsdk:"provider_name"`
-	Enabled       types.Bool    `tfsdk:"enabled"`
-	Config        types.Dynamic `tfsdk:"config"`
+	ID           types.String  `tfsdk:"id"`
+	ProviderName types.String  `tfsdk:"provider_name"`
+	Enabled      types.Bool    `tfsdk:"enabled"`
+	Config       types.Dynamic `tfsdk:"config"`
 }
 
 func (r *NotificationResource) Create(ctx context.Context, req resource.CreateRequest, resp *resource.CreateResponse) {
@@ -63,7 +60,6 @@ func (r *NotificationResource) Create(ctx context.Context, req resource.CreateRe
 	if resp.Diagnostics.HasError() {
 		return
 	}
-	envID := plan.EnvironmentID.ValueString()
 	config, diags := dynamicConfigToAnyMap(plan.Config)
 	resp.Diagnostics.Append(diags...)
 	if resp.Diagnostics.HasError() {
@@ -75,17 +71,16 @@ func (r *NotificationResource) Create(ctx context.Context, req resource.CreateRe
 		Enabled:  plan.Enabled.ValueBool(),
 		Config:   config,
 	}
-	out, err := r.client.UpsertNotification(ctx, envID, body)
+	out, err := r.client.UpsertNotification(ctx, body)
 	if err != nil {
 		resp.Diagnostics.AddError("upsert notification failed", err.Error())
 		return
 	}
 	state := notificationModel{
-		ID:            types.StringValue(envID + ":" + out.Provider),
-		EnvironmentID: plan.EnvironmentID,
-		ProviderName:  plan.ProviderName,
-		Enabled:       types.BoolValue(out.Enabled),
-		Config:        plan.Config,
+		ID:           types.StringValue(out.Provider),
+		ProviderName: plan.ProviderName,
+		Enabled:      types.BoolValue(out.Enabled),
+		Config:       plan.Config,
 	}
 	resp.Diagnostics.Append(resp.State.Set(ctx, &state)...)
 }
@@ -96,9 +91,8 @@ func (r *NotificationResource) Read(ctx context.Context, req resource.ReadReques
 	if resp.Diagnostics.HasError() {
 		return
 	}
-	envID := state.EnvironmentID.ValueString()
 	provider := state.ProviderName.ValueString()
-	out, err := r.client.GetNotification(ctx, envID, provider)
+	out, err := r.client.GetNotification(ctx, provider)
 	if err != nil {
 		if r.client.IsResourceGone(err) {
 			resp.State.RemoveResource(ctx)
@@ -108,7 +102,7 @@ func (r *NotificationResource) Read(ctx context.Context, req resource.ReadReques
 		return
 	}
 	state.Enabled = types.BoolValue(out.Enabled)
-	state.ID = types.StringValue(envID + ":" + provider)
+	state.ID = types.StringValue(provider)
 	resp.Diagnostics.Append(resp.State.Set(ctx, &state)...)
 }
 
@@ -121,7 +115,6 @@ func (r *NotificationResource) Update(ctx context.Context, req resource.UpdateRe
 		return
 	}
 
-	envID := state.EnvironmentID.ValueString()
 	config, diags := dynamicConfigToAnyMap(plan.Config)
 	resp.Diagnostics.Append(diags...)
 	if resp.Diagnostics.HasError() {
@@ -133,7 +126,7 @@ func (r *NotificationResource) Update(ctx context.Context, req resource.UpdateRe
 		Enabled:  plan.Enabled.ValueBool(),
 		Config:   config,
 	}
-	out, err := r.client.UpsertNotification(ctx, envID, body)
+	out, err := r.client.UpsertNotification(ctx, body)
 	if err != nil {
 		resp.Diagnostics.AddError("upsert notification failed", err.Error())
 		return
@@ -149,7 +142,7 @@ func (r *NotificationResource) Delete(ctx context.Context, req resource.DeleteRe
 	if resp.Diagnostics.HasError() {
 		return
 	}
-	if err := r.client.DeleteNotification(ctx, state.EnvironmentID.ValueString(), state.ProviderName.ValueString()); err != nil {
+	if err := r.client.DeleteNotification(ctx, state.ProviderName.ValueString()); err != nil {
 		if r.client.IsResourceGone(err) {
 			return
 		}
@@ -158,15 +151,14 @@ func (r *NotificationResource) Delete(ctx context.Context, req resource.DeleteRe
 }
 
 func (r *NotificationResource) ImportState(ctx context.Context, req resource.ImportStateRequest, resp *resource.ImportStateResponse) {
-	// envID:provider
-	parts := strings.SplitN(req.ID, ":", 2)
-	if len(parts) != 2 {
-		resp.Diagnostics.AddError("invalid import id", "expected env_id:provider")
+	// Notification settings are app-wide: the import ID is the provider name.
+	provider := req.ID
+	if provider == "" {
+		resp.Diagnostics.AddError("invalid import id", "expected the notification provider name")
 		return
 	}
-	resp.Diagnostics.Append(resp.State.SetAttribute(ctx, path.Root("environment_id"), parts[0])...)
-	resp.Diagnostics.Append(resp.State.SetAttribute(ctx, path.Root("provider_name"), parts[1])...)
-	resp.Diagnostics.Append(resp.State.SetAttribute(ctx, path.Root("id"), req.ID)...)
+	resp.Diagnostics.Append(resp.State.SetAttribute(ctx, path.Root("provider_name"), provider)...)
+	resp.Diagnostics.Append(resp.State.SetAttribute(ctx, path.Root("id"), provider)...)
 }
 
 // config helpers (dynamic Terraform value <-> JSON-compatible map)

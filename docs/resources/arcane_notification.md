@@ -1,12 +1,11 @@
 # arcane_notification
 
-Manages notification settings for a provider.
+Manages notification settings for a provider. Notification settings are app-wide (not per environment).
 
 ## Example Usage
 
 ```hcl
 resource "arcane_notification" "discord" {
-  environment_id = var.environment_id
   provider_name  = "discord"
   enabled        = true
   config = {
@@ -26,11 +25,16 @@ resource "arcane_notification" "discord" {
 
 ## Argument Reference
 
-- `environment_id` (String, Required)
 - `provider_name` (String, Required)
 - `enabled` (Bool, Required)
 - `config` (Dynamic, Optional) — provider-specific configuration object. Nested objects are supported.
 
 ## Attributes Reference
 
-- `id` (String) — `{env_id}:{provider_name}`
+- `id` (String) — the provider name.
+
+## Import
+
+```shell
+terraform import arcane_notification.discord discord
+```

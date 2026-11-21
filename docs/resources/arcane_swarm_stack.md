@@ -34,7 +34,7 @@ EOF
 - `prune` (Boolean) - Prune services that are no longer referenced in the compose file during deploy. Changing this forces a new resource.
 - `resolve_image` (String) - Image resolution mode for deploy (for example `always`, `changed`, or `never`). Changing this forces a new resource.
 - `with_registry_auth` (Boolean) - Forward registry authentication to swarm agents during deploy. Changing this forces a new resource.
-- `working_dir` (String) - Working directory used by Arcane for compose include resolution. Changing this forces a new resource.
+- `override_content` (String) - Compose override content merged over `compose_content`.
 
 ## Attributes Reference
 

@@ -6,14 +6,12 @@ import (
 
 	"terraform-provider-arcane/internal/sdkclient"
 
-	"github.com/hashicorp/terraform-plugin-framework-validators/stringvalidator"
 	"github.com/hashicorp/terraform-plugin-framework/path"
 	"github.com/hashicorp/terraform-plugin-framework/resource"
 	resourceschema "github.com/hashicorp/terraform-plugin-framework/resource/schema"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema/planmodifier"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema/stringdefault"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema/stringplanmodifier"
-	"github.com/hashicorp/terraform-plugin-framework/schema/validator"
 	"github.com/hashicorp/terraform-plugin-framework/types"
 )
 
@@ -34,27 +32,25 @@ func (r *RegistryResource) Schema(_ context.Context, _ resource.SchemaRequest, r
 			"id":       resourceschema.StringAttribute{Computed: true, PlanModifiers: []planmodifier.String{stringplanmodifier.UseStateForUnknown()}},
 			"url":      resourceschema.StringAttribute{Required: true, Description: "Registry URL"},
 			"username": resourceschema.StringAttribute{Required: true, Description: "Registry username"},
-			"token": resourceschema.StringAttribute{
-				Optional:           true,
-				Sensitive:          true,
-				Description:        "Registry access token or password. Exactly one of `token` or `token_wo` is required.",
-				DeprecationMessage: writeOnlyDeprecation("token"),
-				Validators:         []validator.String{stringvalidator.ExactlyOneOf(path.MatchRoot("token_wo"))},
-			},
-			"token_wo":                         writeOnlyAttribute("token", "Registry access token or password. Exactly one of `token` or `token_wo` is required."),
+			"token_wo": func() resourceschema.StringAttribute {
+				a := writeOnlyAttribute("token", "Registry access token or password.")
+				a.Optional, a.Required = false, true
+				return a
+			}(),
 			"token_wo_version":                 writeOnlyVersionAttribute("token"),
 			"description":                      resourceschema.StringAttribute{Optional: true},
 			"insecure":                         resourceschema.BoolAttribute{Optional: true},
 			"enabled":                          resourceschema.BoolAttribute{Optional: true},
 			"registry_type":                    resourceschema.StringAttribute{Optional: true, Computed: true, Default: stringdefault.StaticString("generic"), Description: "Registry implementation type"},
 			"repository_names":                 resourceschema.ListAttribute{Optional: true, ElementType: types.StringType, Description: "Pre-configured repository namespaces offered when pushing images to this registry"},
-			"aws_access_key_id":                resourceschema.StringAttribute{Optional: true, Sensitive: true, DeprecationMessage: writeOnlyDeprecation("aws_access_key_id")},
 			"aws_access_key_id_wo":             writeOnlyAttribute("aws_access_key_id", "AWS access key ID (ECR registries)."),
 			"aws_access_key_id_wo_version":     writeOnlyVersionAttribute("aws_access_key_id"),
-			"aws_secret_access_key":            resourceschema.StringAttribute{Optional: true, Sensitive: true, DeprecationMessage: writeOnlyDeprecation("aws_secret_access_key")},
 			"aws_secret_access_key_wo":         writeOnlyAttribute("aws_secret_access_key", "AWS secret access key (ECR registries)."),
 			"aws_secret_access_key_wo_version": writeOnlyVersionAttribute("aws_secret_access_key"),
 			"aws_region":                       resourceschema.StringAttribute{Optional: true},
+
+			"host":      resourceschema.StringAttribute{Computed: true, Description: "Registry host Arcane derived from `url`."},
+			"namespace": resourceschema.StringAttribute{Computed: true, Description: "Namespace (path after the host) Arcane derived from `url`; empty for a bare host."},
 
 			// Computed timestamps
 			"created_at": resourceschema.StringAttribute{Computed: true, PlanModifiers: []planmodifier.String{stringplanmodifier.UseStateForUnknown()}},
@@ -75,7 +71,6 @@ type registryModel struct {
 	ID                          types.String `tfsdk:"id"`
 	URL                         types.String `tfsdk:"url"`
 	Username                    types.String `tfsdk:"username"`
-	Token                       types.String `tfsdk:"token"`
 	TokenWO                     types.String `tfsdk:"token_wo"`
 	TokenWOVersion              types.Int64  `tfsdk:"token_wo_version"`
 	Description                 types.String `tfsdk:"description"`
@@ -83,13 +78,13 @@ type registryModel struct {
 	Enabled                     types.Bool   `tfsdk:"enabled"`
 	RegistryType                types.String `tfsdk:"registry_type"`
 	RepositoryNames             types.List   `tfsdk:"repository_names"`
-	AWSAccessKeyID              types.String `tfsdk:"aws_access_key_id"`
 	AWSAccessKeyIDWO            types.String `tfsdk:"aws_access_key_id_wo"`
 	AWSAccessKeyIDWOVersion     types.Int64  `tfsdk:"aws_access_key_id_wo_version"`
-	AWSSecretAccessKey          types.String `tfsdk:"aws_secret_access_key"`
 	AWSSecretAccessKeyWO        types.String `tfsdk:"aws_secret_access_key_wo"`
 	AWSSecretAccessKeyWOVersion types.Int64  `tfsdk:"aws_secret_access_key_wo_version"`
 	AWSRegion                   types.String `tfsdk:"aws_region"`
+	Host                        types.String `tfsdk:"host"`
+	Namespace                   types.String `tfsdk:"namespace"`
 	CreatedAt                   types.String `tfsdk:"created_at"`
 	UpdatedAt                   types.String `tfsdk:"updated_at"`
 }
@@ -103,9 +98,10 @@ func (r *RegistryResource) Create(ctx context.Context, req resource.CreateReques
 	}
 
 	body := sdkclient.CreateContainerRegistryRequest{
-		URL:             plan.URL.ValueString(),
-		Username:        plan.Username.ValueString(),
-		Token:           plan.Token.ValueString(),
+		URL:      plan.URL.ValueString(),
+		Username: plan.Username.ValueString(),
+		// Write-only: the plan holds null, the value is only in the configuration.
+		Token:           config.TokenWO.ValueString(),
 		RepositoryNames: listToStrings(ctx, plan.RepositoryNames),
 		RegistryType:    "generic",
 	}
@@ -124,16 +120,7 @@ func (r *RegistryResource) Create(ctx context.Context, req resource.CreateReques
 	if !plan.RegistryType.IsNull() && !plan.RegistryType.IsUnknown() {
 		body.RegistryType = plan.RegistryType.ValueString()
 	}
-	if !plan.AWSAccessKeyID.IsNull() && !plan.AWSAccessKeyID.IsUnknown() {
-		body.AWSAccessKeyID = plan.AWSAccessKeyID.ValueString()
-	}
-	if !plan.AWSSecretAccessKey.IsNull() && !plan.AWSSecretAccessKey.IsUnknown() {
-		body.AWSSecretAccessKey = plan.AWSSecretAccessKey.ValueString()
-	}
 	// Write-only: the plan holds null, the values are only in the configuration.
-	if isSetString(config.TokenWO) {
-		body.Token = config.TokenWO.ValueString()
-	}
 	if isSetString(config.AWSAccessKeyIDWO) {
 		body.AWSAccessKeyID = config.AWSAccessKeyIDWO.ValueString()
 	}
@@ -153,16 +140,15 @@ func (r *RegistryResource) Create(ctx context.Context, req resource.CreateReques
 	state := registryModel{
 		ID:                          types.StringValue(reg.ID),
 		URL:                         types.StringValue(reg.URL),
+		Host:                        types.StringValue(reg.Host),
+		Namespace:                   types.StringValue(reg.Namespace),
 		Username:                    plan.Username,
-		Token:                       plan.Token, // keep token in state for apply consistency
 		TokenWOVersion:              plan.TokenWOVersion,
 		Description:                 plan.Description,
 		Insecure:                    plan.Insecure,
 		Enabled:                     plan.Enabled,
 		RegistryType:                plan.RegistryType,
 		RepositoryNames:             plan.RepositoryNames,
-		AWSAccessKeyID:              plan.AWSAccessKeyID,
-		AWSSecretAccessKey:          plan.AWSSecretAccessKey,
 		AWSAccessKeyIDWOVersion:     plan.AWSAccessKeyIDWOVersion,
 		AWSSecretAccessKeyWOVersion: plan.AWSSecretAccessKeyWOVersion,
 		AWSRegion:                   plan.AWSRegion,
@@ -191,6 +177,8 @@ func (r *RegistryResource) Read(ctx context.Context, req resource.ReadRequest, r
 	}
 
 	state.URL = types.StringValue(reg.URL)
+	state.Host = types.StringValue(reg.Host)
+	state.Namespace = types.StringValue(reg.Namespace)
 	state.Username = types.StringValue(reg.Username)
 	if !state.Description.IsNull() && !state.Description.IsUnknown() {
 		state.Description = types.StringValue(reg.Description)
@@ -213,7 +201,6 @@ func (r *RegistryResource) Read(ctx context.Context, req resource.ReadRequest, r
 	}
 	state.CreatedAt = types.StringValue(reg.CreatedAt)
 	state.UpdatedAt = types.StringValue(reg.UpdatedAt)
-	// Token remains as last set
 	resp.Diagnostics.Append(resp.State.Set(ctx, &state)...)
 }
 
@@ -236,10 +223,6 @@ func (r *RegistryResource) Update(ctx context.Context, req resource.UpdateReques
 		v := plan.Username.ValueString()
 		body.Username = &v
 	}
-	if !plan.Token.IsNull() && !plan.Token.IsUnknown() && plan.Token.ValueString() != "" {
-		v := plan.Token.ValueString()
-		body.Token = &v
-	}
 	if !plan.Description.IsNull() && !plan.Description.IsUnknown() {
 		v := plan.Description.ValueString()
 		body.Description = &v
@@ -260,14 +243,6 @@ func (r *RegistryResource) Update(ctx context.Context, req resource.UpdateReques
 	// configuration clears them on the server instead of being a no-op.
 	names := append([]string{}, listToStrings(ctx, plan.RepositoryNames)...)
 	body.RepositoryNames = &names
-	if !plan.AWSAccessKeyID.IsNull() && !plan.AWSAccessKeyID.IsUnknown() {
-		v := plan.AWSAccessKeyID.ValueString()
-		body.AWSAccessKeyID = &v
-	}
-	if !plan.AWSSecretAccessKey.IsNull() && !plan.AWSSecretAccessKey.IsUnknown() {
-		v := plan.AWSSecretAccessKey.ValueString()
-		body.AWSSecretAccessKey = &v
-	}
 	if !plan.AWSRegion.IsNull() && !plan.AWSRegion.IsUnknown() {
 		v := plan.AWSRegion.ValueString()
 		body.AWSRegion = &v
@@ -293,6 +268,8 @@ func (r *RegistryResource) Update(ctx context.Context, req resource.UpdateReques
 	}
 
 	state.URL = types.StringValue(reg.URL)
+	state.Host = types.StringValue(reg.Host)
+	state.Namespace = types.StringValue(reg.Namespace)
 	state.Username = types.StringValue(reg.Username)
 	if !plan.Description.IsNull() && !plan.Description.IsUnknown() {
 		state.Description = types.StringValue(reg.Description)
@@ -315,11 +292,6 @@ func (r *RegistryResource) Update(ctx context.Context, req resource.UpdateReques
 		state.RegistryType = plan.RegistryType
 	}
 	state.RepositoryNames = plan.RepositoryNames
-	// Persist unconditionally so clearing a previously-set credential to null
-	// also updates state (a guarded copy would leave the old secret behind and
-	// produce an inconsistent-result error on the clear-to-null transition).
-	state.AWSAccessKeyID = plan.AWSAccessKeyID
-	state.AWSSecretAccessKey = plan.AWSSecretAccessKey
 	state.AWSAccessKeyIDWOVersion = plan.AWSAccessKeyIDWOVersion
 	state.AWSSecretAccessKeyWOVersion = plan.AWSSecretAccessKeyWOVersion
 	if !plan.AWSRegion.IsNull() && !plan.AWSRegion.IsUnknown() {
@@ -331,9 +303,6 @@ func (r *RegistryResource) Update(ctx context.Context, req resource.UpdateReques
 	// promise the prior one, so rewriting it here would fail the apply as an
 	// inconsistent result.
 	state.UpdatedAt = types.StringValue(reg.UpdatedAt)
-	// Persist unconditionally: moving to token_wo plans token as null, and
-	// keeping the old value would fail the apply as an inconsistent result.
-	state.Token = plan.Token
 	state.TokenWOVersion = plan.TokenWOVersion
 	resp.Diagnostics.Append(resp.State.Set(ctx, &state)...)
 }

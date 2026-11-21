@@ -2,34 +2,41 @@
 
 Manages Arcane environments (agent connections).
 
+Environments are agent-based: Terraform creates the environment, Arcane mints a single-use
+**enrollment token**, and an Arcane agent started with that token (`ARCANE_AGENT_TOKEN`) joins the
+environment. The environment stays `pending` until an agent enrolls. Arcane derives the environment
+URL itself (`agent://<name>`).
+
 ## Example Usage
 
 ```hcl
 resource "arcane_environment" "agent" {
-  name     = "Production"
-  api_url  = "http://agent-host:8080"
-  enabled  = true
-  use_api_key = true
+  name    = "Production"
+  enabled = true
 }
+
+# Start the agent with the token, e.g. through the docker provider:
+# env = ["ARCANE_AGENT=true", "ARCANE_AGENT_TOKEN=${arcane_environment.agent.enrollment_token}",
+#        "ARCANE_MANAGER_API_URL=https://arcane.example.com"]
 ```
 
 ## Argument Reference
 
-- `api_url` (String, Required) — agent API URL.
-- `name` (String, Optional)
-- `access_token` (String, Optional, Sensitive) — access token for agent pairing. **Deprecated**: stored in state; use `access_token_wo` instead, `access_token` will be removed in the next major release.
-- `access_token_wo` (String, Optional, Sensitive, Write-only) — access token for agent pairing. Never stored in state or plan files; only sent when `access_token_wo_version` changes. Conflicts with `access_token`. See [write-only arguments](../index.md#write-only-arguments).
-- `access_token_wo_version` (Number, Optional) — change it to send a new `access_token_wo`. Required with `access_token_wo`.
-- `use_api_key` (Bool, Optional) — request Arcane to generate an API key for pairing.
-- `is_edge` (Bool, Optional, Computed) — whether the environment uses edge transport; read from Arcane when not set. Changing it forces a new resource; Arcane cannot change the transport of an existing environment.
-- `regenerate_api_key` (Bool, Optional) — regenerate the pairing API key on update.
+- `name` (String, Optional) — display name.
 - `enabled` (Bool, Optional)
 
 ## Attributes Reference
 
 - `id` (String)
-- `status` (String)
-- `api_key` (String, Sensitive) — only returned on create when `use_api_key = true`.
-- `edge_agent_instance`, `edge_security_mode`, `edge_session_id` (String)
+- `status` (String) — `pending` until an agent enrolls.
+- `api_url` (String) — URL Arcane derived for the environment.
+- `enrollment_token` (String, Sensitive) — single-use enrollment token minted on create. Null for imported environments; use the [`arcane_deployment_snippets`](../data-sources/arcane_deployment_snippets.md) data source to mint a new one.
+- `edge_agent_instance`, `edge_security_mode`, `edge_session_id` (String) — agent details.
 - `edge_capabilities` (List of String)
-- `edge_mtls_certificate_json` (String) — edge mTLS certificate metadata as JSON.
+- `edge_mtls_certificate_json` (String) — agent mTLS certificate metadata as JSON.
+
+## Import
+
+```shell
+terraform import arcane_environment.agent <environment-id>
+```

@@ -52,9 +52,8 @@ func fullSecretModel() swarmSecretModel {
 		ID:            types.StringValue("sec-1"),
 		EnvironmentID: types.StringValue("env-1"),
 		Name:          types.StringValue("db_password"),
-		Data:          types.StringValue("s3cr3t"),
 		DataWO:        types.StringNull(),
-		DataWOVersion: types.Int64Null(),
+		DataWOVersion: types.Int64Value(1),
 		Labels:        types.MapNull(types.StringType),
 		VersionIndex:  types.Int64Value(10),
 		CreatedAt:     types.StringValue("2026-01-01T00:00:00Z"),
@@ -73,7 +72,7 @@ func TestSwarmSecretRead_PreservesNullLabels(t *testing.T) {
 	defer srv.Close()
 
 	r := &SwarmSecretResource{client: sdkclient.NewClient(srv.URL, "k")}
-	prior := fullSecretModel() // Labels null, Data set
+	prior := fullSecretModel() // Labels null
 
 	resp := &resource.ReadResponse{State: secretState(t, prior)}
 	r.Read(context.Background(), resource.ReadRequest{State: secretState(t, prior)}, resp)
@@ -85,10 +84,6 @@ func TestSwarmSecretRead_PreservesNullLabels(t *testing.T) {
 	resp.State.Get(context.Background(), &got)
 	if !got.Labels.IsNull() {
 		t.Errorf("null labels adopted server labels (would force replace): got %v", got.Labels)
-	}
-	// Plaintext data is write-only on the API and must be preserved from state.
-	if got.Data.ValueString() != "s3cr3t" {
-		t.Errorf("data not preserved on read: got %q, want %q", got.Data.ValueString(), "s3cr3t")
 	}
 }
 
@@ -110,8 +105,11 @@ func TestSwarmSecretCreate_EncodesDataBase64(t *testing.T) {
 	plan.CreatedAt = types.StringNull()
 	plan.UpdatedAt = types.StringNull()
 
+	config := plan
+	config.DataWO = types.StringValue("s3cr3t")
+
 	resp := &resource.CreateResponse{State: secretState(t, fullSecretModel())}
-	r.Create(context.Background(), resource.CreateRequest{Plan: secretPlan(t, plan), Config: secretConfig(t, plan)}, resp)
+	r.Create(context.Background(), resource.CreateRequest{Plan: secretPlan(t, plan), Config: secretConfig(t, config)}, resp)
 	if resp.Diagnostics.HasError() {
 		t.Fatalf("create diagnostics: %v", resp.Diagnostics)
 	}
@@ -142,8 +140,6 @@ func TestSwarmSecretCreate_WriteOnlyData(t *testing.T) {
 	plan.VersionIndex = types.Int64Null()
 	plan.CreatedAt = types.StringNull()
 	plan.UpdatedAt = types.StringNull()
-	plan.Data = types.StringNull()
-	plan.DataWOVersion = types.Int64Value(1)
 	config := plan
 	config.DataWO = types.StringValue("wo-s3cr3t")
 
@@ -158,8 +154,8 @@ func TestSwarmSecretCreate_WriteOnlyData(t *testing.T) {
 	}
 	var got swarmSecretModel
 	resp.State.Get(context.Background(), &got)
-	if !got.Data.IsNull() || !got.DataWO.IsNull() {
-		t.Errorf("secret leaked into state: data=%v data_wo=%v", got.Data, got.DataWO)
+	if !got.DataWO.IsNull() {
+		t.Errorf("secret leaked into state: data_wo=%v", got.DataWO)
 	}
 	if got.DataWOVersion.ValueInt64() != 1 {
 		t.Errorf("data_wo_version in state: got %v, want 1", got.DataWOVersion)

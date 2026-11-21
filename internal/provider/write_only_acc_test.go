@@ -115,7 +115,6 @@ func TestAccArcaneWriteOnly_notInState(t *testing.T) {
 					testAccCheckNoSecretInState(writeOnlySecretMarker),
 					testAccCheckWriteOnlyAttrsNull(),
 					resource.TestCheckResourceAttr("arcane_user.wo", "password_wo_version", "2"),
-					resource.TestCheckResourceAttr("arcane_environment.wo", "access_token_wo_version", "2"),
 					testAccCheckUserLogin(name+"-user", v2.password()),
 					testAccCheckRegistryAWSAccessKeyID("arcane_container_registry.wo_ecr", v2.awsAccessKeyID()),
 					testAccCheckGitOpsSyncPreDeployEnv("arcane_gitops_sync.wo", v2.preDeployEnv()),
@@ -133,17 +132,16 @@ func TestAccArcaneWriteOnly_notInState(t *testing.T) {
 	})
 }
 
-// writeOnlyAttrs lists the secret attributes, stored and write-only, of the
-// resources in testAccWriteOnlyConfig. None of them may be in state.
+// writeOnlyAttrs lists the write-only secret attributes of the resources in
+// testAccWriteOnlyConfig. None of them may be in state.
 var writeOnlyAttrs = map[string][]string{
-	"arcane_user.wo":                   {"password", "password_wo"},
-	"arcane_git_repository.wo_token":   {"token", "token_wo", "ssh_key", "ssh_key_wo"},
-	"arcane_git_repository.wo_ssh":     {"token", "token_wo", "ssh_key", "ssh_key_wo"},
-	"arcane_container_registry.wo":     {"token", "token_wo", "aws_access_key_id", "aws_access_key_id_wo", "aws_secret_access_key", "aws_secret_access_key_wo"},
-	"arcane_container_registry.wo_ecr": {"token", "token_wo", "aws_access_key_id", "aws_access_key_id_wo", "aws_secret_access_key", "aws_secret_access_key_wo"},
-	"arcane_environment.wo":            {"access_token", "access_token_wo"},
-	"arcane_settings.wo":               {"trivy_server_token", "trivy_server_token_wo", "oidc_client_secret", "oidc_client_secret_wo", "depot_token", "depot_token_wo"},
-	"arcane_gitops_sync.wo":            {"pre_deploy_env", "pre_deploy_env_wo"},
+	"arcane_user.wo":                   {"password_wo"},
+	"arcane_git_repository.wo_token":   {"token_wo", "ssh_key_wo"},
+	"arcane_git_repository.wo_ssh":     {"token_wo", "ssh_key_wo"},
+	"arcane_container_registry.wo":     {"token_wo", "aws_access_key_id_wo", "aws_secret_access_key_wo"},
+	"arcane_container_registry.wo_ecr": {"token_wo", "aws_access_key_id_wo", "aws_secret_access_key_wo"},
+	"arcane_settings.wo":               {"trivy_server_token_wo", "oidc_client_secret_wo", "depot_token_wo"},
+	"arcane_gitops_sync.wo":            {"pre_deploy_env_wo"},
 }
 
 func testAccCheckWriteOnlyAttrsNull() resource.TestCheckFunc {
@@ -326,14 +324,6 @@ resource "arcane_container_registry" "wo_ecr" {
   aws_region                       = "eu-west-1"
 }
 
-resource "arcane_environment" "wo" {
-  name                    = "%[4]s-env"
-  api_url                 = "http://localhost:3552"
-  enabled                 = true
-  access_token_wo         = "env-token-%[7]s"
-  access_token_wo_version = %[5]d
-}
-
 resource "arcane_settings" "wo" {
   environment_id                = %[3]q
   lifecycle_enabled             = "true"
@@ -373,104 +363,8 @@ resource "arcane_gitops_sync" "wo" {
 `, testAccEndpoint(), testAccAPIKey(), testAccEnvironmentID(), c.name, c.version, c.password(), s, c.awsAccessKeyID(), preDeployEnv)
 }
 
-// TestAccArcaneWriteOnly_migrateFromStored covers moving from the deprecated
-// stored attributes to their *_wo counterparts:
-//
-//  1. The stored attributes still work, and still persist the secret.
-//  2. Switching to *_wo (with a first *_wo_version) is an in-place update that
-//     drops the secret from state. The user's password changes in the same
-//     step and the login proves the write-only value was sent.
-func TestAccArcaneWriteOnly_migrateFromStored(t *testing.T) {
-	name := testAccName("wo-migrate")
-	oldPassword := "Wo-Pass-" + writeOnlySecretMarker + "old!x9"
-	newPassword := "Wo-Pass-" + writeOnlySecretMarker + "new!x9"
-
-	var expectUpdates []plancheck.PlanCheck
-	for _, addr := range []string{"arcane_user.wo", "arcane_git_repository.wo", "arcane_container_registry.wo", "arcane_environment.wo"} {
-		expectUpdates = append(expectUpdates, plancheck.ExpectResourceAction(addr, plancheck.ResourceActionUpdate))
-	}
-
-	resource.Test(t, resource.TestCase{
-		ProtoV6ProviderFactories: testAccProtoV6ProviderFactories,
-		PreCheck:                 func() { testAccPreCheck(t) },
-		Steps: []resource.TestStep{
-			{
-				Config: testAccWriteOnlyMigrateConfig(name, oldPassword, false),
-				Check: resource.ComposeAggregateTestCheckFunc(
-					// The precondition: the deprecated attributes persist.
-					resource.TestCheckResourceAttr("arcane_user.wo", "password", oldPassword),
-					resource.TestCheckResourceAttr("arcane_git_repository.wo", "token", "git-token-"+writeOnlySecretMarker),
-					resource.TestCheckResourceAttr("arcane_container_registry.wo", "token", "registry-token-"+writeOnlySecretMarker),
-					resource.TestCheckResourceAttr("arcane_environment.wo", "access_token", "env-token-"+writeOnlySecretMarker),
-					testAccCheckUserLogin(name+"-user", oldPassword),
-				),
-			},
-			{
-				Config: testAccWriteOnlyMigrateConfig(name, newPassword, true),
-				ConfigPlanChecks: resource.ConfigPlanChecks{
-					PreApply: expectUpdates,
-				},
-				Check: resource.ComposeAggregateTestCheckFunc(
-					testAccCheckNoSecretInState(writeOnlySecretMarker),
-					resource.TestCheckNoResourceAttr("arcane_user.wo", "password"),
-					resource.TestCheckNoResourceAttr("arcane_git_repository.wo", "token"),
-					resource.TestCheckNoResourceAttr("arcane_container_registry.wo", "token"),
-					resource.TestCheckNoResourceAttr("arcane_environment.wo", "access_token"),
-					testAccCheckUserLogin(name+"-user", newPassword),
-					testAccCheckGitRepositoryCredentials("arcane_git_repository.wo", true, false),
-				),
-			},
-		},
-	})
-}
-
-func testAccWriteOnlyMigrateConfig(name, password string, writeOnly bool) string {
-	suffix := ""
-	versionLine := func(string) string { return "" }
-	if writeOnly {
-		suffix = "_wo"
-		versionLine = func(attr string) string { return "\n  " + attr + "_wo_version = 1" }
-	}
-
-	return fmt.Sprintf(`
-provider "arcane" {
-  endpoint     = %[1]q
-  api_key      = %[2]q
-  http_timeout = "180s"
-}
-
-resource "arcane_user" "wo" {
-  username = "%[3]s-user"
-  password%[5]s = %[4]q%[6]s
-}
-
-resource "arcane_git_repository" "wo" {
-  name      = "%[3]s-repo"
-  url       = "https://github.com/docker/awesome-compose.git"
-  auth_type = "token"
-  username  = "tfacc"
-  token%[5]s = "git-token-%[9]s"%[7]s
-}
-
-resource "arcane_container_registry" "wo" {
-  url      = "https://%[3]s.example.test"
-  username = "tfacc"
-  token%[5]s = "registry-token-%[9]s"%[7]s
-}
-
-resource "arcane_environment" "wo" {
-  name    = "%[3]s-env"
-  api_url = "http://localhost:3552"
-  enabled = true
-  access_token%[5]s = "env-token-%[9]s"%[8]s
-}
-`, testAccEndpoint(), testAccAPIKey(), name, password, suffix,
-		versionLine("password"), versionLine("token"), versionLine("access_token"), writeOnlySecretMarker)
-}
-
-// TestAccArcaneWriteOnly_validation pins the plan-time rules tying each secret
-// to its counterpart: the stored and write-only flavours are exclusive, a
-// required secret needs one of them, and a *_wo value needs its version.
+// TestAccArcaneWriteOnly_validation pins the plan-time rules of the write-only
+// secrets: a required secret must be set, and a *_wo value needs its version.
 func TestAccArcaneWriteOnly_validation(t *testing.T) {
 	provider := fmt.Sprintf(`
 provider "arcane" {
@@ -485,17 +379,15 @@ provider "arcane" {
 	}{
 		{`
 resource "arcane_git_repository" "v" {
-  name             = "v"
-  url              = "https://example.test/v.git"
-  auth_type        = "token"
-  token            = "a"
-  token_wo         = "b"
-  token_wo_version = 1
-}`, `(?s)token_wo.*cannot be specified when.*token`},
+  name      = "v"
+  url       = "https://example.test/v.git"
+  auth_type = "token"
+  token_wo  = "b"
+}`, `(?s)token_wo_version.*must be specified when.*token_wo`},
 		{`
 resource "arcane_user" "v" {
   username = "v"
-}`, `(?s)No attribute specified when one \(and only one\) of.*password_wo`},
+}`, `(?s)Missing required argument.*password_wo`},
 		{`
 resource "arcane_user" "v" {
   username    = "v"
@@ -519,8 +411,7 @@ resource "arcane_user" "v" {
 }
 
 // TestAccArcaneSwarmSecret_writeOnlyData checks the swarm secret's data_wo
-// stays out of state, that bumping data_wo_version replaces the (immutable)
-// secret, and that moving from the deprecated data to data_wo keeps the
+// stays out of state and that bumping data_wo_version replaces the (immutable)
 // secret. It needs an environment whose Docker engine is a swarm manager, so
 // it skips when Arcane reports swarm mode as disabled.
 func TestAccArcaneSwarmSecret_writeOnlyData(t *testing.T) {
@@ -532,20 +423,10 @@ func TestAccArcaneSwarmSecret_writeOnlyData(t *testing.T) {
 		PreCheck:                 func() { testAccPreCheck(t) },
 		Steps: []resource.TestStep{
 			{
-				Config: testAccSwarmSecretStoredConfig(name),
-				Check:  resource.TestCheckResourceAttr("arcane_swarm_secret.wo", "data", writeOnlySecretMarker+"1"),
-			},
-			{
-				// data -> data_wo with the same value: no replacement.
 				Config: testAccSwarmSecretWriteOnlyConfig(name, "1", 1),
-				ConfigPlanChecks: resource.ConfigPlanChecks{
-					PreApply: []plancheck.PlanCheck{
-						plancheck.ExpectResourceAction("arcane_swarm_secret.wo", plancheck.ResourceActionUpdate),
-					},
-				},
 				Check: resource.ComposeAggregateTestCheckFunc(
 					testAccCheckNoSecretInState(writeOnlySecretMarker),
-					resource.TestCheckNoResourceAttr("arcane_swarm_secret.wo", "data"),
+					resource.TestCheckNoResourceAttr("arcane_swarm_secret.wo", "data_wo"),
 					resource.TestCheckResourceAttr("arcane_swarm_secret.wo", "data_wo_version", "1"),
 				),
 			},
@@ -569,22 +450,6 @@ func TestAccArcaneSwarmSecret_writeOnlyData(t *testing.T) {
 			},
 		},
 	})
-}
-
-func testAccSwarmSecretStoredConfig(name string) string {
-	return fmt.Sprintf(`
-provider "arcane" {
-  endpoint     = %q
-  api_key      = %q
-  http_timeout = "180s"
-}
-
-resource "arcane_swarm_secret" "wo" {
-  environment_id = %q
-  name           = %q
-  data           = "%s1"
-}
-`, testAccEndpoint(), testAccAPIKey(), testAccEnvironmentID(), name, writeOnlySecretMarker)
 }
 
 func testAccSwarmSecretWriteOnlyConfig(name, secret string, version int) string {
@@ -614,7 +479,7 @@ func testAccSkipUnlessSwarm(t *testing.T) {
 	if os.Getenv("TF_ACC") == "" {
 		return
 	}
-	url := strings.TrimSuffix(testAccEndpoint(), "/") + "/environments/" + testAccEnvironmentID() + "/swarm/secrets"
+	url := strings.TrimSuffix(testAccEndpoint(), "/") + "/agents/" + testAccEnvironmentID() + "/swarm/secrets"
 	req, err := http.NewRequest(http.MethodGet, url, nil)
 	if err != nil {
 		t.Fatalf("building swarm probe request: %s", err)

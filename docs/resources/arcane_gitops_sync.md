@@ -6,10 +6,8 @@ Manages GitOps sync configurations that automatically deploy docker-compose proj
 
 ```hcl
 resource "arcane_environment" "prod" {
-  name     = "Production"
-  api_url  = "http://agent:8080"
-  enabled  = true
-  use_api_key = true
+  name    = "Production"
+  enabled = true
 }
 
 resource "arcane_git_repository" "app_repo" {
@@ -77,13 +75,39 @@ resource "arcane_gitops_sync" "sops_sync" {
 }
 ```
 
+## Example: Back Up an Existing Project
+
+With `mode = "backup"`, Arcane pushes an existing project (one not deployed from
+Git) to `backup_directory` in the repository; `"bidirectional"` also deploys
+changes back from it. The repository needs write credentials (`token_wo` or
+`ssh_key_wo`).
+
+```hcl
+resource "arcane_gitops_sync" "backup" {
+  environment_id   = arcane_environment.prod.id
+  name             = "Back up my-app"
+  repository_id    = arcane_git_repository.app_repo.id
+  branch           = "main"
+  mode             = "backup"
+  project_id       = arcane_project.my_app.id
+  backup_directory = "backups/my-app"
+  backup_paths     = ["compose.yaml", ".env"]
+}
+```
+
 ## Argument Reference
 
 - `environment_id` (String, Required) — Environment ID (changing forces new resource)
 - `name` (String, Required) — Sync configuration name
 - `repository_id` (String, Required) — Git repository ID
 - `branch` (String, Required) — Git branch to sync from
-- `compose_path` (String, Required) — Path to docker-compose file in the repository
+- `compose_path` (String, Optional) — Path to the compose file in the repository. Required with `mode = "deploy"`; in the backup modes Arcane derives it from `backup_directory` (computed) and it must not be set.
+- `mode` (String, Optional) — `"deploy"` (default) deploys a project from the repository; `"backup"` pushes an existing project to `backup_directory`; `"bidirectional"` does both. Changing it forces a new resource.
+- `project_id` (String, Optional) — Existing project to back up; required with the backup modes and not allowed with `"deploy"` (Arcane creates that project, see Attributes). Changing a configured value forces a new resource.
+- `backup_directory` (String, Optional) — Repository directory the project is pushed to. Required with the backup modes.
+- `backup_paths` (Set of String, Optional) — Project files to back up, relative to the project directory. Unset backs up the whole project.
+- `backup_on_save` (Bool, Optional) — Push a backup each time the project is saved in Arcane (server default `true`).
+- `compose_override_path` (String, Optional) — Repository path of a compose override file. Unset, Arcane looks for one beside the compose file.
 - `project_name` (String, Optional) — Project name for the compose stack. Changing it renames the project the sync is bound to; see [Renaming the project](#renaming-the-project).
 - `auto_sync` (Bool, Optional) — Enable automatic sync on interval
 - `sync_interval` (Int, Optional) — Sync interval in minutes
@@ -95,13 +119,12 @@ resource "arcane_gitops_sync" "sops_sync" {
 - `max_sync_files` (Int, Optional) — Maximum number of files to sync
 - `max_sync_total_size` (Int, Optional) — Maximum total sync size, in bytes
 - `environment_variables` (Map of String, Optional) — Environment variables for the synced project
-- `start_project` (Bool, Optional) — Whether to start the project after creation (default: `true`). Controls lifecycle behavior only; not sent to the API.
+- `start_project` (Bool, Optional) — Whether to start the project after creation (default: `true` with `mode = "deploy"`, `false` in the backup modes). Controls lifecycle behavior only; not sent to the API.
 - `fail_if_name_exists` (Bool, Optional) — If true, fail during the plan phase when a GitOps sync with the same name already exists in the environment, instead of creating a duplicate. Defaults to `false`.
 - `stop_before_rename` (Bool, Optional) — when true, a `project_name` change stops the project, renames it and starts it again in the same apply (default `false`). Arcane only renames stopped projects; without this, the plan fails when the rename targets a running project. See [Renaming the project](#renaming-the-project).
 - `pre_deploy_script_path` (String, Optional) — Path inside the synced repository to a script executed in a throwaway container before each deploy
 - `pre_deploy_runner_image` (String, Optional) — Container image used to run the pre-deploy script. Required by the API whenever `pre_deploy_script_path` is set
-- `pre_deploy_env` (String, Optional, Sensitive) — Environment variables exposed to the pre-deploy script, one `KEY=VALUE` entry per line (`.env` file format). Marked sensitive because it commonly carries key material such as `SOPS_AGE_KEY`. **Deprecated**: stored in state; use `pre_deploy_env_wo` instead, `pre_deploy_env` will be removed in the next major release.
-- `pre_deploy_env_wo` (String, Optional, Sensitive, Write-only) — Environment variables exposed to the pre-deploy script (`.env` format). Never stored in state or plan files; only sent when `pre_deploy_env_wo_version` changes. Conflicts with `pre_deploy_env`. Changing the version with `pre_deploy_env_wo` removed clears it in Arcane. See [write-only arguments](../index.md#write-only-arguments).
+- `pre_deploy_env_wo` (String, Optional, Sensitive, Write-only) — Environment variables exposed to the pre-deploy script, one `KEY=VALUE` entry per line (`.env` file format). Never stored in state or plan files; only sent when `pre_deploy_env_wo_version` changes. Changing the version with `pre_deploy_env_wo` removed clears it in Arcane. See [write-only arguments](../index.md#write-only-arguments).
 - `pre_deploy_env_wo_version` (Number, Optional) — change it to send a new `pre_deploy_env_wo`. Required with `pre_deploy_env_wo`.
 - `pre_deploy_extra_mounts` (String, Optional, Sensitive) — Extra bind mounts for the pre-deploy runner container, one entry per line in docker `src:tgt[:ro|:rw]` form
 - `pre_deploy_timeout_sec` (Int, Optional) — Timeout in seconds for the pre-deploy script (server default 60, capped by the server-side maximum)
@@ -144,13 +167,17 @@ record — for instance one renamed outside Terraform — is left alone until th
 
 ## Deletion
 
-Destroying the resource deletes the sync and destroys its project (containers and networks) without removing volumes or files. Arcane moves the project directory to a hidden `.arcane-trash-*` directory in its projects directory, so it is not imported again.
+Destroying the resource deletes the sync and destroys its project (containers and networks) without removing volumes or files. A backup-mode sync only deletes the sync: the project it backed up is left in place. Arcane moves the project directory to a hidden `.arcane-trash-*` directory in its projects directory, so it is not imported again.
 
 ## Attributes Reference
 
 - `id` (String) — GitOps sync ID
 - `enabled` (Bool) — Whether the sync is enabled (read-only)
-- `project_id` (String) — Associated project ID (created after first sync)
+- `project_id` (String) — Associated project ID (created after first sync for a deploy sync)
+- `backup_state` (String) — State of the last backup push
+- `backup_pending` (Bool) — Whether project changes are waiting to be pushed
+- `backup_failure_reason` (String) — Why the last backup push failed (for example `auth`)
+- `last_backup_at` (String) — Timestamp of the last backup push
 - `last_sync_at` (String) — Last sync timestamp
 - `last_sync_commit` (String) — Last synced commit hash
 - `last_sync_status` (String) — Last sync status
