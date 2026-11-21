@@ -5,8 +5,6 @@ EDGE_COMPOSE_FILE ?= tests/docker-compose.edge.yml
 ARCANE_ENDPOINT ?= http://127.0.0.1:3552/api
 ARCANE_ACC_ENVIRONMENT_ID ?= 0
 ARCANE_API_KEY ?= arc_a54fe1040057252a19b34d72008395141a04de7731a28d6f7359baa4923b2f6a
-ARCANE_ACC_EDGE_AGENT_TOKEN ?= arc_a54fe1040057252a19b34d72008395141a04de7731a28d6f7359baa4923b2f6b
-ARCANE_ACC_EDGE_AGENT_API_URL ?= http://arcane-test-edge-agent:3552
 ACC_TEST ?= TestAcc
 
 .PHONY: test lint-state test-up test-down test-clean wait-arcane test-acc test-suite test-acc-forget test-forget-down test-forget-clean test-all
@@ -51,8 +49,7 @@ test-all:
 	ARCANE_ENDPOINT="$(ARCANE_ENDPOINT)" \
 	ARCANE_API_KEY="$(ARCANE_API_KEY)" \
 	ARCANE_ACC_ENVIRONMENT_ID="$(ARCANE_ACC_ENVIRONMENT_ID)" \
-	ARCANE_ACC_EDGE_AGENT_TOKEN="$(ARCANE_ACC_EDGE_AGENT_TOKEN)" \
-	ARCANE_ACC_EDGE_AGENT_API_URL="$(ARCANE_ACC_EDGE_AGENT_API_URL)" \
+	ARCANE_ACC_AGENT_TEST=1 \
 	go test ./internal/provider -run "$(ACC_TEST)" -count=1 -v
 
 test-acc-forget:
@@ -63,8 +60,7 @@ test-acc-forget:
 	ARCANE_ENDPOINT="$(ARCANE_ENDPOINT)" \
 	ARCANE_API_KEY="$(ARCANE_API_KEY)" \
 	ARCANE_ACC_ENVIRONMENT_ID="$(ARCANE_ACC_ENVIRONMENT_ID)" \
-	ARCANE_ACC_EDGE_AGENT_TOKEN="$(ARCANE_ACC_EDGE_AGENT_TOKEN)" \
-	ARCANE_ACC_EDGE_AGENT_API_URL="$(ARCANE_ACC_EDGE_AGENT_API_URL)" \
+	ARCANE_ACC_AGENT_TEST=1 \
 	go test ./internal/provider -run TestAccArcaneForgetMissingEnvironment -count=1 -v
 
 test-down:
