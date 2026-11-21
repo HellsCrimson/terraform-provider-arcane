@@ -37,6 +37,14 @@ func (d *RegistryDataSource) Schema(ctx context.Context, req datasource.SchemaRe
 				Computed:    true,
 				Description: "Registry URL",
 			},
+			"host": schema.StringAttribute{
+				Computed:    true,
+				Description: "Registry host derived from the URL",
+			},
+			"namespace": schema.StringAttribute{
+				Computed:    true,
+				Description: "Namespace (path after the host) derived from the URL",
+			},
 			"username": schema.StringAttribute{
 				Computed:    true,
 				Description: "Registry username",
@@ -86,6 +94,8 @@ type registryDataSourceModel struct {
 	ID              types.String `tfsdk:"id"`
 	URL             types.String `tfsdk:"url"`
 	Username        types.String `tfsdk:"username"`
+	Host            types.String `tfsdk:"host"`
+	Namespace       types.String `tfsdk:"namespace"`
 	Description     types.String `tfsdk:"description"`
 	Insecure        types.Bool   `tfsdk:"insecure"`
 	Enabled         types.Bool   `tfsdk:"enabled"`
@@ -115,6 +125,8 @@ func (d *RegistryDataSource) Read(ctx context.Context, req datasource.ReadReques
 		ID:              types.StringValue(registry.ID),
 		URL:             types.StringValue(registry.URL),
 		Username:        types.StringValue(registry.Username),
+		Host:            types.StringValue(registry.Host),
+		Namespace:       types.StringValue(registry.Namespace),
 		Description:     types.StringValue(registry.Description),
 		Insecure:        types.BoolValue(registry.Insecure),
 		Enabled:         types.BoolValue(registry.Enabled),

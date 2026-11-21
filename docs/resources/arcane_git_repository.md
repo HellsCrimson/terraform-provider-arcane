@@ -58,9 +58,15 @@ resource "arcane_git_repository" "public_repo" {
 - `token_wo` (String, Optional, Sensitive, Write-only) — Access token for HTTP/HTTPS authentication (required when auth_type is `token`). Never stored in state or plan files; only sent when `token_wo_version` changes. See [write-only arguments](../index.md#write-only-arguments).
 - `token_wo_version` (Number, Optional) — change it to send a new `token_wo`. Required with `token_wo`.
 - `username` (String, Optional) — Username for authentication (used with token auth)
+- `git_provider` (String, Optional) — Git forge used to build web links: `github`, `gitlab`, `gitea` or `bitbucket`. Unset, Arcane detects it from the URL host.
+- `commit_author_name`, `commit_author_email` (String, Optional) — Author of the commits Arcane pushes (for example GitOps backups).
+- `signing_key_wo` (String, Optional, Sensitive, Write-only) — Private key (SSH or OpenPGP) used to sign the commits Arcane pushes. Never stored in state or plan files; only sent when `signing_key_wo_version` changes. See [write-only arguments](../index.md#write-only-arguments).
+- `signing_key_passphrase_wo` (String, Optional, Sensitive, Write-only) — Passphrase of `signing_key_wo`, sent with it.
+- `signing_key_wo_version` (Number, Optional) — change it to send a new `signing_key_wo`. Required with `signing_key_wo`.
 
 ## Attributes Reference
 
 - `id` (String) — Git repository ID
+- `has_signing_key` (Bool) — Whether Arcane holds a signing key for the repository
 - `created_at` (String) — Creation timestamp
 - `updated_at` (String) — Last update timestamp

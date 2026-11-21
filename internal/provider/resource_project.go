@@ -56,6 +56,8 @@ func (r *ProjectResource) Schema(_ context.Context, _ resource.SchemaRequest, re
 			"pull_on_update":      resourceschema.BoolAttribute{Optional: true, Computed: true, Description: "Pull images before redeploy.", Default: booldefault.StaticBool(false)},
 			"remove_orphans":      resourceschema.BoolAttribute{Optional: true, Description: "When deploying (compose up), remove containers for services not defined in the compose file."},
 			"force_recreate":      resourceschema.BoolAttribute{Optional: true, Description: forceRecreateDescription},
+			"build":               resourceschema.BoolAttribute{Optional: true, Description: buildDescription},
+			"recreate_volumes":    resourceschema.BoolAttribute{Optional: true, Description: recreateVolumesDescription},
 			"fail_if_name_exists": resourceschema.BoolAttribute{Optional: true, Description: "If true, fail during the plan phase when a project with the same name already exists in the environment (including folders Arcane has discovered on disk), instead of letting Arcane auto-rename the new project with a numeric suffix. Defaults to false."},
 			"stop_before_rename":  resourceschema.BoolAttribute{Optional: true, Description: stopBeforeRenameDescription},
 
@@ -266,6 +268,8 @@ type projectModel struct {
 	PullOnUpdate     types.Bool   `tfsdk:"pull_on_update"`
 	RemoveOrphans    types.Bool   `tfsdk:"remove_orphans"`
 	ForceRecreate    types.Bool   `tfsdk:"force_recreate"`
+	Build            types.Bool   `tfsdk:"build"`
+	RecreateVolumes  types.Bool   `tfsdk:"recreate_volumes"`
 	FailIfNameExists types.Bool   `tfsdk:"fail_if_name_exists"`
 	StopBeforeRename types.Bool   `tfsdk:"stop_before_rename"`
 	Path             types.String `tfsdk:"path"`
@@ -343,6 +347,8 @@ func (r *ProjectResource) Create(ctx context.Context, req resource.CreateRequest
 		PullOnUpdate:     plan.PullOnUpdate,
 		RemoveOrphans:    plan.RemoveOrphans,
 		ForceRecreate:    plan.ForceRecreate,
+		Build:            plan.Build,
+		RecreateVolumes:  plan.RecreateVolumes,
 		FailIfNameExists: plan.FailIfNameExists,
 		StopBeforeRename: plan.StopBeforeRename,
 	}
@@ -595,6 +601,8 @@ func (r *ProjectResource) Update(ctx context.Context, req resource.UpdateRequest
 	}
 	state.RemoveOrphans = plan.RemoveOrphans
 	state.ForceRecreate = plan.ForceRecreate
+	state.Build = plan.Build
+	state.RecreateVolumes = plan.RecreateVolumes
 	state.FailIfNameExists = plan.FailIfNameExists
 	state.StopBeforeRename = plan.StopBeforeRename
 	state.RemoveFiles = plan.RemoveFiles
@@ -641,10 +649,12 @@ func projectRedeployAllowed(m projectModel) bool {
 // body is omitted.
 func projectDeployOpts(m projectModel) *sdkclient.ProjectDeployOptions {
 	opts := &sdkclient.ProjectDeployOptions{
-		RemoveOrphans: optionalBool(m.RemoveOrphans),
-		ForceRecreate: optionalBool(m.ForceRecreate),
+		RemoveOrphans:   optionalBool(m.RemoveOrphans),
+		ForceRecreate:   optionalBool(m.ForceRecreate),
+		Build:           optionalBool(m.Build),
+		RecreateVolumes: optionalBool(m.RecreateVolumes),
 	}
-	if opts.RemoveOrphans == nil && opts.ForceRecreate == nil {
+	if opts.RemoveOrphans == nil && opts.ForceRecreate == nil && opts.Build == nil && opts.RecreateVolumes == nil {
 		return nil
 	}
 	return opts

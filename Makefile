@@ -22,7 +22,7 @@ test-up:
 
 wait-arcane:
 	@for i in {1..60}; do \
-		if curl -fsS -H "X-API-Key: $(ARCANE_API_KEY)" "$(ARCANE_ENDPOINT)/environments" >/dev/null; then \
+		if curl -fsS -H "X-API-Key: $(ARCANE_API_KEY)" "$(ARCANE_ENDPOINT)/agents" >/dev/null; then \
 			echo "Arcane API is ready"; \
 			exit 0; \
 		fi; \

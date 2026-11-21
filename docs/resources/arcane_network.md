@@ -49,6 +49,23 @@ resource "arcane_network" "ipv6" {
 - `ingress` (Boolean) - Enable routing-mesh for swarm cluster.
 - `labels` (Map of String) - User-defined labels for metadata.
 - `options` (Map of String) - Driver-specific options.
+- `ipam` (Object) - IP address management. Changing this forces a new resource.
+  - `driver` (String) - IPAM driver.
+  - `options` (Map of String) - IPAM driver options.
+  - `config` (List of Object) - Address pools, each with `subnet`, `ip_range`, `gateway` (String) and `aux_address` (Map of String).
+
+```hcl
+resource "arcane_network" "static" {
+  environment_id = "0"
+  name           = "static-net"
+  ipam = {
+    config = [{
+      subnet  = "172.28.0.0/16"
+      gateway = "172.28.0.1"
+    }]
+  }
+}
+```
 
 ## Attributes Reference
 

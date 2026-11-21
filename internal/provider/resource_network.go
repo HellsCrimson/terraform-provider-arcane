@@ -11,6 +11,7 @@ import (
 	resourceschema "github.com/hashicorp/terraform-plugin-framework/resource/schema"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema/boolplanmodifier"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema/mapplanmodifier"
+	"github.com/hashicorp/terraform-plugin-framework/resource/schema/objectplanmodifier"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema/planmodifier"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema/stringplanmodifier"
 	"github.com/hashicorp/terraform-plugin-framework/types"
@@ -114,6 +115,40 @@ func (r *NetworkResource) Schema(_ context.Context, _ resource.SchemaRequest, re
 					mapplanmodifier.RequiresReplace(),
 				},
 			},
+			"ipam": resourceschema.SingleNestedAttribute{
+				Optional:    true,
+				Description: "IP address management. Changing it forces a new resource.",
+				PlanModifiers: []planmodifier.Object{
+					objectplanmodifier.RequiresReplace(),
+				},
+				Attributes: map[string]resourceschema.Attribute{
+					"driver": resourceschema.StringAttribute{
+						Optional:    true,
+						Description: "IPAM driver (Docker default: default).",
+					},
+					"options": resourceschema.MapAttribute{
+						Optional:    true,
+						ElementType: types.StringType,
+						Description: "IPAM driver options.",
+					},
+					"config": resourceschema.ListNestedAttribute{
+						Optional:    true,
+						Description: "Address pools.",
+						NestedObject: resourceschema.NestedAttributeObject{
+							Attributes: map[string]resourceschema.Attribute{
+								"subnet":   resourceschema.StringAttribute{Optional: true, Description: "Subnet in CIDR form, e.g. 172.28.0.0/16."},
+								"ip_range": resourceschema.StringAttribute{Optional: true, Description: "Range to allocate container IPs from, in CIDR form."},
+								"gateway":  resourceschema.StringAttribute{Optional: true, Description: "Gateway address of the subnet."},
+								"aux_address": resourceschema.MapAttribute{
+									Optional:    true,
+									ElementType: types.StringType,
+									Description: "Auxiliary addresses the IPAM driver must not assign, by host name.",
+								},
+							},
+						},
+					},
+				},
+			},
 			// Computed fields
 			"scope": resourceschema.StringAttribute{
 				Computed:    true,
@@ -136,19 +171,20 @@ func (r *NetworkResource) Configure(_ context.Context, req resource.ConfigureReq
 }
 
 type networkModel struct {
-	ID             types.String `tfsdk:"id"`
-	EnvironmentID  types.String `tfsdk:"environment_id"`
-	Name           types.String `tfsdk:"name"`
-	Driver         types.String `tfsdk:"driver"`
-	Attachable     types.Bool   `tfsdk:"attachable"`
-	Internal       types.Bool   `tfsdk:"internal"`
-	EnableIPv6     types.Bool   `tfsdk:"enable_ipv6"`
-	CheckDuplicate types.Bool   `tfsdk:"check_duplicate"`
-	Ingress        types.Bool   `tfsdk:"ingress"`
-	Labels         types.Map    `tfsdk:"labels"`
-	Options        types.Map    `tfsdk:"options"`
-	Scope          types.String `tfsdk:"scope"`
-	Created        types.String `tfsdk:"created"`
+	ID             types.String      `tfsdk:"id"`
+	EnvironmentID  types.String      `tfsdk:"environment_id"`
+	Name           types.String      `tfsdk:"name"`
+	Driver         types.String      `tfsdk:"driver"`
+	Attachable     types.Bool        `tfsdk:"attachable"`
+	Internal       types.Bool        `tfsdk:"internal"`
+	EnableIPv6     types.Bool        `tfsdk:"enable_ipv6"`
+	CheckDuplicate types.Bool        `tfsdk:"check_duplicate"`
+	Ingress        types.Bool        `tfsdk:"ingress"`
+	Labels         types.Map         `tfsdk:"labels"`
+	Options        types.Map         `tfsdk:"options"`
+	IPAM           *networkIPAMModel `tfsdk:"ipam"`
+	Scope          types.String      `tfsdk:"scope"`
+	Created        types.String      `tfsdk:"created"`
 }
 
 func (r *NetworkResource) Create(ctx context.Context, req resource.CreateRequest, resp *resource.CreateResponse) {
@@ -191,6 +227,8 @@ func (r *NetworkResource) Create(ctx context.Context, req resource.CreateRequest
 		opts.Options = mapFromStringMap(ctx, plan.Options)
 	}
 
+	opts.IPAM = plan.IPAM.toAPI(ctx)
+
 	body := sdkclient.NetworkCreateRequest{
 		Name:    plan.Name.ValueString(),
 		Options: opts,
@@ -217,6 +255,7 @@ func (r *NetworkResource) Create(ctx context.Context, req resource.CreateRequest
 		Created:       types.StringValue(networkDetails.Created),
 		Labels:        plan.Labels,
 		Options:       plan.Options,
+		IPAM:          plan.IPAM,
 	}
 
 	if !plan.Driver.IsNull() && !plan.Driver.IsUnknown() {
@@ -313,4 +352,40 @@ func (r *NetworkResource) ImportState(ctx context.Context, req resource.ImportSt
 
 	resp.Diagnostics.Append(resp.State.SetAttribute(ctx, path.Root("environment_id"), parts[0])...)
 	resp.Diagnostics.Append(resp.State.SetAttribute(ctx, path.Root("id"), parts[1])...)
+}
+
+type networkIPAMModel struct {
+	Driver  types.String             `tfsdk:"driver"`
+	Options types.Map                `tfsdk:"options"`
+	Config  []networkIPAMConfigModel `tfsdk:"config"`
+}
+
+type networkIPAMConfigModel struct {
+	Subnet     types.String `tfsdk:"subnet"`
+	IPRange    types.String `tfsdk:"ip_range"`
+	Gateway    types.String `tfsdk:"gateway"`
+	AuxAddress types.Map    `tfsdk:"aux_address"`
+}
+
+// toAPI converts the configured IPAM block; nil when it is not set.
+func (m *networkIPAMModel) toAPI(ctx context.Context) *sdkclient.NetworkIPAM {
+	if m == nil {
+		return nil
+	}
+	out := &sdkclient.NetworkIPAM{Driver: m.Driver.ValueString()}
+	if !m.Options.IsNull() && !m.Options.IsUnknown() {
+		out.Options = mapFromStringMap(ctx, m.Options)
+	}
+	for _, c := range m.Config {
+		cfg := sdkclient.NetworkIPAMConfig{
+			Subnet:  c.Subnet.ValueString(),
+			IPRange: c.IPRange.ValueString(),
+			Gateway: c.Gateway.ValueString(),
+		}
+		if !c.AuxAddress.IsNull() && !c.AuxAddress.IsUnknown() {
+			cfg.AuxAddress = mapFromStringMap(ctx, c.AuxAddress)
+		}
+		out.Config = append(out.Config, cfg)
+	}
+	return out
 }

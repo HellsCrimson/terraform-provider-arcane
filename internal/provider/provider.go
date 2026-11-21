@@ -61,7 +61,7 @@ func (p *ArcaneProvider) Schema(_ context.Context, _ provider.SchemaRequest, res
 				Optional:    true,
 			},
 			"forget_missing_environments": schema.BoolAttribute{
-				Description: "When true, per-environment resources (project, container, volume, network, gitops_sync, notification) whose environment no longer exists are removed from state on read instead of failing with the manager's \"environment not found\" proxy error. Defaults to false (the read errors). Enable this when you recreate environments with new IDs.",
+				Description: "When true, per-environment resources (project, container, volume, network, gitops_sync, ...) whose environment no longer exists are removed from state on read instead of failing with the manager's \"environment not found\" proxy error. Defaults to false (the read errors). Enable this when you recreate environments with new IDs.",
 				Optional:    true,
 			},
 		},
@@ -202,6 +202,7 @@ func (p *ArcaneProvider) Resources(_ context.Context) []func() resource.Resource
 		NewApiKeyResource,
 		NewTemplateResource,
 		NewTemplateRegistryResource,
+		NewGlobalVariableResource,
 		NewVolumeResource,
 		NewVolumeBackupResource,
 		NewNetworkResource,

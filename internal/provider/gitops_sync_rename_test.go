@@ -89,6 +89,7 @@ func renameGitOpsSyncModel(projectName string) gitOpsSyncModel {
 		PreDeployNetworkMode:  types.StringNull(),
 		Enabled:               types.BoolValue(true),
 		EnvironmentVariables:  types.MapNull(types.StringType),
+		BackupPaths:           types.SetNull(types.StringType),
 		StartProject:          types.BoolNull(),
 		FailIfNameExists:      types.BoolNull(),
 		StopBeforeRename:      types.BoolNull(),
@@ -160,9 +161,11 @@ func modifyGitOpsSyncPlan(t *testing.T, fake *fakeArcaneGitOpsSync, plan, state 
 	srv := fake.server(t)
 	r := &GitOpsSyncResource{client: newTestClient(t, srv)}
 
+	planned := gitOpsSyncPlan(t, plan)
 	req := resource.ModifyPlanRequest{
-		Plan:  gitOpsSyncPlan(t, plan),
-		State: gitOpsSyncState(t, state),
+		Plan:   planned,
+		State:  gitOpsSyncState(t, state),
+		Config: tfsdk.Config{Raw: planned.Raw, Schema: planned.Schema},
 	}
 	resp := &resource.ModifyPlanResponse{Plan: gitOpsSyncPlan(t, plan)}
 	r.ModifyPlan(context.Background(), req, resp)

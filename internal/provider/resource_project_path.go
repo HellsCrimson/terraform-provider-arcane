@@ -55,6 +55,8 @@ func (r *ProjectPathResource) Schema(_ context.Context, _ resource.SchemaRequest
 			"stop_before_rename": resourceschema.BoolAttribute{Optional: true, Description: stopBeforeRenameDescription},
 			"pull_on_update":     resourceschema.BoolAttribute{Optional: true, Computed: true, Description: "Pull images before redeploy.", Default: booldefault.StaticBool(false)},
 			"force_recreate":     resourceschema.BoolAttribute{Optional: true, Description: forceRecreateDescription},
+			"build":              resourceschema.BoolAttribute{Optional: true, Description: buildDescription},
+			"recreate_volumes":   resourceschema.BoolAttribute{Optional: true, Description: recreateVolumesDescription},
 			"redeploy_trigger": resourceschema.StringAttribute{
 				Optional:    true,
 				Computed:    true,
@@ -105,6 +107,8 @@ type projectPathModel struct {
 	StopBeforeRename types.Bool   `tfsdk:"stop_before_rename"`
 	PullOnUpdate     types.Bool   `tfsdk:"pull_on_update"`
 	ForceRecreate    types.Bool   `tfsdk:"force_recreate"`
+	Build            types.Bool   `tfsdk:"build"`
+	RecreateVolumes  types.Bool   `tfsdk:"recreate_volumes"`
 	RedeployTrigger  types.String `tfsdk:"redeploy_trigger"`
 	LastRedeploy     types.String `tfsdk:"last_redeploy"`
 	Path             types.String `tfsdk:"path"`
@@ -265,10 +269,15 @@ func projectPathRedeployAllowed(m projectPathModel) bool {
 // projectPathDeployOpts returns the options for up and redeploy, or nil when
 // none is set.
 func projectPathDeployOpts(m projectPathModel) *sdkclient.ProjectDeployOptions {
-	if v := optionalBool(m.ForceRecreate); v != nil {
-		return &sdkclient.ProjectDeployOptions{ForceRecreate: v}
+	opts := &sdkclient.ProjectDeployOptions{
+		ForceRecreate:   optionalBool(m.ForceRecreate),
+		Build:           optionalBool(m.Build),
+		RecreateVolumes: optionalBool(m.RecreateVolumes),
 	}
-	return nil
+	if opts.ForceRecreate == nil && opts.Build == nil && opts.RecreateVolumes == nil {
+		return nil
+	}
+	return opts
 }
 
 // fileContentChanged reports whether freshly read file content differs from what
@@ -643,6 +652,8 @@ func (r *ProjectPathResource) Update(ctx context.Context, req resource.UpdateReq
 	state.Running = plan.Running
 	state.StopBeforeRename = plan.StopBeforeRename
 	state.ForceRecreate = plan.ForceRecreate
+	state.Build = plan.Build
+	state.RecreateVolumes = plan.RecreateVolumes
 	state.RemoveFiles = plan.RemoveFiles
 	state.RemoveVolumes = plan.RemoveVolumes
 	state.RedeployTrigger = redeployTrigger

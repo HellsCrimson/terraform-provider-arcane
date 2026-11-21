@@ -38,5 +38,7 @@ resource "arcane_container_registry" "example" {
 ## Attributes Reference
 
 - `id` (String)
+- `host` (String) — registry host Arcane derived from `url`.
+- `namespace` (String) — namespace (path after the host) Arcane derived from `url`; empty for a bare host.
 - `created_at` (String)
 - `updated_at` (String)

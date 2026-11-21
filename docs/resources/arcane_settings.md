@@ -157,9 +157,55 @@ All optional attributes are strings:
 - `vulnerability_scan_enabled` - Enable vulnerability scanning.
 - `vulnerability_scan_interval` - Vulnerability scan interval.
 
+**More Settings**
+- `projects_directories` - Additional project directories, as a JSON array.
+- `auto_update_delay` - Delay before an available update is applied.
+- `event_cleanup_interval` - Event cleanup schedule (5-field cron expression).
+- `expired_sessions_cleanup_interval` - Expired sessions cleanup schedule (5-field cron expression).
+- `upgrade_log_retention_days` - Upgrade log retention, in days.
+- `unmanaged_backup_retention_days` - Retention of backups not managed by a policy, in days.
+- `project_scan_max_depth` - Maximum directory depth scanned for projects.
+- `project_scan_skip_dirs` - Comma-separated directories skipped when scanning for projects.
+- `project_workspace_max_depth` - Maximum depth of the project file browser.
+- `project_workspace_max_entries` - Maximum entries listed by the project file browser.
+- `project_workspace_max_file_size_mb` - Maximum file size opened by the project file browser, in MB.
+- `volume_workspace_max_entries` - Maximum entries listed by the volume file browser.
+- `volume_workspace_max_file_size_mb` - Maximum file size opened by the volume file browser, in MB.
+- `gpu_monitoring_enabled` - Enable GPU monitoring.
+- `gpu_type` - GPU type to monitor (`auto` by default).
+- `build_history_retention_days` - Image build history retention, in days.
+- `feature_vulnerability_management_enabled` - Enable the vulnerability management feature.
+- `feature_swarm_enabled` - Enable the Docker Swarm feature.
+- `vulnerability_threat_intel_enabled` - Enrich vulnerabilities with threat intelligence.
+- `vulnerability_update_gate_enabled` - Block image updates that exceed the vulnerability limits below.
+- `vulnerability_update_gate_max_critical` - Maximum critical vulnerabilities an update may have (`-1` for no limit).
+- `vulnerability_update_gate_max_high` - Maximum high vulnerabilities an update may have (`-1` for no limit).
+- `vulnerability_update_gate_max_medium` - Maximum medium vulnerabilities an update may have (`-1` for no limit).
+- `vulnerability_update_gate_max_low` - Maximum low vulnerabilities an update may have (`-1` for no limit).
+- `trivy_config` - Trivy configuration file content.
+- `trivy_ignore` - Trivy ignore file content (`.trivyignore`).
+- `registry_tag_timeout` - Registry tag listing timeout, in seconds.
+- `http2_receive_window_mb` - HTTP/2 receive window, in MB.
+- `agent_tunnel_stream_window_mb` - Agent tunnel stream window, in MB.
+- `development_branding_enabled` - Show the development branding (global app-wide setting).
+- `all_environments_limit` - Maximum environments shown in the all-environments views (global app-wide setting).
+- `upgrade_max_parallel_agents` - Maximum agents upgraded in parallel (global app-wide setting).
+- `analytics_enabled` - Send anonymous analytics (global app-wide setting).
+- `update_check_enabled` - Check for Arcane updates (global app-wide setting).
+- `notifications_include_release_links` - Include release links in update notifications (global app-wide setting).
+- `hsts_enabled` - Send the HSTS header (global authentication setting).
+- `oidc_authorization_endpoint` - OIDC authorization endpoint override (global authentication setting).
+- `oidc_token_endpoint` - OIDC token endpoint override (global authentication setting).
+- `oidc_userinfo_endpoint` - OIDC userinfo endpoint override (global authentication setting).
+- `oidc_jwks_endpoint` - OIDC JWKS endpoint override (global authentication setting).
+- `oidc_device_authorization_endpoint` - OIDC device authorization endpoint override (global authentication setting).
+- `oidc_mobile_redirect_uris` - Redirect URIs allowed for the mobile app (global authentication setting).
+- `github_token_wo` - GitHub token used for GitHub API requests (rate limits). Sensitive, write-only: never stored in state, only sent when `github_token_wo_version` changes. See [write-only arguments](../index.md#write-only-arguments).
+- `github_token_wo_version` (Number) - Change it to send a new `github_token_wo`. Required with `github_token_wo`.
+
 ## Drift detection
 
-On refresh, every setting set in the configuration is read back from Arcane, so a change made outside Terraform shows up in the next plan and is reverted on apply. Settings not set in the configuration are not managed and never show a diff. Settings missing from Arcane's response keep their last applied value. The write-only secrets (`depot_token_wo`, `oidc_client_secret_wo`, `trivy_server_token_wo`) are never read back.
+On refresh, every setting set in the configuration is read back from Arcane, so a change made outside Terraform shows up in the next plan and is reverted on apply. Settings not set in the configuration are not managed and never show a diff. Settings missing from Arcane's response keep their last applied value. The write-only secrets (`depot_token_wo`, `oidc_client_secret_wo`, `trivy_server_token_wo`, `github_token_wo`) are never read back.
 
 ## Attributes Reference
 

@@ -1413,31 +1413,78 @@ func (c *Client) TestNotification(ctx context.Context, provider, notifyType stri
 
 // -------- Containers --------
 type ContainerCreateRequest struct {
-	Name            string            `json:"name"`
-	Image           string            `json:"image"`
-	AutoRemove      *bool             `json:"autoRemove,omitempty"`
-	Command         []string          `json:"command,omitempty"`
-	CPUs            *float64          `json:"cpus,omitempty"`
-	Entrypoint      []string          `json:"entrypoint,omitempty"`
-	Environment     []string          `json:"environment,omitempty"`
-	Memory          *int64            `json:"memory,omitempty"`
-	Networks        []string          `json:"networks,omitempty"`
-	Ports           map[string]string `json:"ports,omitempty"`
-	Privileged      *bool             `json:"privileged,omitempty"`
-	RestartPolicy   *string           `json:"restartPolicy,omitempty"`
-	User            *string           `json:"user,omitempty"`
-	Volumes         []string          `json:"volumes,omitempty"`
-	WorkingDir      *string           `json:"workingDir,omitempty"`
-	Hostname        *string           `json:"hostname,omitempty"`
-	Domainname      *string           `json:"domainname,omitempty"`
-	Labels          map[string]string `json:"labels,omitempty"`
-	TTY             *bool             `json:"tty,omitempty"`
-	AttachStdin     *bool             `json:"attachStdin,omitempty"`
-	AttachStdout    *bool             `json:"attachStdout,omitempty"`
-	AttachStderr    *bool             `json:"attachStderr,omitempty"`
-	OpenStdin       *bool             `json:"openStdin,omitempty"`
-	StdinOnce       *bool             `json:"stdinOnce,omitempty"`
-	NetworkDisabled *bool             `json:"networkDisabled,omitempty"`
+	Name            string                      `json:"name"`
+	Image           string                      `json:"image"`
+	AutoRemove      *bool                       `json:"autoRemove,omitempty"`
+	Command         []string                    `json:"command,omitempty"`
+	CPUs            *float64                    `json:"cpus,omitempty"`
+	Entrypoint      []string                    `json:"entrypoint,omitempty"`
+	Environment     []string                    `json:"environment,omitempty"`
+	Memory          *int64                      `json:"memory,omitempty"`
+	Networks        []string                    `json:"networks,omitempty"`
+	Ports           map[string]string           `json:"ports,omitempty"`
+	Privileged      *bool                       `json:"privileged,omitempty"`
+	RestartPolicy   *string                     `json:"restartPolicy,omitempty"`
+	User            *string                     `json:"user,omitempty"`
+	Volumes         []string                    `json:"volumes,omitempty"`
+	WorkingDir      *string                     `json:"workingDir,omitempty"`
+	Hostname        *string                     `json:"hostname,omitempty"`
+	Domainname      *string                     `json:"domainname,omitempty"`
+	Labels          map[string]string           `json:"labels,omitempty"`
+	TTY             *bool                       `json:"tty,omitempty"`
+	AttachStdin     *bool                       `json:"attachStdin,omitempty"`
+	AttachStdout    *bool                       `json:"attachStdout,omitempty"`
+	AttachStderr    *bool                       `json:"attachStderr,omitempty"`
+	OpenStdin       *bool                       `json:"openStdin,omitempty"`
+	StdinOnce       *bool                       `json:"stdinOnce,omitempty"`
+	NetworkDisabled *bool                       `json:"networkDisabled,omitempty"`
+	HostConfig      *ContainerHostConfigCreate  `json:"hostConfig,omitempty"`
+	Healthcheck     *ContainerHealthcheckCreate `json:"healthcheck,omitempty"`
+}
+
+// ContainerHostConfigCreate is the subset of components/schemas/ContainerHostConfigCreate
+// the provider manages.
+type ContainerHostConfigCreate struct {
+	CapAdd          []string                      `json:"capAdd,omitempty"`
+	CapDrop         []string                      `json:"capDrop,omitempty"`
+	ReadonlyRootfs  *bool                         `json:"readonlyRootfs,omitempty"`
+	PublishAllPorts *bool                         `json:"publishAllPorts,omitempty"`
+	MemorySwap      *int64                        `json:"memorySwap,omitempty"`
+	CPUShares       *int64                        `json:"cpuShares,omitempty"`
+	NetworkMode     *string                       `json:"networkMode,omitempty"`
+	RestartPolicy   *ContainerRestartPolicyCreate `json:"restartPolicy,omitempty"`
+	Mounts          []ContainerMountCreate        `json:"mounts,omitempty"`
+}
+
+// Empty reports whether no host setting is set.
+func (h *ContainerHostConfigCreate) Empty() bool {
+	return len(h.CapAdd) == 0 && len(h.CapDrop) == 0 && h.ReadonlyRootfs == nil && h.PublishAllPorts == nil &&
+		h.MemorySwap == nil && h.CPUShares == nil && h.NetworkMode == nil && h.RestartPolicy == nil && len(h.Mounts) == 0
+}
+
+// ContainerRestartPolicyCreate is components/schemas/ContainerRestartPolicyCreate.
+type ContainerRestartPolicyCreate struct {
+	Name              string `json:"name"`
+	MaximumRetryCount int64  `json:"maximumRetryCount,omitempty"`
+}
+
+// ContainerMountCreate is components/schemas/ContainerMountCreate.
+type ContainerMountCreate struct {
+	Type     string `json:"type"`
+	Source   string `json:"source"`
+	Target   string `json:"target"`
+	ReadOnly bool   `json:"readOnly,omitempty"`
+}
+
+// ContainerHealthcheckCreate is components/schemas/ContainerHealthcheckCreate;
+// durations are in seconds.
+type ContainerHealthcheckCreate struct {
+	Test          []string `json:"test,omitempty"`
+	Interval      *int64   `json:"interval,omitempty"`
+	Timeout       *int64   `json:"timeout,omitempty"`
+	Retries       *int64   `json:"retries,omitempty"`
+	StartPeriod   *int64   `json:"startPeriod,omitempty"`
+	StartInterval *int64   `json:"startInterval,omitempty"`
 }
 
 type ContainerCreated struct {
@@ -1601,6 +1648,8 @@ type ContainerRegistry struct {
 	AWSAccessKeyID     string   `json:"awsAccessKeyId"`
 	AWSSecretAccessKey string   `json:"awsSecretAccessKey"`
 	AWSRegion          string   `json:"awsRegion"`
+	Host               string   `json:"host"`
+	Namespace          string   `json:"namespace"`
 	CreatedAt          string   `json:"createdAt"`
 	UpdatedAt          string   `json:"updatedAt"`
 }
@@ -1867,6 +1916,11 @@ type GitRepositoryCreateRequest struct {
 	SSHKey                 *string `json:"sshKey,omitempty"`
 	Token                  *string `json:"token,omitempty"`
 	Username               *string `json:"username,omitempty"`
+	Provider               *string `json:"provider,omitempty"`
+	CommitAuthorName       *string `json:"commitAuthorName,omitempty"`
+	CommitAuthorEmail      *string `json:"commitAuthorEmail,omitempty"`
+	SigningKey             *string `json:"signingKey,omitempty"`
+	SigningKeyPassphrase   *string `json:"signingKeyPassphrase,omitempty"`
 }
 
 type GitRepositoryUpdateRequest struct {
@@ -1879,6 +1933,11 @@ type GitRepositoryUpdateRequest struct {
 	SSHKey                 *string `json:"sshKey,omitempty"`
 	Token                  *string `json:"token,omitempty"`
 	Username               *string `json:"username,omitempty"`
+	Provider               *string `json:"provider,omitempty"`
+	CommitAuthorName       *string `json:"commitAuthorName,omitempty"`
+	CommitAuthorEmail      *string `json:"commitAuthorEmail,omitempty"`
+	SigningKey             *string `json:"signingKey,omitempty"`
+	SigningKeyPassphrase   *string `json:"signingKeyPassphrase,omitempty"`
 }
 
 type GitRepository struct {
@@ -1892,6 +1951,10 @@ type GitRepository struct {
 	SSHHostKeyVerification string `json:"sshHostKeyVerification"`
 	HasSSHKey              bool   `json:"hasSshKey"`
 	HasToken               bool   `json:"hasToken"`
+	HasSigningKey          bool   `json:"hasSigningKey"`
+	Provider               string `json:"provider"`
+	CommitAuthorName       string `json:"commitAuthorName"`
+	CommitAuthorEmail      string `json:"commitAuthorEmail"`
 	CreatedAt              string `json:"createdAt"`
 	UpdatedAt              string `json:"updatedAt"`
 }
@@ -2197,11 +2260,29 @@ func (c *Client) DeleteVolume(ctx context.Context, envID, volumeName string) err
 
 // -------- Volume Backups --------
 type VolumeBackup struct {
-	ID         string  `json:"id"`
-	VolumeName string  `json:"volumeName"`
-	Size       int64   `json:"size"`
-	CreatedAt  string  `json:"createdAt"`
-	UpdatedAt  *string `json:"updatedAt,omitempty"`
+	ID                string  `json:"id"`
+	VolumeName        string  `json:"volumeName"`
+	Size              int64   `json:"size"`
+	Status            string  `json:"status"`
+	Trigger           string  `json:"trigger"`
+	Destination       string  `json:"destination"`
+	Format            string  `json:"format"`
+	Type              string  `json:"type"`
+	Error             string  `json:"error"`
+	PolicyID          string  `json:"policyId"`
+	S3DestinationID   string  `json:"s3DestinationId"`
+	S3DestinationName string  `json:"s3DestinationName"`
+	RemoteAvailable   bool    `json:"remoteAvailable"`
+	CreatedAt         string  `json:"createdAt"`
+	UpdatedAt         *string `json:"updatedAt,omitempty"`
+}
+
+// CreateVolumeBackupRequest is the optional body of a manual volume backup.
+// components/schemas/CreateVolumeBackupRequest
+type CreateVolumeBackupRequest struct {
+	Destination     string `json:"destination,omitempty"`
+	PolicyID        string `json:"policyId,omitempty"`
+	S3DestinationID string `json:"s3DestinationId,omitempty"`
 }
 
 type volumeBackupEnvelope struct {
@@ -2224,8 +2305,12 @@ type volumeBackupListEnvelope struct {
 }
 
 // CreateVolumeBackup POST /agents/{id}/volumes/{volumeName}/backups
-func (c *Client) CreateVolumeBackup(ctx context.Context, envID, volumeName string) (*VolumeBackup, error) {
-	req, err := c.newRequest(ctx, http.MethodPost, path.Join("agents", envID, "volumes", volumeName, "backups"), nil)
+func (c *Client) CreateVolumeBackup(ctx context.Context, envID, volumeName string, body *CreateVolumeBackupRequest) (*VolumeBackup, error) {
+	var payload any
+	if body != nil {
+		payload = body
+	}
+	req, err := c.newRequest(ctx, http.MethodPost, path.Join("agents", envID, "volumes", volumeName, "backups"), payload)
 	if err != nil {
 		return nil, err
 	}
@@ -2268,7 +2353,23 @@ type NetworkCreateOptions struct {
 	Ingress        *bool             `json:"ingress,omitempty"`
 	Labels         map[string]string `json:"labels,omitempty"`
 	Options        map[string]string `json:"options,omitempty"`
-	// Note: IPAM configuration support can be added later if needed
+	IPAM           *NetworkIPAM      `json:"ipam,omitempty"`
+}
+
+// NetworkIPAM is the IP address management of a network.
+// components/schemas/NetworkIPAM
+type NetworkIPAM struct {
+	Driver  string              `json:"driver,omitempty"`
+	Options map[string]string   `json:"options,omitempty"`
+	Config  []NetworkIPAMConfig `json:"config,omitempty"`
+}
+
+// NetworkIPAMConfig is one IPAM pool. components/schemas/NetworkIPAMConfig
+type NetworkIPAMConfig struct {
+	Subnet     string            `json:"subnet,omitempty"`
+	IPRange    string            `json:"ipRange,omitempty"`
+	Gateway    string            `json:"gateway,omitempty"`
+	AuxAddress map[string]string `json:"auxAddress,omitempty"`
 }
 
 type NetworkCreateRequest struct {
@@ -2507,31 +2608,41 @@ type GitOpsSyncCreateRequest struct {
 	PreDeployExtraMounts *string `json:"preDeployExtraMounts,omitempty"`
 	PreDeployTimeoutSec  *int64  `json:"preDeployTimeoutSec,omitempty"`
 	PreDeployNetworkMode *string `json:"preDeployNetworkMode,omitempty"`
-	// Note: 'enabled' is read-only and not included in create requests
+	// Mode is "deploy" (default), "backup" or "bidirectional". The backup
+	// modes push an existing project (ProjectID) to BackupDirectory.
+	Mode                *string   `json:"mode,omitempty"`
+	ProjectID           *string   `json:"projectId,omitempty"`
+	BackupDirectory     *string   `json:"backupDirectory,omitempty"`
+	BackupPaths         *[]string `json:"backupPaths,omitempty"`
+	BackupOnSave        *bool     `json:"backupOnSave,omitempty"`
+	ComposeOverridePath *string   `json:"composeOverridePath,omitempty"`
 }
 
 type GitOpsSyncUpdateRequest struct {
-	Name                 *string `json:"name,omitempty"`
-	RepositoryID         *string `json:"repositoryId,omitempty"`
-	Branch               *string `json:"branch,omitempty"`
-	ComposePath          *string `json:"composePath,omitempty"`
-	ProjectName          *string `json:"projectName,omitempty"`
-	AutoSync             *bool   `json:"autoSync,omitempty"`
-	SyncInterval         *int64  `json:"syncInterval,omitempty"`
-	MaxSyncBinarySize    *int64  `json:"maxSyncBinarySize,omitempty"`
-	MaxSyncFiles         *int64  `json:"maxSyncFiles,omitempty"`
-	MaxSyncTotalSize     *int64  `json:"maxSyncTotalSize,omitempty"`
-	SyncDirectory        *bool   `json:"syncDirectory,omitempty"`
-	PullImageAfterSync   *bool   `json:"pullImageAfterSync,omitempty"`
-	RedeployAfterSync    *bool   `json:"redeployAfterSync,omitempty"`
-	TargetType           *string `json:"targetType,omitempty"`
-	PreDeployScriptPath  *string `json:"preDeployScriptPath,omitempty"`
-	PreDeployRunnerImage *string `json:"preDeployRunnerImage,omitempty"`
-	PreDeployEnv         *string `json:"preDeployEnv,omitempty"`
-	PreDeployExtraMounts *string `json:"preDeployExtraMounts,omitempty"`
-	PreDeployTimeoutSec  *int64  `json:"preDeployTimeoutSec,omitempty"`
-	PreDeployNetworkMode *string `json:"preDeployNetworkMode,omitempty"`
-	// Note: 'enabled' is read-only and not included in update requests
+	Name                 *string   `json:"name,omitempty"`
+	RepositoryID         *string   `json:"repositoryId,omitempty"`
+	Branch               *string   `json:"branch,omitempty"`
+	ComposePath          *string   `json:"composePath,omitempty"`
+	ProjectName          *string   `json:"projectName,omitempty"`
+	AutoSync             *bool     `json:"autoSync,omitempty"`
+	SyncInterval         *int64    `json:"syncInterval,omitempty"`
+	MaxSyncBinarySize    *int64    `json:"maxSyncBinarySize,omitempty"`
+	MaxSyncFiles         *int64    `json:"maxSyncFiles,omitempty"`
+	MaxSyncTotalSize     *int64    `json:"maxSyncTotalSize,omitempty"`
+	SyncDirectory        *bool     `json:"syncDirectory,omitempty"`
+	PullImageAfterSync   *bool     `json:"pullImageAfterSync,omitempty"`
+	RedeployAfterSync    *bool     `json:"redeployAfterSync,omitempty"`
+	TargetType           *string   `json:"targetType,omitempty"`
+	PreDeployScriptPath  *string   `json:"preDeployScriptPath,omitempty"`
+	PreDeployRunnerImage *string   `json:"preDeployRunnerImage,omitempty"`
+	PreDeployEnv         *string   `json:"preDeployEnv,omitempty"`
+	PreDeployExtraMounts *string   `json:"preDeployExtraMounts,omitempty"`
+	PreDeployTimeoutSec  *int64    `json:"preDeployTimeoutSec,omitempty"`
+	PreDeployNetworkMode *string   `json:"preDeployNetworkMode,omitempty"`
+	BackupDirectory      *string   `json:"backupDirectory,omitempty"`
+	BackupPaths          *[]string `json:"backupPaths,omitempty"`
+	BackupOnSave         *bool     `json:"backupOnSave,omitempty"`
+	ComposeOverridePath  *string   `json:"composeOverridePath,omitempty"`
 }
 
 type GitOpsSync struct {
@@ -2567,11 +2678,20 @@ type GitOpsSync struct {
 	PreDeployTimeoutSec  int64   `json:"preDeployTimeoutSec"`
 	PreDeployNetworkMode string  `json:"preDeployNetworkMode"`
 	// Read-only status of the most recent pre-deploy hook run.
-	PreDeployLastRunStatus *string `json:"preDeployLastRunStatus,omitempty"`
-	PreDeployLastRunAt     *string `json:"preDeployLastRunAt,omitempty"`
-	PreDeployLastRunOutput *string `json:"preDeployLastRunOutput,omitempty"`
-	CreatedAt              string  `json:"createdAt"`
-	UpdatedAt              string  `json:"updatedAt"`
+	PreDeployLastRunStatus *string  `json:"preDeployLastRunStatus,omitempty"`
+	PreDeployLastRunAt     *string  `json:"preDeployLastRunAt,omitempty"`
+	PreDeployLastRunOutput *string  `json:"preDeployLastRunOutput,omitempty"`
+	Mode                   string   `json:"mode"`
+	BackupDirectory        string   `json:"backupDirectory"`
+	BackupPaths            []string `json:"backupPaths"`
+	BackupOnSave           bool     `json:"backupOnSave"`
+	BackupPending          bool     `json:"backupPending"`
+	BackupState            string   `json:"backupState"`
+	BackupFailureReason    string   `json:"backupFailureReason"`
+	LastBackupAt           *string  `json:"lastBackupAt,omitempty"`
+	ComposeOverridePath    string   `json:"composeOverridePath"`
+	CreatedAt              string   `json:"createdAt"`
+	UpdatedAt              string   `json:"updatedAt"`
 }
 
 type gitOpsSyncEnvelope struct {
@@ -3045,6 +3165,7 @@ type TemplateVariable struct {
 	AllEnvironments      bool     `json:"allEnvironments,omitempty"`
 	EnvironmentIDs       []string `json:"environmentIds,omitempty"`
 	InjectIntoContainers bool     `json:"injectIntoContainers,omitempty"`
+	CreatedAt            string   `json:"createdAt,omitempty"`
 }
 
 // GetTemplateVariables GET /variables (global variables, v3).
@@ -3061,6 +3182,74 @@ func (c *Client) GetTemplateVariables(ctx context.Context) ([]TemplateVariable, 
 		return nil, err
 	}
 	return out.Data, nil
+}
+
+// GlobalVariableRequest is the create/update body of a global variable.
+// Nil fields are left out, so an update keeps them (a secret's value too).
+// components/schemas/GlobalVariable
+type GlobalVariableRequest struct {
+	Key                  *string   `json:"key,omitempty"`
+	Value                *string   `json:"value,omitempty"`
+	IsSecret             *bool     `json:"isSecret,omitempty"`
+	AllEnvironments      *bool     `json:"allEnvironments,omitempty"`
+	EnvironmentIDs       *[]string `json:"environmentIds,omitempty"`
+	InjectIntoContainers *bool     `json:"injectIntoContainers,omitempty"`
+}
+
+type globalVariableMutationEnvelope struct {
+	Data struct {
+		Variable TemplateVariable `json:"variable"`
+	} `json:"data"`
+}
+
+// CreateGlobalVariable POST /variables
+func (c *Client) CreateGlobalVariable(ctx context.Context, body GlobalVariableRequest) (*TemplateVariable, error) {
+	req, err := c.newRequest(ctx, http.MethodPost, "variables", body)
+	if err != nil {
+		return nil, err
+	}
+	var env globalVariableMutationEnvelope
+	if err := c.do(req, &env); err != nil {
+		return nil, err
+	}
+	return &env.Data.Variable, nil
+}
+
+// UpdateGlobalVariable PATCH /variables/{id}
+func (c *Client) UpdateGlobalVariable(ctx context.Context, id string, body GlobalVariableRequest) (*TemplateVariable, error) {
+	req, err := c.newRequest(ctx, http.MethodPatch, path.Join("variables", id), body)
+	if err != nil {
+		return nil, err
+	}
+	var env globalVariableMutationEnvelope
+	if err := c.do(req, &env); err != nil {
+		return nil, err
+	}
+	return &env.Data.Variable, nil
+}
+
+// DeleteGlobalVariable DELETE /variables/{id}
+func (c *Client) DeleteGlobalVariable(ctx context.Context, id string) error {
+	req, err := c.newRequest(ctx, http.MethodDelete, path.Join("variables", id), nil)
+	if err != nil {
+		return err
+	}
+	return c.do(req, nil)
+}
+
+// GetGlobalVariable finds a global variable by ID. Arcane has no endpoint for
+// a single variable, so it lists them; a missing one is a 404 error.
+func (c *Client) GetGlobalVariable(ctx context.Context, id string) (*TemplateVariable, error) {
+	vars, err := c.GetTemplateVariables(ctx)
+	if err != nil {
+		return nil, err
+	}
+	for i := range vars {
+		if vars[i].ID == id {
+			return &vars[i], nil
+		}
+	}
+	return nil, fmt.Errorf("arcane API error: 404 Not Found: global variable %q not found", id)
 }
 
 // GetPublicSettings GET /agents/{id}/settings/public

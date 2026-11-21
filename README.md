@@ -89,12 +89,12 @@ Resources
 
 - arcane_settings
   - Update settings using explicit attributes. Environment settings apply to `environment_id`; app-wide and authentication/OIDC settings are global.
-  - Settings include: base_server_url, polling_enabled, polling_interval, docker_host, auto_update, oidc_* (OIDC auth), scheduled_prune_* (scheduled pruning), and many more. Secrets (oidc_client_secret_wo, depot_token_wo, trivy_server_token_wo) are write-only.
+  - Settings include: base_server_url, polling_enabled, polling_interval, docker_host, auto_update, oidc_* (OIDC auth), scheduled_prune_* (scheduled pruning), and many more. Secrets (oidc_client_secret_wo, depot_token_wo, trivy_server_token_wo, github_token_wo) are write-only.
   - Computed `applied` map exposes the server's current settings after apply.
 
 - arcane_project
   - Manage a compose project with inline content.
-  - Attributes: environment_id, name, compose_content (required), env_content (optional).
+  - Attributes: environment_id, name, compose_content (required), env_content (optional), running, redeploy_trigger, deploy options (remove_orphans, force_recreate, build, recreate_volumes).
   - Computed: id, path, status, service_count, running_count, created_at, updated_at.
 
 - arcane_swarm_stack
@@ -146,13 +146,13 @@ Resources
 
 - arcane_container
   - Create/delete a single container.
-  - Attributes: environment_id, name, image (required), and advanced options (command, ports, volumes, etc.). Most changes force replacement.
+  - Attributes: environment_id, name, image (required), and advanced options (command, ports, volumes, mounts, healthcheck, cap_add/cap_drop, network_mode, etc.). Most changes force replacement.
   - Ports map format: container port -> host port, numeric strings only (e.g., `{ "8081" = "8081" }`). The provider normalizes values if a protocol suffix is present.
 
 - arcane_container_registry
   - Manage container registries for pulling images.
   - Attributes: url (required), username (required), token_wo + token_wo_version (required, write-only), description, insecure, enabled, aws_access_key_id_wo / aws_secret_access_key_wo (write-only), aws_region.
-  - Computed: id, created_at, updated_at.
+  - Computed: id, host, namespace, created_at, updated_at.
 
 - arcane_environment
   - Manage Arcane (agent) environments. Start an Arcane agent with the `enrollment_token` to join it.
@@ -161,13 +161,13 @@ Resources
 
 - arcane_git_repository
   - Manage Git repository credentials for GitOps.
-  - Attributes: name (required), url (required), auth_type (required: none, ssh, token), description, enabled, ssh_key_wo / token_wo + their _wo_version (write-only), username.
+  - Attributes: name (required), url (required), auth_type (required: none, ssh, token), description, enabled, ssh_key_wo / token_wo / signing_key_wo + their _wo_version (write-only), username, git_provider, commit_author_name, commit_author_email.
   - Computed: id, created_at, updated_at.
 
 - arcane_gitops_sync
   - Manage GitOps synchronization configurations.
-  - Attributes: environment_id (required), name (required), repository_id (required), branch (required), compose_path (required), project_name, auto_sync, sync_interval, env_vars (map).
-  - Computed: id, project_id, enabled, last_sync_at, last_sync_commit, last_sync_status, last_sync_error, created_at, updated_at.
+  - Attributes: environment_id (required), name (required), repository_id (required), branch (required), compose_path (required for deploy syncs), mode (deploy, backup, bidirectional), project_id (backup modes), backup_directory, backup_paths, backup_on_save, compose_override_path, project_name, auto_sync, sync_interval, environment_variables (map).
+  - Computed: id, project_id, enabled, backup_state, last_sync_at, last_sync_commit, last_sync_status, last_sync_error, created_at, updated_at.
 
 - arcane_api_key
   - Manage API keys for programmatic access.
@@ -178,6 +178,11 @@ Resources
   - Manage reusable docker-compose templates.
   - Attributes: name (required), description (required), content (required, docker-compose YAML), env_content (required, .env format).
   - Computed: id, is_custom, is_remote, registry_id.
+
+- arcane_global_variable
+  - Manage Arcane global variables, available to the projects and templates of the environments they are scoped to.
+  - Attributes: key (required), value or value_wo + value_wo_version (write-only, for secrets), is_secret, all_environments, environment_ids, inject_into_containers.
+  - Computed: id, created_at.
 
 - arcane_template_registry
   - Manage external template registries for remote templates.
@@ -192,7 +197,7 @@ Resources
 
 - arcane_network
   - Manage Docker networks for container communication.
-  - Attributes: environment_id (required), name (required, forces replacement), driver (forces replacement), attachable, internal, enable_ipv6, check_duplicate, ingress, labels (map), options (map).
+  - Attributes: environment_id (required), name (required, forces replacement), driver (forces replacement), attachable, internal, enable_ipv6, check_duplicate, ingress, labels (map), options (map), ipam.
   - Computed: id, scope, created.
   - Note: Updates require replacement.
 
@@ -209,8 +214,8 @@ Resources
 
 - arcane_volume_backup
   - Manage snapshots/backups for volumes.
-  - Attributes: environment_id, volume_name (required).
-  - Computed: id, size, created_at, updated_at.
+  - Attributes: environment_id, volume_name (required), destination, policy_id, s3_destination_id.
+  - Computed: id, size, status, error, format, trigger, created_at, updated_at.
 
 Imports
 
@@ -229,6 +234,7 @@ Imports
 - arcane_gitops_sync: `environment_id:sync_id`
 - arcane_api_key: `id`
 - arcane_template: `id`
+- arcane_global_variable: `id`
 - arcane_template_registry: `id`
 - arcane_volume: `environment_id/volume_name`
 - arcane_network: `environment_id/network_id`

@@ -104,6 +104,35 @@ func (d *GitOpsSyncDataSource) Schema(ctx context.Context, req datasource.Schema
 				Computed:    true,
 				Description: "Associated project ID",
 			},
+			"mode": schema.StringAttribute{
+				Computed:    true,
+				Description: "Sync mode: deploy, backup or bidirectional",
+			},
+			"backup_directory": schema.StringAttribute{
+				Computed:    true,
+				Description: "Repository directory a backup sync pushes to",
+			},
+			"backup_paths": schema.ListAttribute{
+				Computed:    true,
+				ElementType: types.StringType,
+				Description: "Project files a backup sync pushes",
+			},
+			"backup_on_save": schema.BoolAttribute{
+				Computed:    true,
+				Description: "Whether a backup is pushed on each project save",
+			},
+			"backup_state": schema.StringAttribute{
+				Computed:    true,
+				Description: "State of the last backup push",
+			},
+			"last_backup_at": schema.StringAttribute{
+				Computed:    true,
+				Description: "Timestamp of the last backup push",
+			},
+			"compose_override_path": schema.StringAttribute{
+				Computed:    true,
+				Description: "Repository path of the compose override file",
+			},
 			"last_sync_at": schema.StringAttribute{
 				Computed:    true,
 				Description: "Last sync timestamp",
@@ -151,6 +180,13 @@ type gitOpsSyncDataSourceModel struct {
 	PreDeployNetworkMode types.String `tfsdk:"pre_deploy_network_mode"`
 	EnvironmentVariables types.Map    `tfsdk:"environment_variables"`
 	ProjectID            types.String `tfsdk:"project_id"`
+	Mode                 types.String `tfsdk:"mode"`
+	BackupDirectory      types.String `tfsdk:"backup_directory"`
+	BackupPaths          types.List   `tfsdk:"backup_paths"`
+	BackupOnSave         types.Bool   `tfsdk:"backup_on_save"`
+	BackupState          types.String `tfsdk:"backup_state"`
+	LastBackupAt         types.String `tfsdk:"last_backup_at"`
+	ComposeOverridePath  types.String `tfsdk:"compose_override_path"`
 	LastSyncAt           types.String `tfsdk:"last_sync_at"`
 	CreatedAt            types.String `tfsdk:"created_at"`
 	UpdatedAt            types.String `tfsdk:"updated_at"`
@@ -230,6 +266,14 @@ func (d *GitOpsSyncDataSource) Read(ctx context.Context, req datasource.ReadRequ
 	} else {
 		state.LastSyncAt = types.StringNull()
 	}
+
+	state.Mode = nullableString(sync.Mode)
+	state.BackupDirectory = nullableString(sync.BackupDirectory)
+	state.BackupPaths = stringsToList(ctx, sync.BackupPaths)
+	state.BackupOnSave = types.BoolValue(sync.BackupOnSave)
+	state.BackupState = nullableString(sync.BackupState)
+	state.LastBackupAt = types.StringPointerValue(sync.LastBackupAt)
+	state.ComposeOverridePath = nullableString(sync.ComposeOverridePath)
 
 	// Fetch environment variables from the project if available
 	if sync.ProjectID != nil && *sync.ProjectID != "" {

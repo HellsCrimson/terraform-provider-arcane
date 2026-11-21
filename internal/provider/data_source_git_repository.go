@@ -53,6 +53,22 @@ func (d *GitRepositoryDataSource) Schema(ctx context.Context, req datasource.Sch
 				Computed:    true,
 				Description: "Whether the repository is enabled",
 			},
+			"git_provider": schema.StringAttribute{
+				Computed:    true,
+				Description: "Git forge used to build web links",
+			},
+			"commit_author_name": schema.StringAttribute{
+				Computed:    true,
+				Description: "Author name of the commits Arcane pushes",
+			},
+			"commit_author_email": schema.StringAttribute{
+				Computed:    true,
+				Description: "Author email of the commits Arcane pushes",
+			},
+			"has_signing_key": schema.BoolAttribute{
+				Computed:    true,
+				Description: "Whether Arcane holds a signing key for the repository",
+			},
 			"username": schema.StringAttribute{
 				Computed:    true,
 				Description: "Username for authentication",
@@ -82,15 +98,19 @@ func (d *GitRepositoryDataSource) Configure(ctx context.Context, req datasource.
 }
 
 type gitRepositoryDataSourceModel struct {
-	ID          types.String `tfsdk:"id"`
-	Name        types.String `tfsdk:"name"`
-	URL         types.String `tfsdk:"url"`
-	AuthType    types.String `tfsdk:"auth_type"`
-	Description types.String `tfsdk:"description"`
-	Enabled     types.Bool   `tfsdk:"enabled"`
-	Username    types.String `tfsdk:"username"`
-	CreatedAt   types.String `tfsdk:"created_at"`
-	UpdatedAt   types.String `tfsdk:"updated_at"`
+	ID                types.String `tfsdk:"id"`
+	Name              types.String `tfsdk:"name"`
+	URL               types.String `tfsdk:"url"`
+	AuthType          types.String `tfsdk:"auth_type"`
+	Description       types.String `tfsdk:"description"`
+	Enabled           types.Bool   `tfsdk:"enabled"`
+	Username          types.String `tfsdk:"username"`
+	Provider          types.String `tfsdk:"git_provider"`
+	CommitAuthorName  types.String `tfsdk:"commit_author_name"`
+	CommitAuthorEmail types.String `tfsdk:"commit_author_email"`
+	HasSigningKey     types.Bool   `tfsdk:"has_signing_key"`
+	CreatedAt         types.String `tfsdk:"created_at"`
+	UpdatedAt         types.String `tfsdk:"updated_at"`
 }
 
 func (d *GitRepositoryDataSource) Read(ctx context.Context, req datasource.ReadRequest, resp *datasource.ReadResponse) {
@@ -118,6 +138,11 @@ func (d *GitRepositoryDataSource) Read(ctx context.Context, req datasource.ReadR
 		Enabled:   types.BoolValue(repo.Enabled),
 		CreatedAt: types.StringValue(repo.CreatedAt),
 		UpdatedAt: types.StringValue(repo.UpdatedAt),
+
+		Provider:          nullableString(repo.Provider),
+		CommitAuthorName:  nullableString(repo.CommitAuthorName),
+		CommitAuthorEmail: nullableString(repo.CommitAuthorEmail),
+		HasSigningKey:     types.BoolValue(repo.HasSigningKey),
 	}
 
 	if repo.Description != "" {

@@ -49,6 +49,9 @@ func (r *RegistryResource) Schema(_ context.Context, _ resource.SchemaRequest, r
 			"aws_secret_access_key_wo_version": writeOnlyVersionAttribute("aws_secret_access_key"),
 			"aws_region":                       resourceschema.StringAttribute{Optional: true},
 
+			"host":      resourceschema.StringAttribute{Computed: true, Description: "Registry host Arcane derived from `url`."},
+			"namespace": resourceschema.StringAttribute{Computed: true, Description: "Namespace (path after the host) Arcane derived from `url`; empty for a bare host."},
+
 			// Computed timestamps
 			"created_at": resourceschema.StringAttribute{Computed: true, PlanModifiers: []planmodifier.String{stringplanmodifier.UseStateForUnknown()}},
 			"updated_at": resourceschema.StringAttribute{Computed: true},
@@ -80,6 +83,8 @@ type registryModel struct {
 	AWSSecretAccessKeyWO        types.String `tfsdk:"aws_secret_access_key_wo"`
 	AWSSecretAccessKeyWOVersion types.Int64  `tfsdk:"aws_secret_access_key_wo_version"`
 	AWSRegion                   types.String `tfsdk:"aws_region"`
+	Host                        types.String `tfsdk:"host"`
+	Namespace                   types.String `tfsdk:"namespace"`
 	CreatedAt                   types.String `tfsdk:"created_at"`
 	UpdatedAt                   types.String `tfsdk:"updated_at"`
 }
@@ -135,6 +140,8 @@ func (r *RegistryResource) Create(ctx context.Context, req resource.CreateReques
 	state := registryModel{
 		ID:                          types.StringValue(reg.ID),
 		URL:                         types.StringValue(reg.URL),
+		Host:                        types.StringValue(reg.Host),
+		Namespace:                   types.StringValue(reg.Namespace),
 		Username:                    plan.Username,
 		TokenWOVersion:              plan.TokenWOVersion,
 		Description:                 plan.Description,
@@ -170,6 +177,8 @@ func (r *RegistryResource) Read(ctx context.Context, req resource.ReadRequest, r
 	}
 
 	state.URL = types.StringValue(reg.URL)
+	state.Host = types.StringValue(reg.Host)
+	state.Namespace = types.StringValue(reg.Namespace)
 	state.Username = types.StringValue(reg.Username)
 	if !state.Description.IsNull() && !state.Description.IsUnknown() {
 		state.Description = types.StringValue(reg.Description)
@@ -259,6 +268,8 @@ func (r *RegistryResource) Update(ctx context.Context, req resource.UpdateReques
 	}
 
 	state.URL = types.StringValue(reg.URL)
+	state.Host = types.StringValue(reg.Host)
+	state.Namespace = types.StringValue(reg.Namespace)
 	state.Username = types.StringValue(reg.Username)
 	if !plan.Description.IsNull() && !plan.Description.IsUnknown() {
 		state.Description = types.StringValue(reg.Description)

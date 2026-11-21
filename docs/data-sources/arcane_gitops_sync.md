@@ -42,6 +42,13 @@ output "project_id" {
 - `pre_deploy_network_mode` (String) — Docker network mode for the pre-deploy runner container.
 - `environment_variables` (Map of String) — environment variables from the associated project.
 - `project_id` (String) — associated project ID.
+- `mode` (String) — sync mode: `deploy`, `backup` or `bidirectional`.
+- `backup_directory` (String) — repository directory a backup sync pushes to.
+- `backup_paths` (List of String) — project files a backup sync pushes.
+- `backup_on_save` (Bool) — whether a backup is pushed on each project save.
+- `backup_state` (String) — state of the last backup push.
+- `last_backup_at` (String) — timestamp of the last backup push.
+- `compose_override_path` (String) — repository path of the compose override file.
 - `last_sync_at` (String) — last sync timestamp.
 - `created_at` (String) — creation timestamp.
 - `updated_at` (String) — last update timestamp.
